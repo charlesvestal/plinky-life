@@ -81,6 +81,12 @@ static const char *const life_note_names[12] = {
     "F#  ", "G   ", "G#  ", "A   ", "A#  ", "B   ",
 };
 
+/* Which overlay is physically fitted. NOTHING in the API reports this - the
+   faceplate is a passive printed sheet - so the player tells us, and we lay the
+   sound page out to match what is printed under their fingers. */
+static const char *const life_plate_names[2] = { "BLNK", "CHRD" };
+enum { LIFE_PLATE_BLANK = 0, LIFE_PLATE_CHORDS };
+
 static const char *const life_sink_names[3] = { "SYN ", "MIDI", "BOTH" };
 enum { LIFE_SINK_SYNTH = 0, LIFE_SINK_MIDI, LIFE_SINK_BOTH };
 
@@ -220,6 +226,7 @@ struct life_panel : panel_t {
     uint8_t pref_sink;
     uint8_t pref_port;
     uint8_t pref_send_cc;
+    uint8_t pref_plate;       /* which faceplate is fitted - see life_plate_names */
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
@@ -285,6 +292,7 @@ struct life_panel : panel_t {
         pref_sink = LIFE_SINK_BOTH;
         pref_port = 3;             /* MIDI_PORT_1 */
         pref_send_cc = 1;
+        pref_plate = LIFE_PLATE_BLANK;
     }
 
     void on_load_finished(void) override {
@@ -372,6 +380,7 @@ struct life_panel : panel_t {
         if (pref_octave > 7) pref_octave = 7;
         if (pref_sink > LIFE_SINK_BOTH) pref_sink = LIFE_SINK_BOTH;
         if (pref_port > 4) pref_port = 3;
+        if (pref_plate > LIFE_PLATE_CHORDS) pref_plate = LIFE_PLATE_BLANK;
         if (edit_voice >= LIFE_NUM_VOICES) edit_voice = 0;
     }
 
@@ -922,8 +931,68 @@ struct life_panel : panel_t {
          x8..15 rows 10..14  the synth XY pad and its LFO/env buttons
          x0..7  rows 10..14  ours: voice selector and the flag buttons
          row 15       transport, drawn by the caller */
+    /* The stock Chords synth page, whose regions the Chords manual gives exactly:
+       upper sliders 0,2..16,7 - lower 0,7..8,14 - XY pad 9,7..16,14. That leaves
+       column 8 rows 7..13 as the XY button column, hence XY_BUTTONS_ON_LEFT.
+
+       The payoff is that every printed label on the overlay is CORRECT: the
+       order below is read straight off the silkscreen, and passing col = 0 lets
+       each slider take its colour from the parameter's own metadata, so the
+       printed colour groups line up for free.
+
+       Rows 0..1 and 14..15 are the printed control rows on Chords, so nothing
+       goes there - which conveniently leaves our transport row alone. */
+    void draw_chords_sound_page(int preset) {
+        static const int top[16] = {            /* rows 2..6, 16 sliders 5 high */
+            VOICE_PARAM_ATTACK,                 /* A     */
+            VOICE_PARAM_DECAY,                  /* D     */
+            VOICE_PARAM_SUSTAIN,                /* S     */
+            VOICE_PARAM_RELEASE,                /* R     */
+            VOICE_PARAM_STEREO,                 /* PAN   */
+            VOICE_PARAM_SUBOSC,                 /* SUB   */
+            VOICE_PARAM_CUTOFF_HP,              /* HP    */
+            VOICE_PARAM_CUTOFF_LP,              /* LP    */
+            VOICE_PARAM_RESONANCE,              /* RESO  */
+            VOICE_PARAM_DELAY_SEND,             /* DELAY */
+            MIX_PARAM_DELAY_TIME + 128,         /* TIME  */
+            MIX_PARAM_DELAY_FEEDBACK + 128,     /* FBK   */
+            VOICE_PARAM_REVERB_SEND,            /* VERB  */
+            MIX_PARAM_REVERB_FEEDBACK + 128,    /* TAIL  */
+            MIX_PARAM_REVERB_SHIMMER + 128,     /* GLOW  */
+            VOICE_PARAM_VOLUME,                 /* VOL   */
+        };
+        static const int bot[8] = {             /* rows 7..13, 8 sliders 7 high */
+            VOICE_PARAM_GLIDE,                  /* GLIDE  */
+            VOICE_PARAM_PITCH,                  /* PITCH  */
+            VOICE_PARAM_OCTAVE,                 /* OCT    */
+            VOICE_PARAM_CHORUS,                 /* CHORUS */
+            VOICE_PARAM_WAVEFOLD,               /* FOLD   */
+            VOICE_PARAM_SAMPLE_START,           /* START  */
+            VOICE_PARAM_SAMPLE_LENGTH,          /* END    */
+            VOICE_PARAM_TIMESTRETCH,            /* SPEED  */
+        };
+        synth_param_sliders_block(preset_pages.slider_banks[0], 0, 2, 16, 5, preset, top);
+        synth_param_sliders_block(preset_pages.slider_banks[1], 0, 7, 8, 7, preset, bot);
+        synth_xy_block(&preset_pages.the_xy_pad, preset, 8, 7, 7, 7,
+                       WHITE, BLUE, false, 0, XY_BUTTONS_ON_LEFT);
+
+        /* Row 0 is a printed control row, so the voice selector goes there
+           rather than over the pad circles. */
+        for (int v = 0; v < LIFE_NUM_VOICES; ++v)
+            if (button(v, 0, v == edit_voice ? life_voice_bright[v] : life_voice_dim[v],
+                       NOT_ISOLATED, "edit this voice's sound"))
+                edit_voice = (uint8_t)v;
+        if (button(0, 14, LIFE_COL_ACTION, NOT_ISOLATED, "back to the voice editor"))
+            ui_mode = LIFE_UI_VOICE;
+    }
+
     void draw_preset_editor(void) {
         int preset = preset_for(edit_voice);
+
+        if (pref_plate == LIFE_PLATE_CHORDS) {
+            draw_chords_sound_page(preset);
+            return;
+        }
 
         preset_pages.edit(preset, 0, 0, false);
         preset_pages.xy_pad(preset, 8, 10);
@@ -968,7 +1037,7 @@ struct life_panel : panel_t {
 
     /* Global only. Per-voice config moved onto the grid, where it is one tap
        deep and visible all at once instead of fourteen side-button clicks. */
-    int settings_page_count(void) { return 10; }
+    int settings_page_count(void) { return 11; }
     int get_num_panel_settings_pages(void) override { return settings_page_count(); }
 
     static int clamp_int(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
@@ -1093,6 +1162,19 @@ struct life_panel : panel_t {
                 set_help_text("#fc2#*Simulation CCs#. - #fc2#*off#.. Turn on to send CC20-27 "
                               "describing the world: density, births, deaths, stability and "
                               "per-voice movement.");
+            break;
+        }
+        case 10: {
+            int d = draw_system_style_enum_settings_page("PLTE", pref_plate, life_plate_names, 2);
+            if (d) pref_plate = (uint8_t)clamp_int(pref_plate + d, 0, 1);
+            if (pref_plate == LIFE_PLATE_CHORDS)
+                set_help_text("#fc2#*Faceplate#. - #fc2#*Chords#.. The sound page is laid out to "
+                              "match the printed Chords synth page, so every label under your "
+                              "fingers is correct.");
+            else
+                set_help_text("#fc2#*Faceplate#. - #fc2#*blank#.. Set this to Chords if you have "
+                              "the Chords overlay fitted and the sound page will match its "
+                              "printed labels.");
             break;
         }
         default:
@@ -1290,6 +1372,7 @@ struct life_panel : panel_t {
             pref_sink = LIFE_SINK_BOTH;
             pref_port = 3;
             pref_send_cc = 1;
+            pref_plate = LIFE_PLATE_BLANK;
         }
 
         OBJECT_BEGIN(s);
@@ -1299,6 +1382,7 @@ struct life_panel : panel_t {
         FIELD("sink", pref_sink);
         FIELD("port", pref_port);
         FIELD("cc", pref_send_cc);
+        FIELD("plate", pref_plate);
         OBJECT_END(s);
 
         clamp_settings();

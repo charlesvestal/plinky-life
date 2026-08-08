@@ -151,11 +151,40 @@ enum {
 int synth_flags_button(int x, int y, int preset_idx, int synth_flag_enum,
                        int preset_idx_write_copies_mask = 0, int col = 0);
 
+/* Only the parameters this panel names; the real enums are much longer. */
+enum {
+    VOICE_PARAM_OCTAVE, VOICE_PARAM_PITCH, VOICE_PARAM_GLIDE,
+    VOICE_PARAM_SAMPLE_START, VOICE_PARAM_SAMPLE_LENGTH, VOICE_PARAM_TIMESTRETCH,
+    VOICE_PARAM_CHORUS, VOICE_PARAM_SUBOSC, VOICE_PARAM_WAVEFOLD,
+    VOICE_PARAM_CUTOFF_HP, VOICE_PARAM_CUTOFF_LP, VOICE_PARAM_RESONANCE,
+    VOICE_PARAM_ATTACK, VOICE_PARAM_DECAY, VOICE_PARAM_SUSTAIN, VOICE_PARAM_RELEASE,
+    VOICE_PARAM_VOLUME, VOICE_PARAM_STEREO,
+    VOICE_PARAM_DELAY_SEND, VOICE_PARAM_REVERB_SEND,
+};
+enum {
+    MIX_PARAM_DELAY_TIME, MIX_PARAM_DELAY_FEEDBACK,
+    MIX_PARAM_REVERB_SHIMMER, MIX_PARAM_REVERB_FEEDBACK,
+};
+
+#define BLUE LED_RGB(0, 0, 31)
+#define XY_BUTTONS_ON_RIGHT false
+#define XY_BUTTONS_ON_LEFT true
+
+
 struct slider_t { int _pad[8]; };
 struct xy_pad_t { int _pad[12]; };
 struct file_picker_t { int _pad[32]; };
 
 #define FLAG_PICKER_ENABLE_DELETE 1
+
+int synth_param_sliders_block(slider_t *synth_sliders, int x, int y, int width, int length,
+                              int preset_idx, const int *synth_params,
+                              int preset_idx_write_copies_mask = 0, int slider_flags = 0);
+bool synth_xy_block(xy_pad_t *xy_pad, int preset_idx, int x, int y, int width = 7, int height = 5,
+                    uint32_t col = WHITE, uint32_t bg_col = BLUE, bool is_clear = false,
+                    int preset_idx_write_copies_mask = 0, bool buttons_on_left = XY_BUTTONS_ON_RIGHT,
+                    bool require_record_button_down_for_speed = false, bool read_only = false,
+                    int flags = 0);
 
 struct preset_pages_t {
     slider_t slider_banks[2][16];
