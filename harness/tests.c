@@ -698,6 +698,54 @@ static void test_cc_per_voice_params_are_four_apart(void) {
     CHECK(CC_RULE_1 - CC_RATE_1 == 4, "parameter groups must be four apart");
 }
 
+static void test_cc_round_trip_is_stable(void) {
+    /* The property two-way CC depends on: what we send must decode back to what
+       we meant, for every option of every range in use. Without this an echo
+       walks the value one step at a time. */
+    const int counts[] = {2, 4, 7, 10, 11, 12, 15, 16, 29, 33, 65};
+    for (unsigned k = 0; k < sizeof(counts) / sizeof(counts[0]); ++k) {
+        int n = counts[k];
+        for (int i = 0; i < n; ++i) {
+            int cc = cc_from_index(i, n);
+            int back = cc_to_index(cc, n);
+            CHECK(back == i, "%d of %d encoded to %d and decoded to %d", i, n, cc, back);
+            CHECK(cc >= 0 && cc <= 127, "encoded %d of %d out of range: %d", i, n, cc);
+            if (back != i) return;
+        }
+    }
+}
+
+static void test_cc_range_round_trip(void) {
+    for (int v = -7; v <= 7; ++v)
+        CHECK(cc_to_range(cc_from_range(v, -7, 7), -7, 7) == v,
+              "pitch %d did not survive the round trip", v);
+    for (int v = 1; v <= 7; ++v)
+        CHECK(cc_to_range(cc_from_range(v, 1, 7), 1, 7) == v,
+              "octave %d did not survive the round trip", v);
+    for (int v = 0; v <= 64; ++v)
+        CHECK(cc_to_range(cc_from_range(v, 0, 64), 0, 64) == v,
+              "floor %d did not survive the round trip", v);
+}
+
+static void test_cc_echo_is_a_fixed_point(void) {
+    /* Feed our own output back in repeatedly: it must not drift. */
+    const int counts[] = {12, 29, 11, 4, 10};
+    for (unsigned k = 0; k < sizeof(counts) / sizeof(counts[0]); ++k) {
+        int n = counts[k];
+        for (int start = 0; start <= 127; ++start) {
+            int idx = cc_to_index(start, n);
+            for (int hop = 0; hop < 8; ++hop) {
+                int cc = cc_from_index(idx, n);
+                int next = cc_to_index(cc, n);
+                CHECK(next == idx, "value drifted on echo %d: %d -> %d (%d options)",
+                      hop, idx, next, n);
+                if (next != idx) return;
+                idx = next;
+            }
+        }
+    }
+}
+
 /* ------------------------------------------------------------------------- */
 
 int main(void) {
@@ -760,6 +808,9 @@ int main(void) {
     test_cc_press_fires_once_per_press();
     test_cc_voice_and_group_split();
     test_cc_per_voice_params_are_four_apart();
+    test_cc_round_trip_is_stable();
+    test_cc_range_round_trip();
+    test_cc_echo_is_a_fixed_point();
 
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

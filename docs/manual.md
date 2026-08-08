@@ -262,7 +262,8 @@ second screen explains each page as you land on it.
 | `OUT ` | output | synth · MIDI · both |
 | `PORT` | MIDI ports | off · USB1 · TRS1 · port 1 · all |
 | `CC  ` | simulation CCs out | on/off — see below |
-| `CIN ` | CC control in | off, or the first controller number |
+| `CIN ` | CC control | off, or the first controller number |
+| `COUT` | CC mirror | send changes back out on the same controllers |
 
 Key and scale set the **whole instrument's** harmony, not just this panel's, so
 the rest of the Plinky follows along.
@@ -338,6 +339,12 @@ the same thing on all four voices.
 
 Clear, seed and step are momentary — they fire once when the value crosses
 halfway going up, so a button that sends 127 then 0 fires once.
+
+With `COUT` on it works both ways: change something on the grid and the same
+controller goes back out, so a DAW or a controller with motorised faders stays
+in step. You can leave both on with everything on one channel — an echo of what
+Life sent decodes to the value it already has, so it changes nothing and sends
+nothing back.
 
 ### Simulation CCs out
 

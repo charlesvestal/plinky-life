@@ -838,6 +838,31 @@ static inline int cc_to_range(int value, int lo, int hi) {
     return lo + cc_to_index(value, hi - lo + 1);
 }
 
+/* The CC value that means index `i` - the MIDDLE of that index's band.
+
+   This is what makes two-way CC safe. Sending back the value we RECEIVED, or
+   the bottom of the band, is not round-trip stable: with 29 scales, an incoming
+   67 means scale 15, but 15 * 128 / 29 is 66, which reads back as scale 14. Echo
+   that and the two ends walk away from each other. The midpoint is the unique
+   choice where cc_to_index(cc_from_index(i, n), n) == i for every i.
+
+   Given that, no channel juggling is needed to stop feedback: an echo of what we
+   sent decodes to the value we already hold, changes nothing, and so sends
+   nothing. The loop dies on the first pass. */
+static inline int cc_from_index(int i, int count) {
+    if (count < 1) return 0;
+    if (i < 0) i = 0;
+    if (i >= count) i = count - 1;
+    int v = (i * 128 + 64) / count;
+    if (v > 127) v = 127;
+    return v;
+}
+
+static inline int cc_from_range(int value, int lo, int hi) {
+    if (hi < lo) return 0;
+    return cc_from_index(value - lo, hi - lo + 1);
+}
+
 /* Momentary controls fire on the rising edge through the midpoint, so a button
    that sends 127 then 0 fires once rather than twice. */
 static inline int cc_is_press(int previous, int value) {
@@ -1069,7 +1094,8 @@ struct life_panel : panel_t {
     uint8_t pref_sink;
     uint8_t pref_port;
     uint8_t pref_send_cc;
-    uint8_t pref_cc_in;       /* base controller number for the input block, 0 = off */
+    uint8_t pref_cc_in;       /* base controller number for the CC block, 0 = off */
+    uint8_t pref_cc_out;      /* mirror parameter changes back out on the same block */
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
@@ -1089,6 +1115,12 @@ struct life_panel : panel_t {
     uint8_t cc_in_value[CC_PARAM_COUNT];
     uint8_t cc_in_last[CC_PARAM_COUNT];
     uint64_t cc_in_pending;
+
+    /* What the outside world was last told each parameter is. Sending only on
+       change is half of what stops a feedback loop; the other half is
+       cc_from_index()'s round-trip stability. */
+    uint8_t cc_out_last[CC_PARAM_COUNT];
+    bool cc_out_primed;
 
     /* ---------------------------------------------------------------- */
 
@@ -1117,8 +1149,12 @@ struct life_panel : panel_t {
         step_once_request = false;
         settings_dirty = false;
         for (int i = 0; i < LIFE_NUM_CCS; ++i) last_cc[i] = 255;
-        for (int i = 0; i < CC_PARAM_COUNT; ++i) cc_in_value[i] = cc_in_last[i] = 0;
+        for (int i = 0; i < CC_PARAM_COUNT; ++i) {
+            cc_in_value[i] = cc_in_last[i] = 0;
+            cc_out_last[i] = 255;
+        }
         cc_in_pending = 0;
+        cc_out_primed = false;
     }
 
     void setup_default_panel_state() override {
@@ -1149,6 +1185,7 @@ struct life_panel : panel_t {
         pref_port = 3;             /* MIDI_PORT_1 */
         pref_send_cc = 1;
         pref_cc_in = CC_IN_DEFAULT_BASE;
+        pref_cc_out = 1;
     }
 
     void on_load_finished(void) override {
@@ -1917,7 +1954,7 @@ struct life_panel : panel_t {
 
     /* Global only. Per-voice config moved onto the grid, where it is one tap
        deep and visible all at once instead of fourteen side-button clicks. */
-    int settings_page_count(void) { return 11; }
+    int settings_page_count(void) { return 12; }
 
     /* Page 1 is the scene save/load picker. on_serialise() has always described
        the world and every voice setting, but without this there was no way to
@@ -2085,6 +2122,19 @@ struct life_panel : panel_t {
                               "the world and every voice from a controller or a DAW.");
             break;
         }
+        case 11: {
+            bool on = pref_cc_out != 0;
+            int d = draw_system_style_bool_settings_page("COUT", on);
+            if (d) { pref_cc_out = on ? 0 : 1; settings_dirty = true; cc_out_primed = false; }
+            if (pref_cc_out)
+                set_help_text("#fc2#*CC mirror#. - #fc2#*on#.. Changes made here are sent back "
+                              "out on the same controllers, so a DAW or a controller stays in "
+                              "step with the panel.");
+            else
+                set_help_text("#fc2#*CC mirror#. - #fc2#*off#.. The panel listens but does not "
+                              "report its own changes.");
+            break;
+        }
         default:
             break;
         }
@@ -2099,6 +2149,7 @@ struct life_panel : panel_t {
         if (page < 0) {
             draw_settings(page);
             flush_settings();
+            send_param_ccs();
             return;
         }
         if (page == 1) {
@@ -2201,6 +2252,8 @@ struct life_panel : panel_t {
                 }
             }
         }
+
+        send_param_ccs();
 
         if (mode == LIFE_UI_VOICE)
             set_voice_help_text();
@@ -2306,14 +2359,72 @@ struct life_panel : panel_t {
         }
     }
 
+    /* The canonical controller value for a parameter's CURRENT setting. Mirror
+       of apply_cc, and the two must agree or two-way CC drifts. */
+    int cc_current_value(int p) const {
+        int voice = cc_voice_for_param(p);
+        if (voice >= 0) {
+            switch (cc_group_for_param(p)) {
+            case 0: return v_muted[voice] ? 127 : 0;
+            case 1: return cc_from_index(v_rate[voice], LIFE_NUM_RATES);
+            case 2: return cc_from_index(v_rule[voice], SEL_COUNT);
+            case 3: return cc_from_index(v_order[voice], TRAV_COUNT);
+            case 4: return cc_from_range(v_pitch[voice], -LIFE_PITCH_CENTRE,
+                                         LIFE_PITCH_CENTRE);
+            case 5: return cc_from_range(v_length[voice] / 10, 1, 10);
+            default: return 0;
+            }
+        }
+        switch (p) {
+        case CC_KEY: return cc_from_index(pref_root, 12);
+        case CC_SCALE: return cc_from_index(pref_scale, LIFE_NUM_SCALES);
+        case CC_OCTAVE: return cc_from_range(pref_octave, 1, 7);
+        case CC_GEN_RATE: return cc_from_index(gen_rate, LIFE_NUM_RATES);
+        case CC_FLOOR: return cc_from_range(respawn_floor, 0, 64);
+        case CC_SEED_AMOUNT: return cc_from_range(respawn_amount, 1, 64);
+        case CC_STALL: return cc_from_range(respawn_stable, 0, 32);
+        case CC_FREEZE: return freeze_life ? 127 : 0;
+        /* the momentary three have no state to report */
+        default: return -1;
+        }
+    }
+
+    /* Mirror any parameter whose value the outside world has not been told.
+
+       Runs on core0 after touch has been handled, so a knob turned on the grid
+       reaches the DAW in the same frame. There is no feedback guard beyond this
+       and the round-trip stability in ccmap.h, and none is needed: an echo of
+       what we sent decodes to what we already hold, so nothing changes and
+       nothing is sent back. */
+    void send_param_ccs(void) {
+        if (!pref_cc_out || !pref_cc_in) return;
+        uint8_t ports = midi_ports();
+        if (!ports) return;
+        int channel = get_system_midi_channel() - 1;
+
+        for (int p = 0; p < CC_PARAM_COUNT; ++p) {
+            int v = cc_current_value(p);
+            if (v < 0) continue;
+            if (cc_out_primed && cc_out_last[p] == (uint8_t)v) continue;
+            cc_out_last[p] = (uint8_t)v;
+            midi_write_cc(ports, channel, pref_cc_in + p, v);
+        }
+        cc_out_primed = true;
+    }
+
     /* Drain on core0. on_midi can add bits while we are here, so take the whole
        word and clear it in one go rather than testing and clearing per bit. */
     void apply_pending_cc(void) {
         uint64_t pending = cc_in_pending;
         if (!pending) return;
         cc_in_pending &= ~pending;
-        for (int p = 0; p < CC_PARAM_COUNT; ++p)
-            if (pending & ((uint64_t)1 << p)) apply_cc(p);
+        for (int p = 0; p < CC_PARAM_COUNT; ++p) {
+            if (!(pending & ((uint64_t)1 << p))) continue;
+            apply_cc(p);
+            /* The sender already knows: do not echo it back at them. */
+            int now = cc_current_value(p);
+            if (now >= 0) cc_out_last[p] = (uint8_t)now;
+        }
     }
 
     /* ================================================================== */
@@ -2392,6 +2503,7 @@ struct life_panel : panel_t {
             pref_port = 3;
             pref_send_cc = 1;
             pref_cc_in = CC_IN_DEFAULT_BASE;
+            pref_cc_out = 1;
         }
 
         OBJECT_BEGIN(s);
@@ -2402,6 +2514,7 @@ struct life_panel : panel_t {
         FIELD("port", pref_port);
         FIELD("cc", pref_send_cc);
         FIELD("ccin", pref_cc_in);
+        FIELD("ccout", pref_cc_out);
         OBJECT_END(s);
 
         clamp_settings();

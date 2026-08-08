@@ -77,6 +77,31 @@ static inline int cc_to_range(int value, int lo, int hi) {
     return lo + cc_to_index(value, hi - lo + 1);
 }
 
+/* The CC value that means index `i` - the MIDDLE of that index's band.
+
+   This is what makes two-way CC safe. Sending back the value we RECEIVED, or
+   the bottom of the band, is not round-trip stable: with 29 scales, an incoming
+   67 means scale 15, but 15 * 128 / 29 is 66, which reads back as scale 14. Echo
+   that and the two ends walk away from each other. The midpoint is the unique
+   choice where cc_to_index(cc_from_index(i, n), n) == i for every i.
+
+   Given that, no channel juggling is needed to stop feedback: an echo of what we
+   sent decodes to the value we already hold, changes nothing, and so sends
+   nothing. The loop dies on the first pass. */
+static inline int cc_from_index(int i, int count) {
+    if (count < 1) return 0;
+    if (i < 0) i = 0;
+    if (i >= count) i = count - 1;
+    int v = (i * 128 + 64) / count;
+    if (v > 127) v = 127;
+    return v;
+}
+
+static inline int cc_from_range(int value, int lo, int hi) {
+    if (hi < lo) return 0;
+    return cc_from_index(value - lo, hi - lo + 1);
+}
+
 /* Momentary controls fire on the rising edge through the midpoint, so a button
    that sends 127 then 0 fires once rather than twice. */
 static inline int cc_is_press(int previous, int value) {
