@@ -409,6 +409,9 @@ def chance():
     ])
     # the readout zone, drawn opposite the finger
     zy = PAD + 0 * (CELL + GAP)
+    # the zone is blanked before the text is drawn, so show it blank
+    out.append(f'<rect x="{PAD - 2}" y="{PAD - 2}" width="{16*(CELL+GAP) - GAP + 4}" '
+               f'height="{4*(CELL+GAP) - GAP + 4}" fill="{BG}"/>')
     zx0, zx1 = PAD - 5, PAD + 16 * (CELL + GAP) - GAP + 5
     zy0, zy1 = zy - 5, zy + 4 * (CELL + GAP) - GAP + 5
     for a, b, c, d in ((zx0, zy0, zx1, zy0), (zx0, zy1, zx1, zy1),
@@ -417,13 +420,13 @@ def chance():
                    f'stroke-width="1.5"/>')
     out.append(f'<text x="{PAD + 8*(CELL+GAP)}" y="{zy + 2*(CELL+GAP) + 6}" '
                f'text-anchor="middle" fill="{V[3]}" '
-               f'style="font-size:26px;font-weight:700;font-family:ui-monospace,monospace">60</text>')
+               f'style="font-size:26px;font-weight:700;font-family:ui-monospace,monospace">AC60</text>')
     out.append(f'<text class="k" x="{zx1}" y="{zy1 + 16}" text-anchor="end" fill="{V[3]}">'
                'readout zone - the held value appears here</text>')
     out.append(
         f'<text class="t" x="{PAD}" y="{PAD + 16*(CELL+GAP) + 18}">'
-        'Left-hand pad of each row is OFF. Hold a pad and its value is spelled out in the zone '
-        'furthest from your hand.</text>'
+        'Left-hand pad of each row is OFF. Hold a pad and the zone furthest from your hand is '
+        'blanked and shows the value, tagged.</text>'
     )
     out.append("</svg>")
     return "\n".join(out)

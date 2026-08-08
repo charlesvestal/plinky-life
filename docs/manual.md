@@ -168,13 +168,20 @@ hard it bites.
 ### Reading a value
 
 These rows are pads with no numbers on them, so **hold one and the value is
-spelled out** in a four-row font. It appears in the zone *furthest from your
-hand* — hold something in the top half and it shows at the bottom, and the other
-way round — so you are never reading through your own fingers. The colour is the
-voice's own, so the number needs no label.
+spelled out**. It appears in the zone *furthest from your hand* — hold something
+in the top half and it shows at the bottom, and the other way round — so you are
+never reading through your own fingers. That zone blanks while you hold, so the
+text is never fighting the pads underneath it.
 
-This works on both voice pages: rate reads `8th`, rule reads `WALK`, pitch reads
-`+3`, every reads `x2`.
+Numbers are tagged, because `30` on its own says nothing:
+
+| | |
+|---|---|
+| `SK` `RT` `TI` `EV` `AC` | skip · ratchet · tie · every · accent |
+| `CH` `PT` `LN` | channel · pitch · length |
+
+Values that already name themselves aren't tagged — rate reads `8th`, rule reads
+`WALK`, order reads `FWD`.
 
 **These are read off the cell the voice actually landed on**, not drawn onto
 steps. A cell with eight neighbours always fires and rolls; a lone cell gets

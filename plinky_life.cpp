@@ -2220,27 +2220,54 @@ struct life_panel : panel_t {
         dst[n] = 0;
     }
 
+    /* A bare "30" says nothing - thirty of what? So a number gets a two-letter
+       tag. Values that already name themselves - 8th, WALK, FWD - do not.
+
+       Sixteen columns is not much at FONT_4, so the tag is dropped rather than
+       clipped if the pair will not fit. leds_string_width() decides that at
+       runtime; guessing the font metrics here would be guessing. */
     const char *readout_text(int row) {
         int v = edit_voice;
+        char value[8];
+        const char *tag = 0;
+        value[0] = 0;
         readout[0] = 0;
 
-        if (row == 0) { readout[0] = 'V'; readout[1] = (char)('1' + v); readout[2] = 0; }
-        else if (voice_page) {
+        if (row == 0) { readout[0] = 'V'; readout[1] = (char)('1' + v); readout[2] = 0;
+                        return readout; }
+
+        if (voice_page) {
             const uint8_t *f = chance_field(row);
             if (!f) return readout;
-            if (row == 4) snprintf(readout, sizeof(readout), "x%d", chance_pass_divisor(*f));
-            else snprintf(readout, sizeof(readout), "%d", *f);
+            switch (row) {
+            case 1: tag = "SK"; break;      /* skip */
+            case 2: tag = "RT"; break;      /* ratchet */
+            case 3: tag = "TI"; break;      /* tie */
+            case 4: tag = "EV"; break;      /* every */
+            case 5: tag = "AC"; break;      /* accent */
+            default: break;
+            }
+            if (row == 4) snprintf(value, sizeof(value), "%d", chance_pass_divisor(*f));
+            else snprintf(value, sizeof(value), "%d", *f);
         } else switch (row) {
-            case 1: trim4(readout, life_rate_names[v_rate[v]]); break;
-            case 2: trim4(readout, life_sel_names[v_rule[v]]); break;
-            case 3: trim4(readout, life_trav_names[v_order[v]]); break;
-            case 4: snprintf(readout, sizeof(readout), "%d",
+            case 1: trim4(value, life_rate_names[v_rate[v]]); break;
+            case 2: trim4(value, life_sel_names[v_rule[v]]); break;
+            case 3: trim4(value, life_trav_names[v_order[v]]); break;
+            case 4: tag = "CH";
+                    snprintf(value, sizeof(value), "%d",
                              (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] : v + 1);
                     break;
-            case 5: snprintf(readout, sizeof(readout), "%+d", (int)v_pitch[v]); break;
-            case 6: snprintf(readout, sizeof(readout), "%d", (int)v_length[v]); break;
+            case 5: tag = "PT"; snprintf(value, sizeof(value), "%+d", (int)v_pitch[v]); break;
+            case 6: tag = "LN"; snprintf(value, sizeof(value), "%d", (int)v_length[v]); break;
             default: break;
         }
+
+        if (!value[0]) return readout;
+        if (tag) {
+            snprintf(readout, sizeof(readout), "%s%s", tag, value);
+            if (leds_string_width(readout, FONT_4) <= LIFE_W) return readout;
+        }
+        snprintf(readout, sizeof(readout), "%s", value);
         return readout;
     }
 
@@ -2253,10 +2280,20 @@ struct life_panel : panel_t {
         const char *txt = readout_text(row);
         if (!txt[0]) return;
 
+        int zone_y = (touched_y <= 7) ? 11 : 0;
+
+        /* Clear the zone first. Text drawn straight over lit pads is unreadable
+           - the pads win, because they are solid and the glyph is a few pixels
+           of the same brightness. */
+        for (int y = zone_y; y < zone_y + 4 && y < LIFE_H; ++y)
+            for (int x = 0; x < LIFE_W; ++x) {
+                if (y == LIFE_TRANSPORT_Y) continue;   /* never cover transport */
+                set_led(x, y, 0);
+            }
+
         int w = leds_string_width(txt, FONT_4);
         int x = (LIFE_W - w) / 2;
         if (x < 0) x = 0;
-        int zone_y = (touched_y <= 7) ? 11 : 0;
         leds_draw_string(x, zone_y, FONT_4, life_voice_bright[edit_voice], txt);
     }
 
