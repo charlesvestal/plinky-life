@@ -24,6 +24,13 @@ typedef enum {
 /* 4-char labels for draw_system_style_enum_settings_page(...). */
 static const char *const life_trav_names[TRAV_COUNT] = { "FWD ", "REV ", "PING", "RAND" };
 
+static const char *const life_trav_help[TRAV_COUNT] = {
+    "Forward - left to right through the 16 columns",
+    "Reverse - right to left",
+    "PingPong - out and back, without repeating the ends",
+    "Random - a random column each step",
+};
+
 typedef struct {
     short pos;
     signed char dir;

@@ -37,6 +37,24 @@ static const char *const life_sel_names[SEL_COUNT] = {
     "FRST", "LAST", "UP  ", "DOWN", "UPDN", "DNUP", "RAND", "WALK", "RISE", "FALL", "ALL "
 };
 
+/* One line per rule, for the second-screen help view. The grid can only show a
+   4-character label, and "DNUP" tells you nothing; these are what a player
+   actually reads when they touch the pad. static const, so they live in flash
+   and cost nothing against the panel arena. */
+static const char *const life_sel_help[SEL_COUNT] = {
+    "First - the topmost live cell in the column, the highest note",
+    "Last - the bottommost live cell, the lowest note",
+    "Up - climbs through the column's live cells, one per step",
+    "Down - descends through the column's live cells",
+    "UpDown - climbs then falls back, without repeating the ends",
+    "DownUp - falls then climbs back, without repeating the ends",
+    "Random - any live cell in the column, evenly",
+    "Walk - the live cell closest in pitch to the last note. Smooth lines",
+    "Rise - the next live cell above the last note, wrapping to the bottom",
+    "Fall - the next live cell below the last note, wrapping to the top",
+    "All - every live cell at once. The only rule that makes chords",
+};
+
 typedef struct {
     short cycle_idx;    /* position within the pitch-ascending live-cell list */
     short prev_row;     /* row of the previous note, or -1 if none yet */

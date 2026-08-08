@@ -707,13 +707,14 @@ struct life_panel : panel_t {
     }
 
     static const char *action_help(int x, int y) {
-        if (y == 13 && x < 4) return "edit this voice";
-        if (y == 14) return x < 4 ? "mute this voice" : "solo this voice";
+        if (y == 13 && x < 4) return "open this voice's editor - rate, rule, sound";
+        if (y == 14) return x < 4 ? "mute this voice"
+                                  : "solo this voice - silences the other three";
         if (y == 15) switch (x) {
-        case 0: return "clear the world";
-        case 1: return "respawn cells now";
-        case 2: return "freeze evolution";
-        case 3: return "step one generation";
+        case 0: return "clear the world - every cell dies";
+        case 1: return "sprinkle new cells in right now";
+        case 2: return "freeze evolution - the palette stops changing";
+        case 3: return "advance exactly one generation, even while stopped";
         default: break;
         }
         return nullptr;
@@ -812,12 +813,30 @@ struct life_panel : panel_t {
         return life_voice_dim[v];
     }
 
+    /* Per-pad help, not per-row. Touching a RULE pad should say what that rule
+       DOES - it is the most opaque part of the panel and the second screen is
+       the only place words can appear.
+
+       Everything returned here is a static string. A shared formatting buffer
+       would be wrong: this runs for all 256 pads each frame and the widget layer
+       keeps the pointer, so a later pad would overwrite the touched one's text. */
     const char *voice_help(int x, int y) const {
         if (y == LIFE_SOUND_Y && x == LIFE_LOAD_X) return "load a preset into this voice";
         if (y == LIFE_SOUND_Y && x == LIFE_SOUND_X) return "edit this voice's sound";
+
         int row = param_row_for_y(y);
         if (row < 0 || x >= life_param_rows[row].n) return nullptr;
-        return life_param_rows[row].name;
+
+        switch (row) {
+        case 0: return "which voice you are editing";
+        case 1: return life_rate_names[x];
+        case 2: return life_sel_help[x];
+        case 3: return life_trav_help[x];
+        case 4: return "MIDI channel for this voice";
+        case 5: return "pitch offset in scale degrees; the dim centre pad is 0";
+        case 6: return "note length, as a share of this voice's step";
+        default: return life_param_rows[row].name;
+        }
     }
 
     void do_voice_edit(int x, int y) {
@@ -838,8 +857,8 @@ struct life_panel : panel_t {
        the only place this panel can show words. */
     void set_voice_help_text(void) {
         int v = edit_voice;
-        set_help_text("V%d #fc2#*%s#. %s %s  ch %d  pitch %+d  len %d%%",
-                      v + 1, life_rate_names[v_rate[v]], life_sel_names[v_rule[v]],
+        set_help_text("#fc2#*Voice %d#. every %s, %s going %s. ch %d, pitch %+d, len %d%%",
+                      v + 1, life_rate_names[v_rate[v]], life_sel_help[v_rule[v]],
                       life_trav_names[v_order[v]],
                       (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] : v + 1,
                       (int)v_pitch[v], (int)v_length[v]);
@@ -913,6 +932,15 @@ struct life_panel : panel_t {
 
     static int clamp_int(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
+    /* Every settings page emits help text.
+
+       The 4-character label on the grid is all the hardware can show, and "SIM"
+       or "STAB" tells you nothing on its own. The second-screen view is the only
+       place this panel can use words, so each page says what it does, what the
+       value means right now, and what it affects.
+
+       Markup per ide_api.md: `#fc2` is a theme-rotated 3-digit hex colour, `#*`
+       is bold, and `#.` resets - styles are sticky until reset. */
     void draw_settings(int page) {
         int idx = -1 - page;                       /* page -1 is our page 0 */
         char buf[8];
@@ -921,6 +949,8 @@ struct life_panel : panel_t {
         case 0: {
             int d = draw_system_style_enum_settings_page("KEY ", pref_root, life_note_names, 12);
             if (d) { pref_root = (uint8_t)((pref_root + d + 120) % 12); apply_scale_to_system(); }
+            set_help_text("#fc2#*Key#. - root note, now #fc2#*%s#.. Sets the whole instrument's "
+                          "key, not just this panel.", life_note_names[pref_root]);
             break;
         }
         case 1: {
@@ -930,36 +960,57 @@ struct life_panel : panel_t {
                 pref_scale = (uint8_t)clamp_int(pref_scale + d, 0, LIFE_NUM_SCALES - 1);
                 apply_scale_to_system();
             }
+            set_help_text("#fc2#*Scale#. - #fc2#*%s#.. Grid rows are degrees of this scale, so "
+                          "every cell is in key. %d of %d.",
+                          life_scale_long_names[pref_scale], pref_scale + 1, LIFE_NUM_SCALES);
             break;
         }
         case 2: {
             snprintf(buf, sizeof(buf), "%d", pref_octave);
             int d = draw_system_style_settings_page("OCT ", buf, pref_octave * 100 / 7);
             if (d) pref_octave = (uint8_t)clamp_int(pref_octave + d, 1, 7);
+            set_help_text("#fc2#*Octave#. - base octave #fc2#*%d#. of 7. The bottom grid row "
+                          "plays %s%d; higher rows climb the scale from there.",
+                          pref_octave, life_note_names[pref_root], pref_octave);
             break;
         }
         case 3: {
             int d = draw_system_style_enum_settings_page("GEN ", gen_rate, life_rate_names,
                                                         LIFE_NUM_RATES);
             if (d) gen_rate = (uint8_t)clamp_int(gen_rate + d, 0, LIFE_NUM_RATES - 1);
+            set_help_text("#fc2#*Generation rate#. - the world evolves every #fc2#*%s#.. This is "
+                          "separate from the voice rates: slow it down for a palette that breathes.",
+                          life_rate_names[gen_rate]);
             break;
         }
         case 4: {
             snprintf(buf, sizeof(buf), "%d", respawn_floor);
             int d = draw_system_style_settings_page("FLOR", buf, respawn_floor * 100 / 64);
             if (d) respawn_floor = (uint8_t)clamp_int(respawn_floor + d, 0, 64);
+            set_help_text("#fc2#*Respawn floor#. - if fewer than #fc2#*%d#. of 256 cells are "
+                          "alive, sprinkle new ones in. 0 disables it and lets the world die.",
+                          respawn_floor);
             break;
         }
         case 5: {
             snprintf(buf, sizeof(buf), "%d", respawn_amount);
             int d = draw_system_style_settings_page("SEED", buf, respawn_amount * 100 / 64);
             if (d) respawn_amount = (uint8_t)clamp_int(respawn_amount + d, 1, 64);
+            set_help_text("#fc2#*Respawn amount#. - how many cells to sprinkle, now #fc2#*%d#.. "
+                          "Also what the SEED pad in the action layer drops in.", respawn_amount);
             break;
         }
         case 6: {
             snprintf(buf, sizeof(buf), "%d", respawn_stable);
             int d = draw_system_style_settings_page("STAB", buf, respawn_stable * 100 / 32);
             if (d) respawn_stable = (uint8_t)clamp_int(respawn_stable + d, 0, 32);
+            if (respawn_stable)
+                set_help_text("#fc2#*Stall limit#. - after #fc2#*%d#. generations with nothing "
+                              "changing at all, respawn. Blinkers keep changing, so they never "
+                              "count as stalled.", respawn_stable);
+            else
+                set_help_text("#fc2#*Stall limit#. - #fc2#*off#.. A world frozen into still lifes "
+                              "will stay frozen; only the floor can rescue it.");
             break;
         }
         case 7: {
@@ -968,6 +1019,10 @@ struct life_panel : panel_t {
                 release_all_voices();              /* never strand a note on the old sink */
                 pref_sink = (uint8_t)clamp_int(pref_sink + d, 0, 2);
             }
+            set_help_text("#fc2#*Output#. - %s.",
+                          pref_sink == LIFE_SINK_SYNTH ? "#fc2#*Plinky's own synth#. only, no MIDI"
+                          : pref_sink == LIFE_SINK_MIDI ? "#fc2#*MIDI#. only - silent on its own"
+                                                        : "#fc2#*both#. the internal synth and MIDI");
             break;
         }
         case 8: {
@@ -976,12 +1031,27 @@ struct life_panel : panel_t {
                 release_all_voices();
                 pref_port = (uint8_t)clamp_int(pref_port + d, 0, 4);
             }
+            set_help_text("#fc2#*MIDI port#. - %s. Each voice sends on its own channel, set in "
+                          "the voice editor.",
+                          pref_port == 0 ? "#fc2#*off#. - no MIDI leaves the panel"
+                          : pref_port == 1 ? "#fc2#*USB 1#."
+                          : pref_port == 2 ? "#fc2#*TRS 1#."
+                          : pref_port == 3 ? "#fc2#*port 1#., USB and TRS"
+                                           : "#fc2#*every port#., USB and TRS 1 and 2");
             break;
         }
         case 9: {
             bool on = pref_send_cc != 0;
-            int d = draw_system_style_bool_settings_page("SIM ", on);
+            int d = draw_system_style_bool_settings_page("CC  ", on);
             if (d) pref_send_cc = on ? 0 : 1;
+            if (pref_send_cc)
+                set_help_text("#fc2#*Simulation CCs#. - #fc2#*on#.. Sends CC20 density, 21 births, "
+                              "22 deaths, 23 stability and 24-27 per-voice movement, once per "
+                              "generation. Modulation from the automaton itself.");
+            else
+                set_help_text("#fc2#*Simulation CCs#. - #fc2#*off#.. Turn on to send CC20-27 "
+                              "describing the world: density, births, deaths, stability and "
+                              "per-voice movement.");
             break;
         }
         default:
@@ -1091,10 +1161,17 @@ struct life_panel : panel_t {
         else if (mode == LIFE_UI_ACTION)
             set_help_text("#fc2#*Actions#. - edit, mute, solo, clear, seed, freeze, step");
         else
-            set_help_text("Life - #fc2#*%d#. alive, %s %s, gen %s%s", last_stats.alive,
-                          life_note_names[pref_root], life_scale_long_names[pref_scale],
-                          life_rate_names[gen_rate],
-                          is_transport_playing() ? "" : " (stopped)");
+            /* The world view is where you spend the time, so its one line of
+               text says what the four voices are set to - otherwise the only
+               way to know is to open each editor in turn. */
+            set_help_text("#fc2#*%d#. alive, %s %s, gen %s%s  #fc2#*|#.  %s %s  %s %s  %s %s  %s %s",
+                          last_stats.alive, life_note_names[pref_root],
+                          life_scale_long_names[pref_scale], life_rate_names[gen_rate],
+                          is_transport_playing() ? "" : " (stopped)",
+                          life_rate_names[v_rate[0]], life_sel_names[v_rule[0]],
+                          life_rate_names[v_rate[1]], life_sel_names[v_rule[1]],
+                          life_rate_names[v_rate[2]], life_sel_names[v_rule[2]],
+                          life_rate_names[v_rate[3]], life_sel_names[v_rule[3]]);
     }
 
     /* ================================================================== */
