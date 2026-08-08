@@ -1231,6 +1231,7 @@ static const life_param_row_t life_chance_rows[] = {
     {  5, 11, "RATCHET" },  /* how much crowding adds repeats */
     {  7, 11, "TIE" },      /* how often survivors hold instead of striking */
     {  9, 11, "EVERY" },    /* play only every Nth crossing */
+    { 11, 11, "ACCENT" },   /* how much crowding drives velocity */
 };
 #define LIFE_NUM_CHANCE_ROWS ((int)(sizeof(life_chance_rows) / sizeof(life_chance_rows[0])))
 
@@ -1246,11 +1247,6 @@ static const life_param_row_t life_chance_rows[] = {
 #define LIFE_LOAD_X  0
 #define LIFE_SOUND_X 1
 #define LIFE_SOUND_Y 15
-
-/* Row 15 of the voice editor: load, sound, a gap, then ACCENT across x3..x12.
-   x13..15 are the modifier and transport, which are never covered. */
-#define LIFE_ACCENT_X0 3
-#define LIFE_ACCENT_N  10
 
 struct life_panel : panel_t {
     /* --- world --- */
@@ -2076,6 +2072,7 @@ struct life_panel : panel_t {
         case 2: return &v_ratchet[edit_voice];
         case 3: return &v_tie[edit_voice];
         case 4: return &v_cond[edit_voice];
+        case 5: return &v_accent[edit_voice];
         default: return 0;
         }
     }
@@ -2129,14 +2126,9 @@ struct life_panel : panel_t {
         }
     }
 
-    int accent_index(int v) const { return (v_accent[v] * (LIFE_ACCENT_N - 1) + 50) / 100; }
-
     uint32_t voice_colour(int x, int y) const {
         if (y == LIFE_SOUND_Y && x == LIFE_LOAD_X) return LED_RGB(6, 4, 14);
         if (y == LIFE_SOUND_Y && x == LIFE_SOUND_X) return LIFE_COL_ACTION;
-        if (y == LIFE_SOUND_Y && x >= LIFE_ACCENT_X0 && x < LIFE_ACCENT_X0 + LIFE_ACCENT_N)
-            return (x - LIFE_ACCENT_X0) == accent_index(edit_voice)
-                       ? life_voice_bright[edit_voice] : life_voice_dim[edit_voice];
         if (y == LIFE_SOUND_Y && x == LIFE_VPAGE_X)
             return voice_page ? LED_RGB(20, 10, 0) : LED_RGB(5, 3, 0);
 
@@ -2165,8 +2157,6 @@ struct life_panel : panel_t {
     const char *voice_help(int x, int y) const {
         if (y == LIFE_SOUND_Y && x == LIFE_LOAD_X) return "load a preset into this voice";
         if (y == LIFE_SOUND_Y && x == LIFE_SOUND_X) return "edit this voice's sound";
-        if (y == LIFE_SOUND_Y && x >= LIFE_ACCENT_X0 && x < LIFE_ACCENT_X0 + LIFE_ACCENT_N)
-            return "accent - how much crowded cells hit harder";
 
         if (y == LIFE_SOUND_Y && x == LIFE_VPAGE_X)
             return "flip between the voice's timing and its chance controls";
@@ -2180,6 +2170,7 @@ struct life_panel : panel_t {
         case 2: return "Ratchet - how much a crowded cell repeats inside its step";
         case 3: return "Tie - how often a cell that survived holds instead of striking";
         case 4: return "Every - play only every 2nd, 3rd or 4th crossing of the world";
+        case 5: return "Accent - how much a crowded cell hits harder than a lone one";
         default: return rows()[row].name;
         }
 
@@ -2205,11 +2196,6 @@ struct life_panel : panel_t {
             return;
         }
         if (y == LIFE_SOUND_Y && x == LIFE_VPAGE_X) { voice_page = voice_page ? 0 : 1; return; }
-        if (y == LIFE_SOUND_Y && x >= LIFE_ACCENT_X0 && x < LIFE_ACCENT_X0 + LIFE_ACCENT_N) {
-            v_accent[edit_voice] =
-                (uint8_t)((x - LIFE_ACCENT_X0) * 100 / (LIFE_ACCENT_N - 1));
-            return;
-        }
         int row = param_row_for_y(y);
         if (row < 0 || x >= rows()[row].n) return;
         set_param(row, x);
@@ -2220,9 +2206,9 @@ struct life_panel : panel_t {
     void set_voice_help_text(void) {
         int v = edit_voice;
         if (voice_page) {
-            set_help_text("#fc2#*Voice %d chance#. - skip %d%%, ratchet %d%%, tie %d%%, "
-                          "every %d crossing%s", v + 1, v_prob[v], v_ratchet[v], v_tie[v],
-                          chance_pass_divisor(v_cond[v]),
+            set_help_text("#fc2#*Voice %d behaviour#. - skip %d%%, ratchet %d%%, tie %d%%, "
+                          "accent %d%%, every %d crossing%s", v + 1, v_prob[v], v_ratchet[v],
+                          v_tie[v], v_accent[v], chance_pass_divisor(v_cond[v]),
                           chance_pass_divisor(v_cond[v]) == 1 ? "" : "s");
             return;
         }

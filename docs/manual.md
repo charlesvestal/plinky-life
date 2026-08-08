@@ -123,7 +123,6 @@ range goes.
 | 9 | **channel** | MIDI channel 1–16 |
 | 11 | **pitch** | −7 … +7 scale degrees; the dim centre pad is 0 |
 | 13 | **length** | 10% … 100% of the step |
-| 15, `x3`–`x12` | **accent** | how much crowded cells hit harder |
 
 And on row 15:
 
@@ -131,7 +130,7 @@ And on row 15:
 |---|---|
 | `(0,15)` | **load** a preset into this voice |
 | `(1,15)` | **edit** this voice's sound |
-| `(2,15)` | flip to the **chance** page |
+| `(2,15)` | flip to the **behaviour** page |
 
 Press `×` to go back to the world.
 
@@ -272,9 +271,8 @@ eight to itself.
 Sending to MIDI only? Then there's no ceiling and chords go out whole.
 
 **Loud cells:** a cell surrounded by neighbours hits harder than a lone one, so
-dense clusters accent themselves. Each voice's **accent** sets how much of that
-gets through — at the bottom of the range every note is the same weight, at the
-top the world owns the dynamics.
+dense clusters accent themselves. How much is each voice's **accent**, on its
+behaviour page.
 
 ---
 

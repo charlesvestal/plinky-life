@@ -42,7 +42,6 @@ PARAM_ROWS = [
 ]
 
 LOAD_X, SOUND_X, SOUND_Y = 0, 1, 15   # load a preset / edit this voice's sound
-ACCENT_X0, ACCENT_N = 3, 10           # accent, along the rest of row 15
 VPAGE_X = 2                           # flip to the chance page
 
 CHANCE_ROWS = [
@@ -51,6 +50,7 @@ CHANCE_ROWS = [
     (5, 11, "RATCHET", "crowding adds repeats"),
     (7, 11, "TIE", "survivors hold instead"),
     (9, 11, "EVERY", "play every 2nd/3rd/4th pass"),
+    (11, 11, "ACCENT", "crowded cells hit harder"),
 ]
 
 
@@ -261,8 +261,6 @@ def voice():
                 pad(out, x, y, "#33333c")
             else:
                 pad(out, x, y, V_DIM[1])
-    for i in range(ACCENT_N):
-        pad(out, ACCENT_X0 + i, SOUND_Y, V[1] if i == 5 else V_DIM[1])
     pad(out, LOAD_X, SOUND_Y, "#4a3c8f", "LD", "#fff")
     pad(out, SOUND_X, SOUND_Y, ACTION, "SND", "#000")
     pad(out, VPAGE_X, SOUND_Y, "#5a3000", "P2", "#000")
@@ -277,8 +275,8 @@ def voice():
         out.append(f'<text class="k" x="{lx}" y="{py + 12}">{esc(desc)}</text>')
     out.append(
         f'<text class="t" x="{PAD}" y="{PAD + 16*(CELL+GAP) + 18}">'
-        'Row 15: LD loads a preset, SND edits the sound, P2 flips to the chance page, and '
-        'x3-12 is ACCENT.</text>'
+        'Selected pad bright; the rest of the row dim. Row 15: LD loads a preset, SND edits '
+        'the sound, P2 flips to the behaviour page.</text>'
     )
     out.append("</svg>")
     return "\n".join(out)
@@ -371,7 +369,7 @@ def chance():
     w, h = grid_size(300)
     out = svg_open(w, h, "plinky-life voice chance page")
     axes(out)
-    sel = {1: 1, 3: 4, 5: 6, 7: 0, 9: 2}
+    sel = {1: 1, 3: 4, 5: 6, 7: 0, 9: 2, 11: 6}
     rows = {y: n for y, n, _, _ in CHANCE_ROWS}
     for y in range(16):
         for x in range(16):
@@ -391,8 +389,6 @@ def chance():
                 pad(out, x, y, "#33333c")
             else:
                 pad(out, x, y, V_DIM[1])
-    for i in range(ACCENT_N):
-        pad(out, ACCENT_X0 + i, SOUND_Y, V[1] if i == 5 else V_DIM[1])
     pad(out, LOAD_X, SOUND_Y, "#4a3c8f", "LD", "#fff")
     pad(out, SOUND_X, SOUND_Y, ACTION, "SND", "#000")
     pad(out, VPAGE_X, SOUND_Y, "#c86400", "P2", "#000")
@@ -405,13 +401,11 @@ def chance():
         py = PAD + y * (CELL + GAP) + CELL / 2 + 4
         out.append(f'<text class="h" x="{lx}" y="{py - 2}">{esc(name)}</text>')
         out.append(f'<text class="k" x="{lx}" y="{py + 12}">{esc(desc)}</text>')
-    note(out, lx, PAD + 10 * (CELL + GAP) + 30, [
-        ("h", "row 15 - same on both"),
-        ("h", "voice pages"),
+    note(out, lx, PAD + 13 * (CELL + GAP) + 6, [
+        ("h", "row 15 - both pages"),
         ("t", "LD   load a preset"),
         ("t", "SND  the sound editor"),
         ("t", "P2   flip play / chance"),
-        ("t", "x3-12  ACCENT"),
     ])
     out.append(
         f'<text class="t" x="{PAD}" y="{PAD + 16*(CELL+GAP) + 18}">'
