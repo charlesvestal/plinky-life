@@ -101,7 +101,16 @@ static const uint8_t life_port_values[5] = {
 
 #define LIFE_NUM_VOICES 4
 
-/* Row 15, following the Chords silkscreen - which is also the convention in
+/* The world is ALWAYS the full 16 rows, on every faceplate.
+
+   Chords and Drums print pad circles only on rows 2..13, so on those plates the
+   top and bottom rows of the world sit under printed control rows. That
+   misalignment is deliberate and settled: rows are scale degrees, and cropping
+   to the printed circles would make it a 12-degree instrument instead of a
+   16-degree one. The grid is the grid; we align to the silkscreen on the sound
+   page, where the labels actually name what the pads do.
+
+   Row 15, following the Chords silkscreen - which is also the convention in
    ide_api.md's Global Transport section:
 
      (12,15) REC   - we have nothing to record, so it stays part of the world

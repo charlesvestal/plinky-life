@@ -53,6 +53,11 @@ and never changes meaning.
 Three cells are given up to those pads. They still live and die with the rest of
 the world — you just can't see or paint them.
 
+**On the Chords and Drums overlays** the world still uses all 16 rows, so the top
+and bottom rows sit outside the printed pad circles. That's intentional: rows are
+pitch, and cropping them would cost you two scale degrees at each end. The sound
+page does line up with the printed labels.
+
 ### Reading the playheads
 
 Each voice tints the column it is standing on, in its own colour:
