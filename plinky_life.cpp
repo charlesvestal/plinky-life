@@ -821,12 +821,6 @@ static const char *const life_note_names[12] = {
     "F#  ", "G   ", "G#  ", "A   ", "A#  ", "B   ",
 };
 
-/* Which overlay is physically fitted. NOTHING in the API reports this - the
-   faceplate is a passive printed sheet - so the player tells us, and we lay the
-   sound page out to match what is printed under their fingers. */
-static const char *const life_plate_names[2] = { "BLNK", "CHRD" };
-enum { LIFE_PLATE_BLANK = 0, LIFE_PLATE_CHORDS };
-
 static const char *const life_sink_names[3] = { "SYN ", "MIDI", "BOTH" };
 enum { LIFE_SINK_SYNTH = 0, LIFE_SINK_MIDI, LIFE_SINK_BOTH };
 
@@ -966,7 +960,6 @@ struct life_panel : panel_t {
     uint8_t pref_sink;
     uint8_t pref_port;
     uint8_t pref_send_cc;
-    uint8_t pref_plate;       /* which faceplate is fitted - see life_plate_names */
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
@@ -1032,7 +1025,6 @@ struct life_panel : panel_t {
         pref_sink = LIFE_SINK_BOTH;
         pref_port = 3;             /* MIDI_PORT_1 */
         pref_send_cc = 1;
-        pref_plate = LIFE_PLATE_BLANK;
     }
 
     void on_load_finished(void) override {
@@ -1120,7 +1112,6 @@ struct life_panel : panel_t {
         if (pref_octave > 7) pref_octave = 7;
         if (pref_sink > LIFE_SINK_BOTH) pref_sink = LIFE_SINK_BOTH;
         if (pref_port > 4) pref_port = 3;
-        if (pref_plate > LIFE_PLATE_CHORDS) pref_plate = LIFE_PLATE_BLANK;
         if (edit_voice >= LIFE_NUM_VOICES) edit_voice = 0;
     }
 
@@ -1729,7 +1720,11 @@ struct life_panel : panel_t {
     void draw_preset_editor(void) {
         int preset = preset_for(edit_voice);
 
-        if (pref_plate == LIFE_PLATE_CHORDS) {
+        /* The firmware reads the mounted overlay off resistor straps, so we do
+           not have to ask - get_frontpanel_code() knows. Chords is the one whose
+           printed synth page we can match exactly (its manual gives the regions);
+           every other overlay gets the general layout. */
+        if (get_frontpanel_code() == FRONT_PANEL_CODE_CHORDS) {
             draw_chords_sound_page(preset);
             return;
         }
@@ -1777,7 +1772,7 @@ struct life_panel : panel_t {
 
     /* Global only. Per-voice config moved onto the grid, where it is one tap
        deep and visible all at once instead of fourteen side-button clicks. */
-    int settings_page_count(void) { return 11; }
+    int settings_page_count(void) { return 10; }
     int get_num_panel_settings_pages(void) override { return settings_page_count(); }
 
     static int clamp_int(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
@@ -1904,19 +1899,6 @@ struct life_panel : panel_t {
                               "per-voice movement.");
             break;
         }
-        case 10: {
-            int d = draw_system_style_enum_settings_page("PLTE", pref_plate, life_plate_names, 2);
-            if (d) pref_plate = (uint8_t)clamp_int(pref_plate + d, 0, 1);
-            if (pref_plate == LIFE_PLATE_CHORDS)
-                set_help_text("#fc2#*Faceplate#. - #fc2#*Chords#.. The sound page is laid out to "
-                              "match the printed Chords synth page, so every label under your "
-                              "fingers is correct.");
-            else
-                set_help_text("#fc2#*Faceplate#. - #fc2#*blank#.. Set this to Chords if you have "
-                              "the Chords overlay fitted and the sound page will match its "
-                              "printed labels.");
-            break;
-        }
         default:
             break;
         }
@@ -1973,7 +1955,8 @@ struct life_panel : panel_t {
            the top of it. */
         if (mode == LIFE_UI_PRESET) {
             draw_preset_editor();
-            set_help_text("V%d #fc2#*sound#. - x to leave", edit_voice + 1);
+            set_help_text("V%d #fc2#*sound#. - %s layout - x to leave", edit_voice + 1,
+                          get_frontpanel_code() == FRONT_PANEL_CODE_CHORDS ? "Chords" : "standard");
             return;
         }
 
@@ -2112,7 +2095,6 @@ struct life_panel : panel_t {
             pref_sink = LIFE_SINK_BOTH;
             pref_port = 3;
             pref_send_cc = 1;
-            pref_plate = LIFE_PLATE_BLANK;
         }
 
         OBJECT_BEGIN(s);
@@ -2122,7 +2104,6 @@ struct life_panel : panel_t {
         FIELD("sink", pref_sink);
         FIELD("port", pref_port);
         FIELD("cc", pref_send_cc);
-        FIELD("plate", pref_plate);
         OBJECT_END(s);
 
         clamp_settings();

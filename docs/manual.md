@@ -153,6 +153,12 @@ Voice editor → `(1,15)`.
 
 The familiar Plinky synth editor, pointed at the selected voice.
 
+**With the Chords overlay fitted it rearranges itself** to match the printed
+Chords synth page, so attack, decay, sustain, release and the rest land under
+the labels they belong to and the sliders pick up the printed colour groups.
+You don't have to tell it — it knows which overlay is on the instrument. The
+second screen says which layout you're looking at.
+
 | Area | |
 |---|---|
 | rows 0–4 | 16 sliders: effects sends and the mix |
@@ -232,18 +238,11 @@ second screen explains each page as you land on it.
 | `OUT ` | output | synth · MIDI · both |
 | `PORT` | MIDI ports | off · USB1 · TRS1 · port 1 · all |
 | `CC  ` | simulation CCs | on/off — see below |
-| `PLTE` | faceplate | blank · Chords |
 
 Key and scale set the **whole instrument's** harmony, not just this panel's, so
 the rest of the Plinky follows along.
 
-### If you have the Chords overlay
 
-Set `PLTE` to `CHRD`. The sound page rearranges to match the printed Chords
-synth page — attack, decay, sustain, release and the rest land under the labels
-they belong to, and the sliders take the printed colour groups.
-
-Nothing else moves; the world, actions and voice editor are the same either way.
 
 ---
 

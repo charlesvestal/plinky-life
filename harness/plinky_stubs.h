@@ -201,6 +201,18 @@ struct preset_pages_t {
                   int preset_idx_write_copies_mask = 0);
 };
 
+/* --- front panel ---------------------------------------------------------
+   The mounted overlay is readable: the firmware reads resistor straps. */
+#ifndef FRONT_PANEL_CODE_NONE
+#define FRONT_PANEL_CODE_NONE 0x00000
+#define FRONT_PANEL_CODE_BLOCKS FRONT_PANEL_CODE_NONE
+#define FRONT_PANEL_CODE_TOADSTEP 0x00002
+#define FRONT_PANEL_CODE_DRUMS 0x00010
+#define FRONT_PANEL_CODE_CHORDS 0x00020
+#endif
+int get_frontpanel_code(void);
+int get_frontpanel_orientation(void);   /* 0=missing, 1=normal, 2=upside down */
+
 /* --- musical state ------------------------------------------------------- */
 extern uint8_t current_key;
 extern uint16_t current_scale;
