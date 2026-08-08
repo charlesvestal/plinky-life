@@ -834,6 +834,7 @@ struct life_panel : panel_t {
     int8_t v_pitch[LIFE_NUM_VOICES];
     uint8_t v_length[LIFE_NUM_VOICES];
 
+    uint8_t initialised;      /* 0 only on a zeroed arena - see on_load_finished */
     uint8_t gen_rate;
     uint8_t respawn_floor;
     uint8_t respawn_amount;
@@ -886,33 +887,12 @@ struct life_panel : panel_t {
     void setup_default_panel_state() override {
         panel_t::setup_default_panel_state();
 
-        /* Durable panel state defaults. SYSTEM_NOTES.md section 6b: this hook
-           does NOT run on a staged load, which is how the IDE loads a panel, so
-           anything that must exist at runtime is rebuilt in on_load_finished()
-           rather than only here. */
-        for (int v = 0; v < LIFE_NUM_VOICES; ++v) {
-            v_enabled[v] = 1;
-            v_muted[v] = 0;
-            v_rate[v] = (uint8_t)(4 + v);          /* 8th, 4T, 1/4, 1/2 - four different rates */
-            v_order[v] = TRAV_FORWARD;
-            v_rule[v] = (uint8_t)(v == 0 ? SEL_FIRST : v == 1 ? SEL_WALK
-                                        : v == 2   ? SEL_RANDOM
-                                                   : SEL_LAST);
-            v_pitch[v] = (int8_t)(v * -3);
-            v_length[v] = 60;
-        }
-        gen_rate = 8;              /* one generation per bar */
-        respawn_floor = 12;
-        respawn_amount = 10;
-        respawn_stable = 4;
-        freeze_life = 0;
-
-        pref_root = 0;
-        pref_scale = 9;            /* minor pentatonic - forgiving by default */
-        pref_octave = 3;
-        pref_sink = LIFE_SINK_BOTH;
-        pref_port = 3;             /* MIDI_PORT_1 */
-        pref_send_cc = 1;
+        /* SYSTEM_NOTES.md section 6b: this hook does NOT run on a staged load,
+           which is how the IDE loads a panel. on_load_finished() covers that
+           case; both call the same two functions so the defaults cannot drift
+           apart between the two entry points. */
+        setup_default_panel_state_fields_only();
+        set_pref_defaults();
 
         reset_everything();
         rebuild_runtime();
@@ -924,11 +904,44 @@ struct life_panel : panel_t {
         apply_scale_to_system();
     }
 
+    void set_pref_defaults(void) {
+        pref_root = 0;
+        pref_scale = 9;            /* minor pentatonic - forgiving by default */
+        pref_octave = 3;
+        pref_sink = LIFE_SINK_BOTH;
+        pref_port = 3;             /* MIDI_PORT_1 */
+        pref_send_cc = 1;
+    }
+
     void on_load_finished(void) override {
         panel_t::on_load_finished();
+
+        /* SYSTEM_NOTES.md section 6b: setup_default_panel_state() does NOT run on
+           a staged load, which is how the IDE loads a panel. The arena is zeroed,
+           so without this the panel comes up with every voice DISABLED, an empty
+           world and MIDI off - press play, hear nothing, with no clue why.
+
+           `initialised` is serialised, so it is 1 in any real save and 0 only on
+           a zeroed arena. That is what distinguishes "never set up" from "loaded
+           a scene where the user deliberately muted everything". */
+        bool fresh = !initialised;
+        if (fresh) setup_default_panel_state_fields_only();
+
+        /* pref_octave is 1..7, so 0 means the settings file never loaded either.
+           Checked before clamp_settings(), which would turn that 0 into a 1. */
+        if (pref_octave == 0) set_pref_defaults();
+
         clamp_settings();
         unpack_world();
         rebuild_runtime();
+
+        if (fresh) {
+            /* An empty Game of Life stays empty forever. Seed it so the panel is
+               audible the moment transport starts. */
+            life_respawn_apply(&world, &respawn, 60);
+            initialised = 1;
+        }
+
         apply_scale_to_system();
     }
 
@@ -1504,6 +1517,7 @@ struct life_panel : panel_t {
         FIELD("seed", respawn_amount);
         FIELD("stab", respawn_stable);
         FIELD("freeze", freeze_life);
+        FIELD("init", initialised);
         OBJECT_END(s);
 
         clamp_settings();
@@ -1530,6 +1544,7 @@ struct life_panel : panel_t {
         respawn_amount = 10;
         respawn_stable = 4;
         freeze_life = 0;
+        initialised = 1;
     }
 
     bool on_serialise_settings(serialiser_t &s, int version) override {
