@@ -3,7 +3,11 @@
 @Author: Charles Vestal
 @Firmware: latest
 @Level: Advanced
-@Tags: sequencer, generative, midi, cellular automata
+@Tags: sequencer, generative, midi, cellular automata, game of life
+@Preferred Panels: blocks, chords, drums
+@Category: Sequencer
+@Documentation: https://github.com/charlesvestal/plinky-life/blob/main/docs/manual.md
+@Discussion: https://github.com/charlesvestal/plinky-life
 @Description: A Game of Life sequencer. Four voices walk an evolving 16x16 world and play what they find alive.
 
 Life turns Conway's Game of Life into a sequencer. The 16x16 grid is a living
@@ -663,6 +667,14 @@ static inline int life_nth_degree_semitone(unsigned short mask, int idx) {
     return -1;
 }
 
+/* The inverse: which scale degree is nearest this MIDI note.
+
+   Needed for note input - a played note has to land on a row, and rows are
+   degrees. A note outside the scale snaps to the nearest degree rather than
+   being dropped, so playing the black keys in a pentatonic still draws
+   something instead of silently doing nothing. */
+static inline int life_note_to_degree(int note, int root, unsigned short mask);
+
 /* Map a scale degree to a MIDI note.
 
    `degree` may be negative or run past the top of the scale; it wraps into
@@ -676,6 +688,23 @@ static inline int life_degree_to_note(int degree, int root, unsigned short mask)
     if (idx < 0) { idx += n; --octave; }  /* C truncates toward zero; we need floor */
     int note = root + octave * 12 + life_nth_degree_semitone(mask, idx);
     return note < 0 ? 0 : (note > 127 ? 127 : note);
+}
+
+static inline int life_note_to_degree(int note, int root, unsigned short mask) {
+    if (mask == 0) mask = 0xFFF;
+    int n = life_popcount12(mask);
+
+    /* Start from the octave the note is in, then check the degrees around it -
+       far cheaper than sweeping the whole range, and exact because
+       life_degree_to_note is monotonic in the degree. */
+    int rough = ((note - root) * n) / 12;
+    int best = rough, best_d = 1 << 20;
+    for (int d = rough - n - 1; d <= rough + n + 1; ++d) {
+        int diff = life_degree_to_note(d, root, mask) - note;
+        if (diff < 0) diff = -diff;
+        if (diff < best_d) { best_d = diff; best = d; }
+    }
+    return best;
 }
 
 /* ===== src/voice.h ===== */
@@ -1163,6 +1192,7 @@ struct life_panel : panel_t {
     uint8_t pref_cc_in;       /* base controller number for the CC block, 0 = off */
     uint8_t pref_cc_out;      /* mirror parameter changes back out on the same block */
     uint8_t pref_cv_out;      /* drive the two CV outputs from the world */
+    uint8_t pref_note_in;     /* played notes draw cells into the world */
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
@@ -1183,6 +1213,12 @@ struct life_panel : panel_t {
     uint8_t cc_in_last[CC_PARAM_COUNT];
     uint64_t cc_in_pending;
     uint32_t musical_state_seen;   /* so we notice key or scale changed elsewhere */
+
+    /* Note input. on_midi records; on_ui paints, because touching the world is
+       exactly what the sequence lock exists to protect. */
+    uint8_t note_in_row[16];
+    uint8_t note_in_count;
+    uint8_t note_write_x;
 
     /* What the outside world was last told each parameter is. Sending only on
        change is half of what stops a feedback loop; the other half is
@@ -1224,6 +1260,8 @@ struct life_panel : panel_t {
         cc_in_pending = 0;
         cc_out_primed = false;
         musical_state_seen = 0;
+        note_in_count = 0;
+        note_write_x = 0;
     }
 
     void setup_default_panel_state() override {
@@ -1256,6 +1294,7 @@ struct life_panel : panel_t {
         pref_cc_in = CC_IN_DEFAULT_BASE;
         pref_cc_out = 1;
         pref_cv_out = 1;
+        pref_note_in = 1;
     }
 
     void on_load_finished(void) override {
@@ -2096,7 +2135,7 @@ struct life_panel : panel_t {
 
     /* Global only. Per-voice config moved onto the grid, where it is one tap
        deep and visible all at once instead of fourteen side-button clicks. */
-    int settings_page_count(void) { return 16; }
+    int settings_page_count(void) { return 17; }
 
     /* Page 1 is the scene save/load picker. on_serialise() has always described
        the world and every voice setting, but without this there was no way to
@@ -2323,6 +2362,19 @@ struct life_panel : panel_t {
                           "changing. 0 to 5 volts.", pref_cv_out ? "#fc2#*on#." : "#fc2#*off#.");
             break;
         }
+        case 16: {
+            bool on = pref_note_in != 0;
+            int d = draw_system_style_bool_settings_page("NIN ", on);
+            if (d) { pref_note_in = on ? 0 : 1; settings_dirty = true; }
+            if (pref_note_in)
+                set_help_text("#fc2#*Note input#. - #fc2#*on#.. Played notes draw cells into the "
+                              "world, one column per note, left to right. Off-scale notes snap "
+                              "to the nearest degree.");
+            else
+                set_help_text("#fc2#*Note input#. - #fc2#*off#.. Turn on to draw into the world "
+                              "from a keyboard.");
+            break;
+        }
         default:
             break;
         }
@@ -2333,6 +2385,7 @@ struct life_panel : panel_t {
 
         follow_musical_state();
         apply_pending_cc();
+        apply_note_input();
 
         int page = get_scroll_page();
         if (page < 0) {
@@ -2467,6 +2520,18 @@ struct life_panel : panel_t {
     /* ================================================================== */
 
     void on_midi(uint32_t midimsg) override {
+        /* Play a note, draw a cell. The note picks the row - it snaps to the
+           nearest degree, so off-scale notes still draw instead of vanishing -
+           and a write head moves one column per note, so a played phrase is
+           written across the world left to right. */
+        if (pref_note_in && IS_NOTE_ON(midimsg)) {
+            int degree = life_note_to_degree(NOTE_NUMBER(midimsg), root_note(), scale_mask());
+            int row = 15 - degree;
+            if (row >= 0 && row < LIFE_H && note_in_count < 16) {
+                note_in_row[note_in_count++] = (uint8_t)row;
+            }
+            return;
+        }
         if (!IS_CC(midimsg)) return;
         if (CHANNEL_BYTE(midimsg) != (get_system_midi_channel() - 1)) return;
 
@@ -2601,6 +2666,19 @@ struct life_panel : panel_t {
         cc_out_primed = true;
     }
 
+    /* Paint whatever arrived as notes. Core0, under the lock, because
+       on_sequence is reading the same world. */
+    void apply_note_input(void) {
+        int n = note_in_count;
+        if (!n) return;
+        note_in_count = 0;
+        on_sequence_lock_guard_t guard;
+        for (int i = 0; i < n; ++i) {
+            life_set(&world, note_write_x, note_in_row[i], 1);
+            note_write_x = (uint8_t)((note_write_x + 1) & (LIFE_W - 1));
+        }
+    }
+
     /* Drain on core0. on_midi can add bits while we are here, so take the whole
        word and clear it in one go rather than testing and clearing per bit. */
     void apply_pending_cc(void) {
@@ -2702,6 +2780,7 @@ struct life_panel : panel_t {
             pref_cc_in = CC_IN_DEFAULT_BASE;
             pref_cc_out = 1;
             pref_cv_out = 1;
+            pref_note_in = 1;
         }
 
         OBJECT_BEGIN(s);
@@ -2714,6 +2793,7 @@ struct life_panel : panel_t {
         FIELD("ccin", pref_cc_in);
         FIELD("ccout", pref_cc_out);
         FIELD("cvout", pref_cv_out);
+        FIELD("notein", pref_note_in);
         OBJECT_END(s);
 
         clamp_settings();

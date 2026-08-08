@@ -580,6 +580,42 @@ static void test_empty_mask_falls_back_to_chromatic(void) {
     CHECK(life_degree_to_note(1, 60, 0) == 61, "an empty scale mask should behave chromatically");
 }
 
+static void test_note_to_degree_round_trips(void) {
+    /* Every degree must come back from the note it produces. */
+    for (int i = 0; i < LIFE_NUM_SCALES; ++i) {
+        unsigned short m = life_scale_masks[i];
+        for (int d = -20; d <= 20; ++d) {
+            int note = life_degree_to_note(d, 60, m);
+            if (note <= 0 || note >= 127) continue;      /* clamped, not invertible */
+            int back = life_note_to_degree(note, 60, m);
+            CHECK(life_degree_to_note(back, 60, m) == note,
+                  "scale %s degree %d -> note %d -> degree %d played a different note",
+                  life_scale_long_names[i], d, note, back);
+        }
+    }
+}
+
+static void test_note_to_degree_snaps_off_scale_notes(void) {
+    const unsigned short minpent = 0x4A9;    /* 0 3 5 7 10 */
+    /* C#, not in C minor pentatonic, must still land somewhere sensible. */
+    int d = life_note_to_degree(61, 60, minpent);
+    int got = life_degree_to_note(d, 60, minpent);
+    CHECK(got == 60 || got == 63, "C# should snap to C or D#, got %d", got);
+}
+
+static void test_note_to_degree_covers_the_midi_range(void) {
+    for (int i = 0; i < LIFE_NUM_SCALES; ++i)
+        for (int note = 0; note <= 127; ++note) {
+            int d = life_note_to_degree(note, 60, life_scale_masks[i]);
+            int back = life_degree_to_note(d, 60, life_scale_masks[i]);
+            CHECK(back >= 0 && back <= 127, "note %d gave an out-of-range note %d", note, back);
+            int err = back - note; if (err < 0) err = -err;
+            CHECK(err <= 6, "note %d snapped %d semitones away in scale %s",
+                  note, err, life_scale_long_names[i]);
+            if (err > 6) return;
+        }
+}
+
 /* --------------------------------------------------------------- voice.h -- */
 
 static void test_note_expires_after_its_length(void) {
@@ -859,6 +895,9 @@ int main(void) {
     test_pentatonic_wraps_at_five();
     test_notes_stay_in_midi_range();
     test_empty_mask_falls_back_to_chromatic();
+    test_note_to_degree_round_trips();
+    test_note_to_degree_snaps_off_scale_notes();
+    test_note_to_degree_covers_the_midi_range();
 
     test_note_expires_after_its_length();
     test_rearming_the_same_note_does_not_double_allocate();

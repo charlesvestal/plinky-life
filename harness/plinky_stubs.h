@@ -125,6 +125,9 @@ void synth_note_up(int voice);
 #define CC_NUMBER(m) DATA1_BYTE(m)
 #define CC_VALUE(m) DATA2_BYTE(m)
 #define IS_CC(m) (STATUS_NIBBLE(m) == 0xb0)
+#define NOTE_NUMBER(m) DATA1_BYTE(m)
+#define NOTE_VELOCITY(m) DATA2_BYTE(m)
+#define IS_NOTE_ON(m) ((STATUS_NIBBLE(m) == 0x90) && (DATA2_BYTE(m) != 0))
 
 bool midi_write(uint8_t ports, uint32_t midimsg);
 static inline int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }

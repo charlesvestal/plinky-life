@@ -123,6 +123,7 @@ range goes.
 | 9 | **channel** | MIDI channel 1–16 |
 | 11 | **pitch** | −7 … +7 scale degrees; the dim centre pad is 0 |
 | 13 | **length** | 10% … 100% of the step |
+| 15, `x3`–`x12` | **accent** | how much crowded cells hit harder |
 
 And on row 15:
 
@@ -241,7 +242,9 @@ eight to itself.
 Sending to MIDI only? Then there's no ceiling and chords go out whole.
 
 **Loud cells:** a cell surrounded by neighbours hits harder than a lone one, so
-dense clusters accent themselves.
+dense clusters accent themselves. Each voice's **accent** sets how much of that
+gets through — at the bottom of the range every note is the same weight, at the
+top the world owns the dynamics.
 
 ---
 
@@ -264,6 +267,11 @@ second screen explains each page as you land on it.
 | `CC  ` | simulation CCs out | on/off — see below |
 | `CIN ` | CC control | off, or the first controller number |
 | `COUT` | CC mirror | send changes back out on the same controllers |
+| `RULE` | the rule the world runs | Conway · HighLife · Maze · Coral · 34 · Seeds |
+| `SWNG` | swing | 0–100% |
+| `SWPT` | swing feel | plain 16th, or one of seven shuffle patterns |
+| `CV  ` | CV out | A = how full, B = how much is changing |
+| `NIN ` | note input | played notes draw cells |
 
 Key and scale set the **whole instrument's** harmony, not just this panel's, so
 the rest of the Plinky follows along.
@@ -287,7 +295,32 @@ preferences, saved automatically as you change them and shared by every scene.
 
 ---
 
-## 8. Keeping it alive
+## 8. Rules, swing and drawing from a keyboard
+
+**`RULE`** changes the law the world lives by, and it changes what the panel is:
+
+| | |
+|---|---|
+| `LIFE` | Conway — gliders drifting through a sparse world |
+| `HIGH` | HighLife — shapes replicate, so it keeps regenerating |
+| `MAZE` | dense slow-churning corridors, good for drones |
+| `CORL` | Coral — grows slowly outward into thick shapes |
+| `34` | restless, never settles for long |
+| `SEED` | everything dies every step and explodes outward |
+
+**`SWNG`** shuffles every voice together while the world keeps its own straight
+time. `SWPT` picks plain 16th swing or one of seven shuffle patterns.
+
+**`NIN`** lets you draw with a keyboard: played notes become cells, one column
+per note, left to right. Off-scale notes snap to the nearest degree, so it always
+draws something.
+
+**`CV`** sends the world out as voltage — A follows how full it is, B how much is
+changing.
+
+---
+
+## 9. Keeping it alive
 
 Left alone, a Game of Life world eventually settles into shapes that never
 change — and a frozen palette means four playheads walking a loop that never
@@ -304,7 +337,7 @@ Set `FLOR` and `STAB` to 0 if you'd rather it be allowed to die.
 
 ---
 
-## 9. Output
+## 10. Output
 
 Each voice has its own **sound** and its own **MIDI channel**, defaulting to
 channels 1–4. `OUT` chooses the internal synth, MIDI, or both.
@@ -364,7 +397,7 @@ rather than flooding the bus.
 
 ---
 
-## 10. If something seems wrong
+## 11. If something seems wrong
 
 **Nothing plays.** Check transport is running — `(15,15)` glows bright green.
 Nothing moves while stopped.

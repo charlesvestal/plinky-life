@@ -130,6 +130,14 @@ static inline int life_nth_degree_semitone(unsigned short mask, int idx) {
     return -1;
 }
 
+/* The inverse: which scale degree is nearest this MIDI note.
+
+   Needed for note input - a played note has to land on a row, and rows are
+   degrees. A note outside the scale snaps to the nearest degree rather than
+   being dropped, so playing the black keys in a pentatonic still draws
+   something instead of silently doing nothing. */
+static inline int life_note_to_degree(int note, int root, unsigned short mask);
+
 /* Map a scale degree to a MIDI note.
 
    `degree` may be negative or run past the top of the scale; it wraps into
@@ -143,4 +151,21 @@ static inline int life_degree_to_note(int degree, int root, unsigned short mask)
     if (idx < 0) { idx += n; --octave; }  /* C truncates toward zero; we need floor */
     int note = root + octave * 12 + life_nth_degree_semitone(mask, idx);
     return note < 0 ? 0 : (note > 127 ? 127 : note);
+}
+
+static inline int life_note_to_degree(int note, int root, unsigned short mask) {
+    if (mask == 0) mask = 0xFFF;
+    int n = life_popcount12(mask);
+
+    /* Start from the octave the note is in, then check the degrees around it -
+       far cheaper than sweeping the whole range, and exact because
+       life_degree_to_note is monotonic in the degree. */
+    int rough = ((note - root) * n) / 12;
+    int best = rough, best_d = 1 << 20;
+    for (int d = rough - n - 1; d <= rough + n + 1; ++d) {
+        int diff = life_degree_to_note(d, root, mask) - note;
+        if (diff < 0) diff = -diff;
+        if (diff < best_d) { best_d = diff; best = d; }
+    }
+    return best;
 }
