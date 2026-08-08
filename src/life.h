@@ -55,6 +55,39 @@ static inline unsigned short life_column_mask(const life_world_t *w, int x) {
     return m;
 }
 
+/* --- Rulesets -------------------------------------------------------------
+
+   A rule is two 9-bit masks: which neighbour counts cause a birth, and which
+   let a live cell survive. Conway is B3/S23. The others are not decoration -
+   they change what the panel IS, because the rule decides whether the palette
+   drifts, churns or explodes. */
+
+typedef struct {
+    unsigned short birth;     /* bit n set: a dead cell with n neighbours is born */
+    unsigned short survive;   /* bit n set: a live cell with n neighbours lives */
+    const char *name;         /* 4 chars, for the settings page */
+} life_rule_t;
+
+#define LIFE_B(n) (1u << (n))
+
+static const life_rule_t life_rulesets[] = {
+    { LIFE_B(3),                                     LIFE_B(2) | LIFE_B(3),
+      "LIFE" },   /* Conway B3/S23 - gliders, sparse, settles eventually */
+    { LIFE_B(3) | LIFE_B(6),                         LIFE_B(2) | LIFE_B(3),
+      "HIGH" },   /* HighLife B36/S23 - replicators, keeps regenerating */
+    { LIFE_B(3),                                     LIFE_B(1) | LIFE_B(2) | LIFE_B(3) |
+                                                     LIFE_B(4) | LIFE_B(5),
+      "MAZE" },   /* B3/S12345 - dense corridors, slow churn, drone-like */
+    { LIFE_B(3),                                     LIFE_B(4) | LIFE_B(5) | LIFE_B(6) |
+                                                     LIFE_B(7) | LIFE_B(8),
+      "CORL" },   /* Coral B3/S45678 - grows slowly into thick shapes */
+    { LIFE_B(3) | LIFE_B(4),                         LIFE_B(3) | LIFE_B(4),
+      "34  " },   /* 34 Life B34/S34 - restless, never settles for long */
+    { LIFE_B(2),                                     0,
+      "SEED" },   /* Seeds B2/S - everything dies every step, explosive */
+};
+#define LIFE_NUM_RULESETS ((int)(sizeof(life_rulesets) / sizeof(life_rulesets[0])))
+
 /* Toroidal neighbour count. Edges wrap, which is what keeps small worlds
    musically alive - a bounded 16x16 clips gliders dead at the border. */
 static inline int life_neighbours(const life_world_t *w, int x, int y) {
@@ -67,15 +100,19 @@ static inline int life_neighbours(const life_world_t *w, int x, int y) {
     return n;
 }
 
-/* Advance one generation of B3/S23 into `next`, reporting what changed.
-   `next` must not alias `w`. */
-static inline void life_step(const life_world_t *w, life_world_t *next, life_stats_t *stats) {
+/* Advance one generation into `next`, reporting what changed.
+   `next` must not alias `w`. `rule` indexes life_rulesets. */
+static inline void life_step_rule(const life_world_t *w, life_world_t *next,
+                                  life_stats_t *stats, int rule) {
+    if (rule < 0 || rule >= LIFE_NUM_RULESETS) rule = 0;
+    unsigned birth = life_rulesets[rule].birth;
+    unsigned survive = life_rulesets[rule].survive;
     int alive = 0, births = 0, deaths = 0, unchanged = 0;
     for (int y = 0; y < LIFE_H; ++y) {
         for (int x = 0; x < LIFE_W; ++x) {
             int was = w->cell[y * LIFE_W + x] ? 1 : 0;
             int n = life_neighbours(w, x, y);
-            int now = was ? (n == 2 || n == 3) : (n == 3);
+            int now = was ? ((survive >> n) & 1) : ((birth >> n) & 1);
             next->cell[y * LIFE_W + x] = (unsigned char)now;
             if (now) ++alive;
             if (now && !was) ++births;
@@ -89,6 +126,12 @@ static inline void life_step(const life_world_t *w, life_world_t *next, life_sta
         stats->deaths = deaths;
         stats->unchanged = unchanged;
     }
+}
+
+/* Conway, for callers that do not care about rulesets - including the tests
+   that assert classic Life behaviour. */
+static inline void life_step(const life_world_t *w, life_world_t *next, life_stats_t *stats) {
+    life_step_rule(w, next, stats, 0);
 }
 
 /* --- Liveness -------------------------------------------------------------

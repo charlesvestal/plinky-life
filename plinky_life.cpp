@@ -80,6 +80,39 @@ static inline unsigned short life_column_mask(const life_world_t *w, int x) {
     return m;
 }
 
+/* --- Rulesets -------------------------------------------------------------
+
+   A rule is two 9-bit masks: which neighbour counts cause a birth, and which
+   let a live cell survive. Conway is B3/S23. The others are not decoration -
+   they change what the panel IS, because the rule decides whether the palette
+   drifts, churns or explodes. */
+
+typedef struct {
+    unsigned short birth;     /* bit n set: a dead cell with n neighbours is born */
+    unsigned short survive;   /* bit n set: a live cell with n neighbours lives */
+    const char *name;         /* 4 chars, for the settings page */
+} life_rule_t;
+
+#define LIFE_B(n) (1u << (n))
+
+static const life_rule_t life_rulesets[] = {
+    { LIFE_B(3),                                     LIFE_B(2) | LIFE_B(3),
+      "LIFE" },   /* Conway B3/S23 - gliders, sparse, settles eventually */
+    { LIFE_B(3) | LIFE_B(6),                         LIFE_B(2) | LIFE_B(3),
+      "HIGH" },   /* HighLife B36/S23 - replicators, keeps regenerating */
+    { LIFE_B(3),                                     LIFE_B(1) | LIFE_B(2) | LIFE_B(3) |
+                                                     LIFE_B(4) | LIFE_B(5),
+      "MAZE" },   /* B3/S12345 - dense corridors, slow churn, drone-like */
+    { LIFE_B(3),                                     LIFE_B(4) | LIFE_B(5) | LIFE_B(6) |
+                                                     LIFE_B(7) | LIFE_B(8),
+      "CORL" },   /* Coral B3/S45678 - grows slowly into thick shapes */
+    { LIFE_B(3) | LIFE_B(4),                         LIFE_B(3) | LIFE_B(4),
+      "34  " },   /* 34 Life B34/S34 - restless, never settles for long */
+    { LIFE_B(2),                                     0,
+      "SEED" },   /* Seeds B2/S - everything dies every step, explosive */
+};
+#define LIFE_NUM_RULESETS ((int)(sizeof(life_rulesets) / sizeof(life_rulesets[0])))
+
 /* Toroidal neighbour count. Edges wrap, which is what keeps small worlds
    musically alive - a bounded 16x16 clips gliders dead at the border. */
 static inline int life_neighbours(const life_world_t *w, int x, int y) {
@@ -92,15 +125,19 @@ static inline int life_neighbours(const life_world_t *w, int x, int y) {
     return n;
 }
 
-/* Advance one generation of B3/S23 into `next`, reporting what changed.
-   `next` must not alias `w`. */
-static inline void life_step(const life_world_t *w, life_world_t *next, life_stats_t *stats) {
+/* Advance one generation into `next`, reporting what changed.
+   `next` must not alias `w`. `rule` indexes life_rulesets. */
+static inline void life_step_rule(const life_world_t *w, life_world_t *next,
+                                  life_stats_t *stats, int rule) {
+    if (rule < 0 || rule >= LIFE_NUM_RULESETS) rule = 0;
+    unsigned birth = life_rulesets[rule].birth;
+    unsigned survive = life_rulesets[rule].survive;
     int alive = 0, births = 0, deaths = 0, unchanged = 0;
     for (int y = 0; y < LIFE_H; ++y) {
         for (int x = 0; x < LIFE_W; ++x) {
             int was = w->cell[y * LIFE_W + x] ? 1 : 0;
             int n = life_neighbours(w, x, y);
-            int now = was ? (n == 2 || n == 3) : (n == 3);
+            int now = was ? ((survive >> n) & 1) : ((birth >> n) & 1);
             next->cell[y * LIFE_W + x] = (unsigned char)now;
             if (now) ++alive;
             if (now && !was) ++births;
@@ -114,6 +151,12 @@ static inline void life_step(const life_world_t *w, life_world_t *next, life_sta
         stats->deaths = deaths;
         stats->unchanged = unchanged;
     }
+}
+
+/* Conway, for callers that do not care about rulesets - including the tests
+   that assert classic Life behaviour. */
+static inline void life_step(const life_world_t *w, life_world_t *next, life_stats_t *stats) {
+    life_step_rule(w, next, stats, 0);
 }
 
 /* --- Liveness -------------------------------------------------------------
@@ -945,6 +988,20 @@ static const char *const life_note_names[12] = {
     "F#  ", "G   ", "G#  ", "A   ", "A#  ", "B   ",
 };
 
+static const char *const life_swing_names[8] = {
+    "16TH", "ST 1", "ST 2", "ST 3", "ST 4", "ST 5", "ST 6", "ST 7",
+};
+
+/* One line per rule for the second screen: "MAZE" says nothing on its own. */
+static const char *const life_rule_help[] = {
+    "Conway - gliders drifting through a sparse world. The classic",
+    "HighLife - like Conway but shapes replicate, so it keeps regenerating",
+    "Maze - dense slow-churning corridors. Good for drones",
+    "Coral - grows slowly outward into thick stable shapes",
+    "34 Life - restless, never settles for long. Busy and unpredictable",
+    "Seeds - everything dies every step and explodes outward. Chaos",
+};
+
 static const char *const life_sink_names[3] = { "SYN ", "MIDI", "BOTH" };
 enum { LIFE_SINK_SYNTH = 0, LIFE_SINK_MIDI, LIFE_SINK_BOTH };
 
@@ -1046,6 +1103,11 @@ static const life_param_row_t life_param_rows[] = {
 #define LIFE_SOUND_X 1
 #define LIFE_SOUND_Y 15
 
+/* Row 15 of the voice editor: load, sound, a gap, then ACCENT across x3..x12.
+   x13..15 are the modifier and transport, which are never covered. */
+#define LIFE_ACCENT_X0 3
+#define LIFE_ACCENT_N  10
+
 struct life_panel : panel_t {
     /* --- world --- */
     life_world_t world;
@@ -1086,6 +1148,10 @@ struct life_panel : panel_t {
     uint8_t respawn_amount;
     uint8_t respawn_stable;
     uint8_t freeze_life;
+    uint8_t rule_set;         /* which cellular automaton rule the world runs */
+    uint8_t swing;            /* 0..100, applied to every voice */
+    uint8_t swing_pattern;    /* 0 = plain swing, 1..7 = the stolper patterns */
+    uint8_t v_accent[LIFE_NUM_VOICES];  /* 0..100: how much crowding drives velocity */
 
     /* --- durable preferences (on_serialise_settings) --- */
     uint8_t pref_root;        /* 0..11 */
@@ -1096,6 +1162,7 @@ struct life_panel : panel_t {
     uint8_t pref_send_cc;
     uint8_t pref_cc_in;       /* base controller number for the CC block, 0 = off */
     uint8_t pref_cc_out;      /* mirror parameter changes back out on the same block */
+    uint8_t pref_cv_out;      /* drive the two CV outputs from the world */
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
@@ -1115,6 +1182,7 @@ struct life_panel : panel_t {
     uint8_t cc_in_value[CC_PARAM_COUNT];
     uint8_t cc_in_last[CC_PARAM_COUNT];
     uint64_t cc_in_pending;
+    uint32_t musical_state_seen;   /* so we notice key or scale changed elsewhere */
 
     /* What the outside world was last told each parameter is. Sending only on
        change is half of what stops a feedback loop; the other half is
@@ -1155,6 +1223,7 @@ struct life_panel : panel_t {
         }
         cc_in_pending = 0;
         cc_out_primed = false;
+        musical_state_seen = 0;
     }
 
     void setup_default_panel_state() override {
@@ -1186,6 +1255,7 @@ struct life_panel : panel_t {
         pref_send_cc = 1;
         pref_cc_in = CC_IN_DEFAULT_BASE;
         pref_cc_out = 1;
+        pref_cv_out = 1;
     }
 
     void on_load_finished(void) override {
@@ -1256,6 +1326,7 @@ struct life_panel : panel_t {
             if (v_rule[v] >= SEL_COUNT) v_rule[v] = SEL_FIRST;
             if (v_length[v] < 10) v_length[v] = 10;
             if (v_length[v] > 100) v_length[v] = 100;
+            if (v_accent[v] > 100) v_accent[v] = 60;
             if (v_pitch[v] < -30) v_pitch[v] = -30;
             if (v_pitch[v] > 30) v_pitch[v] = 30;
             if (v_channel[v] < -1 || v_channel[v] > 16) v_channel[v] = (int8_t)(v + 1);
@@ -1267,6 +1338,9 @@ struct life_panel : panel_t {
         if (respawn_amount < 1) respawn_amount = 1;
         if (respawn_amount > 64) respawn_amount = 64;
         if (respawn_stable > 32) respawn_stable = 4;
+        if (rule_set >= LIFE_NUM_RULESETS) rule_set = 0;
+        if (swing > 100) swing = 0;
+        if (swing_pattern > 7) swing_pattern = 0;
         if (pref_root > 11) pref_root = 0;
         if (pref_scale >= LIFE_NUM_SCALES) pref_scale = 9;
         if (pref_octave < 1) pref_octave = 1;
@@ -1284,8 +1358,33 @@ struct life_panel : panel_t {
         set_current_key_and_scale((uint8_t)(pref_root & 11), life_scale_masks[pref_scale]);
     }
 
-    uint16_t scale_mask(void) const { return life_scale_masks[pref_scale]; }
-    int root_note(void) const { return (int)pref_octave * 12 + (int)pref_root; }
+    /* Read the INSTRUMENT's key and scale, not a private copy. Life sets those
+       globals from its own settings page, but anything else - another panel, an
+       incoming NRPN - can set them too, and this way we simply follow instead of
+       quietly playing in a key the rest of the box has left. */
+    uint16_t scale_mask(void) const {
+        return current_scale ? current_scale : life_scale_masks[pref_scale];
+    }
+    int root_note(void) const { return (int)pref_octave * 12 + (int)(current_key % 12); }
+
+    /* The globals changed under us: move the settings-page pickers to match, so
+       what the page shows is what the instrument is actually doing. */
+    void follow_musical_state(void) {
+        uint32_t gen = get_current_musical_state_generation();
+        if (gen == musical_state_seen) return;
+        musical_state_seen = gen;
+
+        uint8_t key = (uint8_t)(current_key % 12);
+        if (key != pref_root) { pref_root = key; settings_dirty = true; }
+
+        for (int i = 0; i < LIFE_NUM_SCALES; ++i)
+            if (life_scale_masks[i] == current_scale) {
+                if (pref_scale != i) { pref_scale = (uint8_t)i; settings_dirty = true; }
+                return;
+            }
+        /* A scale we do not have a name for. We still PLAY it - scale_mask()
+           reads the global - the picker just cannot show which one it is. */
+    }
     uint8_t midi_ports(void) const { return life_port_values[pref_port]; }
 
     /* --- world packing ---------------------------------------------------
@@ -1407,7 +1506,7 @@ struct life_panel : panel_t {
 
     void step_generation(void) {
         life_stats_t st;
-        life_step(&world, &scratch, &st);
+        life_step_rule(&world, &scratch, &st, rule_set);
         for (int i = 0; i < LIFE_CELLS; ++i) world.cell[i] = scratch.cell[i];
         last_stats = st;
 
@@ -1415,6 +1514,7 @@ struct life_panel : panel_t {
             life_respawn_apply(&world, &respawn, (int)respawn_amount);
 
         if (pref_send_cc) send_simulation_ccs();
+        send_simulation_cv();
     }
 
     /* How many notes this playhead may sound at once.
@@ -1463,10 +1563,14 @@ struct life_panel : panel_t {
             int degree = (15 - y) + (int)v_pitch[v];
             int note = life_degree_to_note(degree, root_note(), scale_mask());
 
-            /* The automaton drives dynamics: a cell in a crowded neighbourhood
-               hits harder than a lone one. */
+            /* The world drives dynamics: a cell in a crowded neighbourhood hits
+               harder than a lone one. ACCENT is how much of that gets through -
+               at 0 every note is the same weight, at 100 the crowding owns the
+               dynamics. */
             int n = life_neighbours(&world, col, y);
-            int velocity = 68 + n * 7;
+            int depth = v_accent[v];
+            int velocity = 100 - (depth * 32) / 100 + (n * 7 * depth) / 100;
+            if (velocity < 1) velocity = 1;
             if (velocity > 127) velocity = 127;
 
             if (voice_arm(&notes[v], note, velocity, ticks) >= 0) {
@@ -1476,8 +1580,20 @@ struct life_panel : panel_t {
         }
     }
 
+    /* Swing warps the clock the dividers read, so every voice shuffles together
+       and the world keeps its own straight time. Pattern 0 is plain 16th-note
+       swing; 1..7 are the stolper patterns, which are the same seven the Chords
+       manual documents. */
+    int64_t swung_phase(int64_t phase) const {
+        if (!swing) return phase;
+        float amount = (float)swing / 100.0f;
+        if (swing_pattern == 0) return warp_clock_swing(phase, amount);
+        return warp_clock_stolper(swing_pattern - 1, phase, amount);
+    }
+
     void on_sequence(int delta_time_us) override {
-        int64_t phase = get_clock_phase();
+        int64_t raw_phase = get_clock_phase();
+        int64_t phase = swung_phase(raw_phase);
         bool playing = is_transport_playing();
 
         /* Expire held notes first, so a note that ends exactly as the next one
@@ -1507,7 +1623,7 @@ struct life_panel : panel_t {
         }
 
         const life_rate_t *gr = &life_rates[gen_rate];
-        int gen_edges = gen_div.update(phase, gr->num, gr->den, UPDATE_DIV_ON_QUARTER_NOTE);
+        int gen_edges = gen_div.update(raw_phase, gr->num, gr->den, UPDATE_DIV_ON_QUARTER_NOTE);
         if (!freeze_life && gen_edges > 0 && sequencer_should_advance_playhead()) {
             /* A long stall can report many crossed edges at once. Cap the catch
                up so a seek cannot burn hundreds of generations inside an IRQ. */
@@ -1553,6 +1669,19 @@ struct life_panel : panel_t {
         last_cc[idx] = (uint8_t)value;
         uint8_t ports = midi_ports();
         if (ports) midi_write_cc(ports, get_system_midi_channel() - 1, cc, value);
+    }
+
+    /* Plinky has two CV outputs. The world's own shape is the most interesting
+       modulation this panel produces, so it goes out as voltage too, not only as
+       MIDI: A follows how full the world is, B follows how much is changing.
+       0..5V, updated once per generation like the CCs. */
+    void send_simulation_cv(void) {
+        if (!pref_cv_out) return;
+        int density = last_stats.alive * 5000 / LIFE_CELLS;
+        int motion = (last_stats.births + last_stats.deaths) * 5000 / 64;
+        if (motion > 5000) motion = 5000;
+        set_cv_out_mv(0, density);
+        set_cv_out_mv(1, motion);
     }
 
     void send_simulation_ccs(void) {
@@ -1739,9 +1868,14 @@ struct life_panel : panel_t {
         }
     }
 
+    int accent_index(int v) const { return (v_accent[v] * (LIFE_ACCENT_N - 1) + 50) / 100; }
+
     uint32_t voice_colour(int x, int y) const {
         if (y == LIFE_SOUND_Y && x == LIFE_LOAD_X) return LED_RGB(6, 4, 14);
         if (y == LIFE_SOUND_Y && x == LIFE_SOUND_X) return LIFE_COL_ACTION;
+        if (y == LIFE_SOUND_Y && x >= LIFE_ACCENT_X0 && x < LIFE_ACCENT_X0 + LIFE_ACCENT_N)
+            return (x - LIFE_ACCENT_X0) == accent_index(edit_voice)
+                       ? life_voice_bright[edit_voice] : life_voice_dim[edit_voice];
         int row = param_row_for_y(y);
         if (row < 0) return 0;                       /* the blank separator rows */
         if (x >= life_param_rows[row].n) return 0;
@@ -1766,6 +1900,8 @@ struct life_panel : panel_t {
     const char *voice_help(int x, int y) const {
         if (y == LIFE_SOUND_Y && x == LIFE_LOAD_X) return "load a preset into this voice";
         if (y == LIFE_SOUND_Y && x == LIFE_SOUND_X) return "edit this voice's sound";
+        if (y == LIFE_SOUND_Y && x >= LIFE_ACCENT_X0 && x < LIFE_ACCENT_X0 + LIFE_ACCENT_N)
+            return "accent - how much crowded cells hit harder";
 
         int row = param_row_for_y(y);
         if (row < 0 || x >= life_param_rows[row].n) return nullptr;
@@ -1791,6 +1927,11 @@ struct life_panel : panel_t {
             ui_mode = LIFE_UI_PRESET;
             return;
         }
+        if (y == LIFE_SOUND_Y && x >= LIFE_ACCENT_X0 && x < LIFE_ACCENT_X0 + LIFE_ACCENT_N) {
+            v_accent[edit_voice] =
+                (uint8_t)((x - LIFE_ACCENT_X0) * 100 / (LIFE_ACCENT_N - 1));
+            return;
+        }
         int row = param_row_for_y(y);
         if (row < 0 || x >= life_param_rows[row].n) return;
         set_param(row, x);
@@ -1805,6 +1946,7 @@ struct life_panel : panel_t {
                       life_trav_names[v_order[v]],
                       (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] : v + 1,
                       (int)v_pitch[v], (int)v_length[v]);
+        (void)0;
     }
 
     /* --- the hosted synth editor ------------------------------------------
@@ -1954,7 +2096,7 @@ struct life_panel : panel_t {
 
     /* Global only. Per-voice config moved onto the grid, where it is one tap
        deep and visible all at once instead of fourteen side-button clicks. */
-    int settings_page_count(void) { return 12; }
+    int settings_page_count(void) { return 16; }
 
     /* Page 1 is the scene save/load picker. on_serialise() has always described
        the world and every voice setting, but without this there was no way to
@@ -1980,6 +2122,14 @@ struct life_panel : panel_t {
         if (!settings_dirty) return;
         settings_dirty = false;
         (void)save_settings_to_sd(false);
+    }
+
+    /* life_rulesets holds name and masks together; the settings page wants the
+       names on their own. */
+    static const char *const *life_ruleset_names(void) {
+        static const char *names[LIFE_NUM_RULESETS];
+        for (int i = 0; i < LIFE_NUM_RULESETS; ++i) names[i] = life_rulesets[i].name;
+        return names;
     }
 
     void draw_settings(int page) {
@@ -2135,6 +2285,44 @@ struct life_panel : panel_t {
                               "report its own changes.");
             break;
         }
+        case 12: {
+            int d = draw_system_style_enum_settings_page("RULE", rule_set, life_ruleset_names(),
+                                                        LIFE_NUM_RULESETS);
+            if (d) { settings_dirty = true;
+                     rule_set = (uint8_t)clamp_int(rule_set + d, 0, LIFE_NUM_RULESETS - 1); }
+            set_help_text("#fc2#*Rule#. - %s", life_rule_help[rule_set]);
+            break;
+        }
+        case 13: {
+            snprintf(buf, sizeof(buf), "%d", swing);
+            int d = draw_system_style_settings_page("SWNG", buf, swing);
+            if (d) { settings_dirty = true; swing = (uint8_t)clamp_int(swing + d, 0, 100); }
+            if (swing)
+                set_help_text("#fc2#*Swing#. - #fc2#*%d%%#. of %s. Every voice shuffles together; "
+                              "the world keeps its own straight time.", swing,
+                              swing_pattern ? "the chosen pattern" : "plain 16th swing");
+            else
+                set_help_text("#fc2#*Swing#. - #fc2#*straight#.. Turn it up to shuffle every "
+                              "voice together.");
+            break;
+        }
+        case 14: {
+            int d = draw_system_style_enum_settings_page("SWPT", swing_pattern,
+                                                        life_swing_names, 8);
+            if (d) { settings_dirty = true;
+                     swing_pattern = (uint8_t)clamp_int(swing_pattern + d, 0, 7); }
+            set_help_text("#fc2#*Swing feel#. - %s. Only audible with SWNG above zero.",
+                          swing_pattern ? "one of the seven shuffle patterns" : "plain 16th swing");
+            break;
+        }
+        case 15: {
+            bool on = pref_cv_out != 0;
+            int d = draw_system_style_bool_settings_page("CV  ", on);
+            if (d) { pref_cv_out = on ? 0 : 1; settings_dirty = true; }
+            set_help_text("#fc2#*CV out#. - %s. A follows how full the world is, B how much is "
+                          "changing. 0 to 5 volts.", pref_cv_out ? "#fc2#*on#." : "#fc2#*off#.");
+            break;
+        }
         default:
             break;
         }
@@ -2143,6 +2331,7 @@ struct life_panel : panel_t {
     void on_ui(int delta_time_us) override {
         (void)delta_time_us;
 
+        follow_musical_state();
         apply_pending_cc();
 
         int page = get_scroll_page();
@@ -2462,6 +2651,10 @@ struct life_panel : panel_t {
         FIELD("seed", respawn_amount);
         FIELD("stab", respawn_stable);
         FIELD("freeze", freeze_life);
+        FIELD("rule", rule_set);
+        FIELD("swing", swing);
+        FIELD("swpat", swing_pattern);
+        FIELD("vacc", v_accent);
         FIELD("init", initialised);
         OBJECT_END(s);
 
@@ -2483,6 +2676,7 @@ struct life_panel : panel_t {
                                                    : SEL_LAST);
             v_pitch[v] = (int8_t)(v * -3);
             v_length[v] = 60;
+            v_accent[v] = 60;
             v_channel[v] = (int8_t)(v + 1);   /* a different MIDI channel each */
         }
         gen_rate = 8;
@@ -2490,6 +2684,9 @@ struct life_panel : panel_t {
         respawn_amount = 10;
         respawn_stable = 4;
         freeze_life = 0;
+        rule_set = 0;             /* Conway */
+        swing = 0;
+        swing_pattern = 0;
         initialised = 1;
     }
 
@@ -2504,6 +2701,7 @@ struct life_panel : panel_t {
             pref_send_cc = 1;
             pref_cc_in = CC_IN_DEFAULT_BASE;
             pref_cc_out = 1;
+            pref_cv_out = 1;
         }
 
         OBJECT_BEGIN(s);
@@ -2515,6 +2713,7 @@ struct life_panel : panel_t {
         FIELD("cc", pref_send_cc);
         FIELD("ccin", pref_cc_in);
         FIELD("ccout", pref_cc_out);
+        FIELD("cvout", pref_cv_out);
         OBJECT_END(s);
 
         clamp_settings();

@@ -237,6 +237,11 @@ int get_frontpanel_orientation(void);   /* 0=missing, 1=normal, 2=upside down */
 extern uint8_t current_key;
 extern uint16_t current_scale;
 void set_current_key_and_scale(uint8_t key, uint16_t scale);
+uint32_t get_current_musical_state_generation(void);
+int64_t warp_clock_swing(int64_t clock, float amount);
+int64_t warp_clock_stolper(int pattern, int64_t clock, float amount);
+void set_cv_out_mv(int channel, int mv);
+int get_cv_out_mv(int channel);
 
 /* --- serialisation -------------------------------------------------------
 

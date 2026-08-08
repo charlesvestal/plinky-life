@@ -188,6 +188,73 @@ static void test_respawn_apply_terminates_on_a_full_world(void) {
     CHECK(life_population(&w) == LIFE_CELLS, "full world changed");
 }
 
+static void test_rulesets_are_well_formed(void) {
+    for (int r = 0; r < LIFE_NUM_RULESETS; ++r) {
+        CHECK((life_rulesets[r].birth & ~0x1FFu) == 0, "ruleset %d birth mask has bits above 8", r);
+        CHECK((life_rulesets[r].survive & ~0x1FFu) == 0, "ruleset %d survive mask too wide", r);
+        CHECK(!(life_rulesets[r].birth & 1u), "ruleset %d births from 0 neighbours", r);
+        CHECK(strlen(life_rulesets[r].name) == 4, "ruleset %d label \"%s\" is not 4 chars",
+              r, life_rulesets[r].name);
+    }
+    CHECK(life_rulesets[0].birth == (1u << 3), "ruleset 0 must be Conway B3");
+    CHECK(life_rulesets[0].survive == ((1u << 2) | (1u << 3)), "ruleset 0 must be Conway S23");
+}
+
+static void test_seeds_kills_every_live_cell(void) {
+    /* Seeds is B2/S - nothing survives, which is what makes it explosive. */
+    int seeds = -1;
+    for (int r = 0; r < LIFE_NUM_RULESETS; ++r)
+        if (life_rulesets[r].survive == 0) seeds = r;
+    CHECK(seeds >= 0, "expected a survive-nothing ruleset");
+    if (seeds < 0) return;
+
+    life_world_t a, b;
+    life_respawn_t rs;
+    life_respawn_init(&rs, 5);
+    life_clear(&a);
+    life_respawn_apply(&a, &rs, 40);
+
+    life_stats_t st;
+    life_step_rule(&a, &b, &st, seeds);
+    for (int i = 0; i < LIFE_CELLS; ++i)
+        if (a.cell[i] && b.cell[i]) {
+            CHECK(0, "a live cell survived under a survive-nothing rule");
+            return;
+        }
+}
+
+static void test_every_ruleset_is_stable_under_churn(void) {
+    /* No rule may produce a cell value other than 0 or 1, or run away. */
+    for (int r = 0; r < LIFE_NUM_RULESETS; ++r) {
+        life_world_t a, b;
+        life_respawn_t rs;
+        life_respawn_init(&rs, 900 + r);
+        life_clear(&a);
+        life_respawn_apply(&a, &rs, 60);
+        for (int gen = 0; gen < 120; ++gen) {
+            life_stats_t st;
+            life_step_rule(&a, &b, &st, r);
+            memcpy(&a, &b, sizeof(a));
+            CHECK(st.alive >= 0 && st.alive <= LIFE_CELLS, "ruleset %d bad population %d",
+                  r, st.alive);
+            CHECK(st.births + st.deaths + st.unchanged == LIFE_CELLS,
+                  "ruleset %d stats do not account for every cell", r);
+            for (int i = 0; i < LIFE_CELLS; ++i)
+                if (a.cell[i] > 1) { CHECK(0, "ruleset %d produced cell value %d",
+                                           r, a.cell[i]); return; }
+        }
+    }
+}
+
+static void test_out_of_range_ruleset_falls_back_to_conway(void) {
+    life_world_t a, b, c;
+    const int blinker[3][2] = {{4, 5}, {5, 5}, {6, 5}};
+    set_cells(&a, blinker, 3);
+    life_step_rule(&a, &b, 0, 99);
+    life_step(&a, &c, 0);
+    CHECK(memcmp(b.cell, c.cell, LIFE_CELLS) == 0, "a bad ruleset index must behave as Conway");
+}
+
 /* ----------------------------------------------------------- selection.h -- */
 
 static unsigned short col(const int *rows, int n) {
@@ -759,6 +826,10 @@ int main(void) {
     test_respawn_fires_on_low_density();
     test_respawn_apply_adds_cells();
     test_respawn_apply_terminates_on_a_full_world();
+    test_rulesets_are_well_formed();
+    test_seeds_kills_every_live_cell();
+    test_every_ruleset_is_stable_under_churn();
+    test_out_of_range_ruleset_falls_back_to_conway();
 
     test_empty_column_is_a_rest_for_every_rule();
     test_first_and_last();

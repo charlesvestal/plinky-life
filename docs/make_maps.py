@@ -42,6 +42,7 @@ PARAM_ROWS = [
 ]
 
 LOAD_X, SOUND_X, SOUND_Y = 0, 1, 15   # load a preset / edit this voice's sound
+ACCENT_X0, ACCENT_N = 3, 10           # accent, along the rest of row 15
 
 
 def esc(s):
@@ -251,6 +252,8 @@ def voice():
                 pad(out, x, y, "#33333c")
             else:
                 pad(out, x, y, V_DIM[1])
+    for i in range(ACCENT_N):
+        pad(out, ACCENT_X0 + i, SOUND_Y, V[1] if i == 5 else V_DIM[1])
     pad(out, LOAD_X, SOUND_Y, "#4a3c8f", "LD", "#fff")
     pad(out, SOUND_X, SOUND_Y, ACTION, "SND", "#000")
     transport(out)
@@ -264,8 +267,8 @@ def voice():
         out.append(f'<text class="k" x="{lx}" y="{py + 12}">{esc(desc)}</text>')
     out.append(
         f'<text class="t" x="{PAD}" y="{PAD + 16*(CELL+GAP) + 18}">'
-        'Selected pad bright; the rest of the row dim. LD (0,15) loads a preset into this voice; '
-        'SND (1,15) edits its sound.</text>'
+        'Row 15: LD loads a preset, SND edits the sound, and x3-12 is ACCENT - how much '
+        'crowded cells hit harder.</text>'
     )
     out.append("</svg>")
     return "\n".join(out)
