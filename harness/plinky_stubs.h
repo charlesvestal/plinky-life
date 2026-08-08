@@ -36,6 +36,8 @@ void set_help_text(const char *str, ...);
 
 /* --- pages --------------------------------------------------------------- */
 int get_scroll_page(void);
+void scroll_to_page(int page);
+void scroll_to_y_q16(int y_q16);
 int draw_system_style_settings_page(const char *name4, const char *value4 = nullptr,
                                     int bar_percent = -1, int highlight_x1 = 0,
                                     int highlight_x2 = 0, uint32_t value_color = 0);
@@ -185,6 +187,14 @@ bool synth_xy_block(xy_pad_t *xy_pad, int preset_idx, int x, int y, int width = 
                     int preset_idx_write_copies_mask = 0, bool buttons_on_left = XY_BUTTONS_ON_RIGHT,
                     bool require_record_button_down_for_speed = false, bool read_only = false,
                     int flags = 0);
+
+enum panel_page_load_mode_t { PANEL_PAGE_LOAD_COMMIT_ASAP, PANEL_PAGE_LOAD_COMMIT_ON_STOP };
+
+struct panel_page_t {
+    file_picker_t picker;
+    bool saveload(int y, bool draw_title = true, int flags = FLAG_PICKER_ENABLE_DELETE,
+                  panel_page_load_mode_t load_mode = PANEL_PAGE_LOAD_COMMIT_ASAP);
+};
 
 struct preset_pages_t {
     slider_t slider_banks[2][16];
@@ -347,4 +357,6 @@ struct panel_t {
     virtual void on_midi(uint32_t midimsg) { (void)midimsg; }
     virtual bool on_serialise(serialiser_t &s, int version) { (void)s; (void)version; return true; }
     virtual bool on_serialise_settings(serialiser_t &s, int version) { (void)s; (void)version; return true; }
+    bool load_settings_from_sd(bool include_serial_number);
+    bool save_settings_to_sd(bool include_serial_number);
 };

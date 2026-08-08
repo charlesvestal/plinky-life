@@ -270,7 +270,22 @@ the rest of the Plinky follows along.
 
 ---
 
-## 7. Keeping it alive
+## 7. Saving
+
+Press the right side button **down** from the world to reach the scene page:
+folders on the left, slots on the right, cancel and OK bottom right.
+
+A scene holds **the world itself** — every live cell — plus every voice's rate,
+rule, order, channel, pitch, length and mute, and the generation rate and
+respawn settings. Load one back and you get the same world and the same four
+voices.
+
+The settings pages are separate: key, scale, octave, output, ports and CCs are
+preferences, saved automatically as you change them and shared by every scene.
+
+---
+
+## 8. Keeping it alive
 
 Left alone, a Game of Life world eventually settles into shapes that never
 change — and a frozen palette means four playheads walking a loop that never
@@ -287,7 +302,7 @@ Set `FLOR` and `STAB` to 0 if you'd rather it be allowed to die.
 
 ---
 
-## 8. Output
+## 9. Output
 
 Each voice has its own **sound** and its own **MIDI channel**, defaulting to
 channels 1–4. `OUT` chooses the internal synth, MIDI, or both.
@@ -310,7 +325,7 @@ rather than flooding the bus.
 
 ---
 
-## 9. If something seems wrong
+## 10. If something seems wrong
 
 **Nothing plays.** Check transport is running — `(15,15)` glows bright green.
 Nothing moves while stopped.

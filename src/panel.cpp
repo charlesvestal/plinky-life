@@ -196,6 +196,7 @@ struct life_panel : panel_t {
     voice_notes_t notes[LIFE_NUM_VOICES];
     voice_allocator_t allocator;
     preset_pages_t preset_pages;   /* the stock synth editor, hosted per voice */
+    panel_page_t panel_page;       /* the stock scene save/load picker, on page 1 */
 
     uint32_t last_edge_us[LIFE_NUM_VOICES];
     uint32_t step_us[LIFE_NUM_VOICES];
@@ -238,6 +239,7 @@ struct life_panel : panel_t {
     uint8_t last_cc[LIFE_NUM_CCS];
     bool cc_primed;
     bool step_once_request;
+    bool settings_dirty;      /* a preference changed and has not reached the SD card */
 
     /* ---------------------------------------------------------------- */
 
@@ -264,6 +266,7 @@ struct life_panel : panel_t {
         ui_mode = LIFE_UI_WORLD;
         cc_primed = false;
         step_once_request = false;
+        settings_dirty = false;
         for (int i = 0; i < LIFE_NUM_CCS; ++i) last_cc[i] = 255;
     }
 
@@ -1062,6 +1065,11 @@ struct life_panel : panel_t {
     /* Global only. Per-voice config moved onto the grid, where it is one tap
        deep and visible all at once instead of fourteen side-button clicks. */
     int settings_page_count(void) { return 10; }
+
+    /* Page 1 is the scene save/load picker. on_serialise() has always described
+       the world and every voice setting, but without this there was no way to
+       trigger a save - the state was serialisable and unreachable. */
+    int get_num_pages(void) override { return 2; }
     int get_num_panel_settings_pages(void) override { return settings_page_count(); }
 
     static int clamp_int(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
@@ -1075,6 +1083,15 @@ struct life_panel : panel_t {
 
        Markup per ide_api.md: `#fc2` is a theme-rotated 3-digit hex colour, `#*`
        is bold, and `#.` resets - styles are sticky until reset. */
+    /* on_serialise_settings() describes the preferences, but nothing writes
+       them on its own - the panel has to ask. Called after the settings page has
+       had its go, so an edit survives a power cycle. */
+    void flush_settings(void) {
+        if (!settings_dirty) return;
+        settings_dirty = false;
+        (void)save_settings_to_sd(false);
+    }
+
     void draw_settings(int page) {
         int idx = -1 - page;                       /* page -1 is our page 0 */
         char buf[8];
@@ -1082,6 +1099,7 @@ struct life_panel : panel_t {
         switch (idx) {
         case 0: {
             int d = draw_system_style_enum_settings_page("KEY ", pref_root, life_note_names, 12);
+            if (d) settings_dirty = true;
             if (d) { pref_root = (uint8_t)((pref_root + d + 120) % 12); apply_scale_to_system(); }
             set_help_text("#fc2#*Key#. - root note, now #fc2#*%s#.. Sets the whole instrument's "
                           "key, not just this panel.", life_note_names[pref_root]);
@@ -1090,6 +1108,7 @@ struct life_panel : panel_t {
         case 1: {
             int d = draw_system_style_enum_settings_page("SCAL", pref_scale, life_scale_names,
                                                         LIFE_NUM_SCALES);
+            if (d) settings_dirty = true;
             if (d) {
                 pref_scale = (uint8_t)clamp_int(pref_scale + d, 0, LIFE_NUM_SCALES - 1);
                 apply_scale_to_system();
@@ -1102,6 +1121,7 @@ struct life_panel : panel_t {
         case 2: {
             snprintf(buf, sizeof(buf), "%d", pref_octave);
             int d = draw_system_style_settings_page("OCT ", buf, pref_octave * 100 / 7);
+            if (d) settings_dirty = true;
             if (d) pref_octave = (uint8_t)clamp_int(pref_octave + d, 1, 7);
             set_help_text("#fc2#*Octave#. - base octave #fc2#*%d#. of 7. The bottom grid row "
                           "plays %s%d; higher rows climb the scale from there.",
@@ -1111,6 +1131,7 @@ struct life_panel : panel_t {
         case 3: {
             int d = draw_system_style_enum_settings_page("GEN ", gen_rate, life_rate_names,
                                                         LIFE_NUM_RATES);
+            if (d) settings_dirty = true;
             if (d) gen_rate = (uint8_t)clamp_int(gen_rate + d, 0, LIFE_NUM_RATES - 1);
             set_help_text("#fc2#*Generation rate#. - the world evolves every #fc2#*%s#.. This is "
                           "separate from the voice rates: slow it down for a palette that breathes.",
@@ -1120,6 +1141,7 @@ struct life_panel : panel_t {
         case 4: {
             snprintf(buf, sizeof(buf), "%d", respawn_floor);
             int d = draw_system_style_settings_page("FLOR", buf, respawn_floor * 100 / 64);
+            if (d) settings_dirty = true;
             if (d) respawn_floor = (uint8_t)clamp_int(respawn_floor + d, 0, 64);
             set_help_text("#fc2#*Respawn floor#. - if fewer than #fc2#*%d#. of 256 cells are "
                           "alive, sprinkle new ones in. 0 disables it and lets the world die.",
@@ -1129,6 +1151,7 @@ struct life_panel : panel_t {
         case 5: {
             snprintf(buf, sizeof(buf), "%d", respawn_amount);
             int d = draw_system_style_settings_page("SEED", buf, respawn_amount * 100 / 64);
+            if (d) settings_dirty = true;
             if (d) respawn_amount = (uint8_t)clamp_int(respawn_amount + d, 1, 64);
             set_help_text("#fc2#*Respawn amount#. - how many cells to sprinkle, now #fc2#*%d#.. "
                           "Also what the SEED pad in the action layer drops in.", respawn_amount);
@@ -1137,6 +1160,7 @@ struct life_panel : panel_t {
         case 6: {
             snprintf(buf, sizeof(buf), "%d", respawn_stable);
             int d = draw_system_style_settings_page("STAB", buf, respawn_stable * 100 / 32);
+            if (d) settings_dirty = true;
             if (d) respawn_stable = (uint8_t)clamp_int(respawn_stable + d, 0, 32);
             if (respawn_stable)
                 set_help_text("#fc2#*Stall limit#. - after #fc2#*%d#. generations with nothing "
@@ -1149,6 +1173,7 @@ struct life_panel : panel_t {
         }
         case 7: {
             int d = draw_system_style_enum_settings_page("OUT ", pref_sink, life_sink_names, 3);
+            if (d) settings_dirty = true;
             if (d) {
                 release_all_voices();              /* never strand a note on the old sink */
                 pref_sink = (uint8_t)clamp_int(pref_sink + d, 0, 2);
@@ -1161,6 +1186,7 @@ struct life_panel : panel_t {
         }
         case 8: {
             int d = draw_system_style_enum_settings_page("PORT", pref_port, life_port_names, 5);
+            if (d) settings_dirty = true;
             if (d) {
                 release_all_voices();
                 pref_port = (uint8_t)clamp_int(pref_port + d, 0, 4);
@@ -1177,6 +1203,7 @@ struct life_panel : panel_t {
         case 9: {
             bool on = pref_send_cc != 0;
             int d = draw_system_style_bool_settings_page("CC  ", on);
+            if (d) settings_dirty = true;
             if (d) pref_send_cc = on ? 0 : 1;
             if (pref_send_cc)
                 set_help_text("#fc2#*Simulation CCs#. - #fc2#*on#.. Sends CC20 density, 21 births, "
@@ -1199,6 +1226,18 @@ struct life_panel : panel_t {
         int page = get_scroll_page();
         if (page < 0) {
             draw_settings(page);
+            flush_settings();
+            return;
+        }
+        if (page == 1) {
+            /* The stock whole-page helper draws itself at this offset. */
+            leds_clear();
+            panel_page.saveload(16);
+            set_help_text("#fc2#*Scenes#. - save or load the world and every voice setting");
+            return;
+        }
+        if (page > 1) {
+            scroll_to_page(1);
             return;
         }
 
