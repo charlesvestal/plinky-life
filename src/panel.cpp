@@ -128,6 +128,17 @@ static const uint8_t life_port_values[5] = {
    divider edges have been seen and the real interval is known. */
 #define LIFE_DEFAULT_STEP_US 250000
 
+/* How many of Plinky's synth voices this panel will claim. llm.txt: there are
+   12 physical voices, but 8 "is the current practical default for user panels;
+   using all 12 can exceed the DSP budget with heavier presets or effects". */
+#define LIFE_SYNTH_VOICES 8
+
+/* Every playhead claims at the same priority. An earlier version passed
+   `1 + v`, which quietly made voice 4 outrank voice 1 and let the bass steal
+   synth voices from the melody. That was the loop index leaking into a musical
+   decision, not a musical decision. */
+#define LIFE_VOICE_PRIO 2
+
 /* The three things the grid can be showing. The grid is the entire screen, so
    these are modes rather than panes. */
 enum { LIFE_UI_WORLD = 0, LIFE_UI_ACTION, LIFE_UI_VOICE, LIFE_UI_PRESET, LIFE_UI_LOAD };
@@ -452,7 +463,7 @@ struct life_panel : panel_t {
         if (!synth_enabled()) return;
         uint32_t sid = source_id_for(v, note);
         int old_voice = allocator.find_voice(sid);
-        int new_voice = allocator.voice_allocate(sid, (uint8_t)(1 + v));
+        int new_voice = allocator.voice_allocate(sid, LIFE_VOICE_PRIO, 0, LIFE_SYNTH_VOICES);
         if (new_voice < 0) return;
         if (new_voice != old_voice && old_voice >= 0) synth_note_up(old_voice);
         play_synth(new_voice, preset_for(v), velocity, note << 8, true);
@@ -504,6 +515,29 @@ struct life_panel : panel_t {
         if (pref_send_cc) send_simulation_ccs();
     }
 
+    /* How many notes this playhead may sound at once.
+
+       Every audible playhead is guaranteed one voice, so a chord can never
+       starve a melody. Whatever is left over goes to the playheads on ALL, split
+       between them - so a single ALL with the others muted gets the whole synth,
+       which is the point of putting a voice on ALL in the first place.
+
+       With MIDI alone there is no ceiling to respect, so chords go out whole.
+       When the synth is in play the limit applies to BOTH sinks, so external
+       gear and the internal synth always agree about what is sounding. */
+    int poly_budget(int v) const {
+        if (!synth_enabled()) return LIFE_MAX_HELD;
+        if (v_rule[v] != SEL_ALL) return 1;
+
+        int mono = 0, chords = 0;
+        for (int i = 0; i < LIFE_NUM_VOICES; ++i) {
+            if (!voice_is_audible(i)) continue;
+            if (v_rule[i] == SEL_ALL) ++chords;
+            else ++mono;
+        }
+        return voice_poly_budget(LIFE_SYNTH_VOICES, mono, chords, LIFE_MAX_HELD);
+    }
+
     void fire_voice(int v) {
         int col = traversal_position(&trav[v], LIFE_W);
         uint16_t col_mask = life_column_mask(&world, col);
@@ -516,9 +550,14 @@ struct life_panel : panel_t {
         voice_dev[v] = (uint8_t)selection_deviation(&sel[v], prev);
 
         int ticks = voice_length_ticks((int)step_us[v], (int)v_length[v]);
+        int budget = poly_budget(v);
+        int sounded = 0;
 
-        for (int y = 0; y < LIFE_H; ++y) {
+        /* Lowest pitch first (row 15 up), so a chord that has to be trimmed
+           keeps its roots and loses the top rather than the other way round. */
+        for (int y = LIFE_H - 1; y >= 0; --y) {
             if (!(chosen & (1u << y))) continue;
+            if (sounded >= budget) break;
             int degree = (15 - y) + (int)v_pitch[v];
             int note = life_degree_to_note(degree, root_note(), scale_mask());
 
@@ -528,8 +567,10 @@ struct life_panel : panel_t {
             int velocity = 68 + n * 7;
             if (velocity > 127) velocity = 127;
 
-            if (voice_arm(&notes[v], note, velocity, ticks) >= 0)
+            if (voice_arm(&notes[v], note, velocity, ticks) >= 0) {
                 synth_note_on(v, note, velocity);
+                ++sounded;
+            }
         }
     }
 

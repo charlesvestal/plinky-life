@@ -198,6 +198,18 @@ Given the live cells in the column a voice has arrived at:
 `WALK` gives you melodies. `RAND` gives you sparkle. `ALL` gives you pads. Mixing
 them across the four voices is most of the instrument.
 
+### How many notes at once
+
+Every rule but `ALL` plays **one note per step**, so four voices give you up to
+four notes. `ALL` plays the whole column.
+
+The synth has eight notes to share. Each voice you can hear is guaranteed one of
+them, so a chord can never cut off a melody — and whatever is spare goes to the
+voices playing `ALL`. Mute the other three and a single `ALL` voice gets all
+eight to itself.
+
+Sending to MIDI only? Then there's no ceiling and chords go out whole.
+
 **Loud cells:** a cell surrounded by neighbours hits harder than a lone one, so
 dense clusters accent themselves.
 

@@ -570,6 +570,39 @@ static void test_note_length_is_never_zero_ticks(void) {
     CHECK(voice_length_ticks(100, 500) == 100, "length percent should clamp to 100");
 }
 
+static void test_poly_budget_reserves_one_per_melody(void) {
+    /* 8 voices, one chord voice, three melodies -> the chord gets what is left */
+    CHECK(voice_poly_budget(8, 3, 1, 16) == 5, "3 melodies + 1 chord gave %d, wanted 5",
+          voice_poly_budget(8, 3, 1, 16));
+    /* mute the melodies and the chord gets the whole pool */
+    CHECK(voice_poly_budget(8, 0, 1, 16) == 8, "a lone chord should get all 8, got %d",
+          voice_poly_budget(8, 0, 1, 16));
+}
+
+static void test_poly_budget_splits_between_chords(void) {
+    /* two chord voices must not between them claim more than the pool */
+    int b = voice_poly_budget(8, 2, 2, 16);
+    CHECK(b == 3, "2 melodies + 2 chords gave %d each, wanted 3", b);
+    CHECK(b * 2 + 2 <= 8, "two chords plus two melodies oversubscribe: %d", b * 2 + 2);
+
+    int c = voice_poly_budget(8, 0, 4, 16);
+    CHECK(c * 4 <= 8, "four chords oversubscribe the pool: %d", c * 4);
+}
+
+static void test_poly_budget_never_silences_a_voice(void) {
+    /* even absurdly oversubscribed, an audible voice can still sound one note */
+    for (int mono = 0; mono <= 12; ++mono)
+        for (int chords = 0; chords <= 8; ++chords) {
+            int b = voice_poly_budget(8, mono, chords, 16);
+            CHECK(b >= 1, "budget %d with %d melodies and %d chords", b, mono, chords);
+            if (b < 1) return;
+        }
+}
+
+static void test_poly_budget_respects_the_held_ceiling(void) {
+    CHECK(voice_poly_budget(64, 0, 1, 16) == 16, "must not exceed the held-note array");
+}
+
 /* ------------------------------------------------------------------------- */
 
 int main(void) {
@@ -618,6 +651,10 @@ int main(void) {
     test_release_all_clears_everything();
     test_chord_of_sixteen_fits();
     test_note_length_is_never_zero_ticks();
+    test_poly_budget_reserves_one_per_melody();
+    test_poly_budget_splits_between_chords();
+    test_poly_budget_never_silences_a_voice();
+    test_poly_budget_respects_the_held_ceiling();
 
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

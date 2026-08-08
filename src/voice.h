@@ -91,6 +91,25 @@ static inline int voice_release_all(voice_notes_t *v, unsigned char *released) {
     return n;
 }
 
+/* How many notes a chord-playing voice may sound at once.
+
+   `synth_voices` is the pool. Every audible melody voice is guaranteed one, so
+   a chord can never starve a melody. Whatever is left is split between the
+   voices playing chords - so a single chord voice with the melodies muted gets
+   the whole pool.
+
+   Always returns at least 1: a voice that is audible must be able to make a
+   sound, even in a badly over-subscribed setup. */
+static inline int voice_poly_budget(int synth_voices, int mono_count, int chord_count,
+                                    int max_held) {
+    if (chord_count < 1) chord_count = 1;
+    int spare = synth_voices - mono_count;
+    int budget = spare / chord_count;
+    if (budget < 1) budget = 1;
+    if (budget > max_held) budget = max_held;
+    return budget;
+}
+
 /* Note length is a percentage (10..100) of the voice's step interval. Always at
    least 1 tick, so a very short step at a low percentage still produces an
    audible note rather than a note-on immediately followed by a note-off. */
