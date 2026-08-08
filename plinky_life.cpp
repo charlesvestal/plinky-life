@@ -803,6 +803,32 @@ static const uint8_t life_port_values[5] = {
    divider edges have been seen and the real interval is known. */
 #define LIFE_DEFAULT_STEP_US 250000
 
+/* The three things the grid can be showing. The grid is the entire screen, so
+   these are modes rather than panes. */
+enum { LIFE_UI_WORLD = 0, LIFE_UI_ACTION, LIFE_UI_VOICE };
+
+/* The on-grid voice editor. One parameter per row, on odd rows only: the blank
+   even rows between them are what makes seven stacked rows readable at arm's
+   length on a 16x16. `n` is how many pads wide that row's range is. */
+typedef struct {
+    signed char y;
+    signed char n;
+    const char *name;
+} life_param_row_t;
+
+static const life_param_row_t life_param_rows[] = {
+    {  1,  4, "VOICE" },   /* which voice this editor is editing */
+    {  3, 12, "RATE"  },
+    {  5, 11, "RULE"  },
+    {  7,  4, "ORDER" },
+    {  9, 12, "SYNTH" },
+    { 11, 16, "CHAN"  },
+    { 13, 15, "PITCH" },   /* bipolar, centre pad is 0 */
+    { 15, 10, "LENGTH" },
+};
+#define LIFE_NUM_PARAM_ROWS ((int)(sizeof(life_param_rows) / sizeof(life_param_rows[0])))
+#define LIFE_PITCH_CENTRE 7
+
 struct life_panel : panel_t {
     /* --- world --- */
     life_world_t world;
@@ -854,7 +880,7 @@ struct life_panel : panel_t {
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
     bool modifier_held;
-    bool action_latch;        /* tap the corner to keep the action layer open */
+    uint8_t ui_mode;          /* LIFE_UI_WORLD / _ACTION / _VOICE */
     uint8_t solo_mask;
     uint8_t last_cc[LIFE_NUM_CCS];
     bool cc_primed;
@@ -882,7 +908,7 @@ struct life_panel : panel_t {
         solo_mask = 0;
         edit_voice = 0;
         modifier_held = false;
-        action_latch = false;
+        ui_mode = LIFE_UI_WORLD;
         cc_primed = false;
         step_once_request = false;
         for (int i = 0; i < LIFE_NUM_CCS; ++i) last_cc[i] = 255;
@@ -1303,12 +1329,14 @@ struct life_panel : panel_t {
        showing the world, dimmed, so you never lose your place. */
 
     bool is_action_pad(int x, int y) const {
+        if (y == 13) return x < 4;                 /* 0-3 edit that voice */
         if (y == 14) return x < 8;                 /* 0-3 mute, 4-7 solo */
         if (y == 15) return x < 5;                 /* clear seed freeze step play */
         return false;
     }
 
     uint32_t action_colour(int x, int y) const {
+        if (y == 13 && x < 4) return life_voice_dim[x];
         if (y == 14) {
             if (x < 4) return voice_is_audible(x) ? life_voice_bright[x] : LIFE_COL_OFF;
             if (x < 8) return (solo_mask & (1u << (x - 4))) ? life_voice_bright[x - 4]
@@ -1327,6 +1355,7 @@ struct life_panel : panel_t {
     }
 
     static const char *action_help(int x, int y) {
+        if (y == 13 && x < 4) return "edit this voice";
         if (y == 14) return x < 4 ? "mute this voice" : "solo this voice";
         if (y == 15) switch (x) {
         case 0: return "clear the world";
@@ -1341,6 +1370,11 @@ struct life_panel : panel_t {
 
     void do_action(int x, int y) {
         printf("life: action pad (%d,%d)\n", x, y);
+        if (y == 13 && x < 4) {
+            edit_voice = (uint8_t)x;
+            ui_mode = LIFE_UI_VOICE;
+            return;
+        }
         if (y == 14 && x < 4) {
             v_muted[x] = v_muted[x] ? 0 : 1;
             if (!voice_is_audible(x)) release_voice(x);
@@ -1370,6 +1404,93 @@ struct life_panel : panel_t {
             break;
         default: break;
         }
+    }
+
+    /* --- the on-grid voice editor -----------------------------------------
+
+       Reachable in one tap instead of fourteen side-button clicks, and every
+       parameter is visible at once rather than one page at a time. Selected pad
+       bright, the rest of the row dim so you can see how far the range goes. */
+
+    int param_row_for_y(int y) const {
+        for (int i = 0; i < LIFE_NUM_PARAM_ROWS; ++i)
+            if (life_param_rows[i].y == y) return i;
+        return -1;
+    }
+
+    int get_param(int row) const {
+        int v = edit_voice;
+        switch (row) {
+        case 0: return edit_voice;
+        case 1: return v_rate[v];
+        case 2: return v_rule[v];
+        case 3: return v_order[v];
+        case 4: return v_preset[v];
+        case 5: return (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] - 1 : v;
+        case 6: return v_pitch[v] + LIFE_PITCH_CENTRE;
+        case 7: return (v_length[v] - 10) / 10;
+        default: return 0;
+        }
+    }
+
+    void set_param(int row, int i) {
+        int v = edit_voice;
+        switch (row) {
+        case 0: edit_voice = (uint8_t)i; return;
+        case 1:
+            /* the step length just changed, so the held note's countdown is
+               measured against the wrong interval */
+            release_voice(v);
+            v_rate[v] = (uint8_t)i;
+            last_edge_us[v] = 0;
+            step_us[v] = LIFE_DEFAULT_STEP_US;
+            return;
+        case 2: v_rule[v] = (uint8_t)i; return;
+        case 3: v_order[v] = (uint8_t)i; return;
+        case 4: release_voice(v); v_preset[v] = (uint8_t)i; return;
+        case 5: release_voice(v); v_channel[v] = (int8_t)(i + 1); return;
+        case 6: v_pitch[v] = (int8_t)(i - LIFE_PITCH_CENTRE); return;
+        case 7: v_length[v] = (uint8_t)(10 + i * 10); return;
+        default: return;
+        }
+    }
+
+    uint32_t voice_colour(int x, int y) const {
+        int row = param_row_for_y(y);
+        if (row < 0) return 0;                       /* the blank separator rows */
+        if (x >= life_param_rows[row].n) return 0;
+
+        /* the voice selector paints each pad in its own voice's colour */
+        if (row == 0) return (x == edit_voice) ? life_voice_bright[x] : life_voice_dim[x];
+
+        int v = edit_voice;
+        if (x == get_param(row)) return life_voice_bright[v];
+        /* PITCH centre stays findable even when it is not selected */
+        if (row == 6 && x == LIFE_PITCH_CENTRE) return LIFE_COL_OFF;
+        return life_voice_dim[v];
+    }
+
+    const char *voice_help(int x, int y) const {
+        int row = param_row_for_y(y);
+        if (row < 0 || x >= life_param_rows[row].n) return nullptr;
+        return life_param_rows[row].name;
+    }
+
+    void do_voice_edit(int x, int y) {
+        int row = param_row_for_y(y);
+        if (row < 0 || x >= life_param_rows[row].n) return;
+        set_param(row, x);
+    }
+
+    /* One line describing the whole voice, for the second-screen help view -
+       the only place this panel can show words. */
+    void set_voice_help_text(void) {
+        int v = edit_voice;
+        set_help_text("V%d #fc2#*%s#. %s %s  synth %d ch %d  pitch %+d  len %d%%",
+                      v + 1, life_rate_names[v_rate[v]], life_sel_names[v_rule[v]],
+                      life_trav_names[v_order[v]], v_preset[v] + 1,
+                      (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] : v + 1,
+                      (int)v_pitch[v], (int)v_length[v]);
     }
 
     /* --- settings pages -------------------------------------------------
@@ -1529,63 +1650,75 @@ struct life_panel : panel_t {
 
         leds_clear();
 
-        /* SYSTEM_NOTES.md section 4, and the read_modifiers() discipline in
-           plinky-ambiotica: emit the modifier ONCE, at the top, BEFORE anything
-           that tests it, NOT_ISOLATED because being held while another pad is
-           tapped IS the gesture. Read its edges immediately, with nothing in
-           between - is_last_widget_*() refers to the most recent widget.
-
-           Pass the dim colour to the widget and set_led the bright one over it
-           when active: set_led lands after the widget and wins, so the pad
-           highlights in the same frame without emitting a second widget. */
+        /* SYSTEM_NOTES.md section 4, and read_modifiers() in plinky-ambiotica:
+           emit the modifier ONCE, at the top, BEFORE anything that tests it,
+           NOT_ISOLATED because being held while another pad is tapped IS the
+           gesture. Read its edge immediately - is_last_widget_*() refers to the
+           most recently emitted widget, so nothing may come between. */
         modifier_held = shift_button(LIFE_MODIFIER_X, LIFE_MODIFIER_Y, LIFE_COL_MODIFIER,
-                                     NOT_ISOLATED, "hold or tap for mutes, clear, transport");
+                                     NOT_ISOLATED, "hold or tap for actions");
         bool modifier_pressed = is_last_widget_pressed();
 
-        /* The layer is available by HOLD or by LATCH. Holding is the Plinky
-           grammar, but it is also the fragile half - so a tap latches the layer
-           open and any action closes it again. Either gesture works, and
-           transport is reachable without relying on hold detection at all. */
-        if (modifier_pressed) action_latch = !action_latch;
-        bool action_mode = modifier_held || action_latch;
+        /* Tap toggles, hold peeks. Anything that is not the world goes back to
+           the world, so the corner always means "get me out of here". */
+        if (modifier_pressed)
+            ui_mode = (ui_mode == LIFE_UI_WORLD) ? LIFE_UI_ACTION : LIFE_UI_WORLD;
 
-        if (action_mode) set_led(LIFE_MODIFIER_X, LIFE_MODIFIER_Y, LED_RGB(31, 0, 24));
+        int mode = ui_mode;
+        if (mode == LIFE_UI_WORLD && modifier_held) mode = LIFE_UI_ACTION;
+        if (mode != LIFE_UI_WORLD)
+            set_led(LIFE_MODIFIER_X, LIFE_MODIFIER_Y, LED_RGB(31, 0, 24));
 
-        /* ONE widget per pad, in the SAME order, EVERY frame. The mode changes
-           only the colour and what a press does.
-
-           This is the bug that made the modifier appear to cancel itself: the
-           previous version emitted 255 invisible_buttons in world mode and 13
-           buttons in action mode, so the widget set changed shape the instant
-           the corner went down, and the held state went with it. */
+        /* ONE widget per pad, in the SAME order, EVERY frame, in every mode.
+           The mode changes only each pad's colour and what a press does, which
+           is why the voice editor lives inside this loop rather than drawing
+           itself alongside it. */
         for (int y = 0; y < LIFE_H; ++y) {
             for (int x = 0; x < LIFE_W; ++x) {
                 if (x == LIFE_MODIFIER_X && y == LIFE_MODIFIER_Y) continue;
 
-                uint32_t col = action_mode ? action_colour(x, y) : cell_colour(x, y, false);
-                const char *help = action_mode ? action_help(x, y) : nullptr;
+                uint32_t col;
+                const char *help;
+                if (mode == LIFE_UI_VOICE) {
+                    col = voice_colour(x, y);
+                    help = voice_help(x, y);
+                } else if (mode == LIFE_UI_ACTION) {
+                    col = action_colour(x, y);
+                    help = action_help(x, y);
+                } else {
+                    col = cell_colour(x, y, false);
+                    help = nullptr;
+                }
 
-                if (button(x, y, col, NOT_ISOLATED, help)) {
-                    if (action_mode) {
-                        if (is_action_pad(x, y)) {
-                            do_action(x, y);
-                            action_latch = false;   /* a latched layer closes after one action */
-                        }
-                    } else {
-                        /* on_ui and on_sequence share the world, and on_sequence
-                           can interrupt this at any instruction. */
-                        on_sequence_lock_guard_t guard;
-                        life_toggle(&world, x, y);
+                if (!button(x, y, col, NOT_ISOLATED, help)) continue;
+
+                if (mode == LIFE_UI_VOICE) {
+                    do_voice_edit(x, y);
+                } else if (mode == LIFE_UI_ACTION) {
+                    if (is_action_pad(x, y)) {
+                        do_action(x, y);
+                        /* one-shot: an action drops back to the world unless it
+                           opened another mode */
+                        if (ui_mode == LIFE_UI_ACTION) ui_mode = LIFE_UI_WORLD;
                     }
+                } else {
+                    /* on_ui and on_sequence share the world, and on_sequence can
+                       interrupt this at any instruction. */
+                    on_sequence_lock_guard_t guard;
+                    life_toggle(&world, x, y);
                 }
             }
         }
 
-        if (action_mode)
-            set_help_text("Life #fc2#*actions#. - %s", is_transport_playing() ? "playing" : "stopped");
+        if (mode == LIFE_UI_VOICE)
+            set_voice_help_text();
+        else if (mode == LIFE_UI_ACTION)
+            set_help_text("#fc2#*Actions#. - edit, mute, solo, clear, seed, freeze, step, %s",
+                          is_transport_playing() ? "stop" : "play");
         else
-            set_help_text("Life - #fc2#*%d#. alive, %s %s%s", last_stats.alive,
+            set_help_text("Life - #fc2#*%d#. alive, %s %s, gen %s%s", last_stats.alive,
                           life_note_names[pref_root], life_scale_long_names[pref_scale],
+                          life_rate_names[gen_rate],
                           is_transport_playing() ? "" : " (stopped)");
     }
 
