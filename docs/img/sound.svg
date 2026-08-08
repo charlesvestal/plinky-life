@@ -297,28 +297,29 @@
 <text class="h" x="654" y="40">SOUND  (1,15) in the</text>
 <text class="h" x="654" y="57">voice editor</text>
 <text class="t" x="654" y="74"></text>
-<text class="t" x="654" y="91">This is the STOCK synth</text>
-<text class="t" x="654" y="108">editor, not ours.</text>
-<text class="t" x="654" y="125"></text>
-<text class="t" x="654" y="142">Voice N plays preset N.</text>
-<text class="t" x="654" y="159">No selector, no indirection.</text>
-<text class="t" x="654" y="176"></text>
-<text class="h" x="654" y="193">rows 0-4, 5-9</text>
-<text class="t" x="654" y="210">Two banks of 16 sliders:</text>
-<text class="t" x="654" y="227">mix and fx above, the main</text>
-<text class="t" x="654" y="244">synth params below.</text>
-<text class="t" x="654" y="261"></text>
-<text class="h" x="654" y="278">x8-15, rows 10-14</text>
-<text class="t" x="654" y="295">The synth XY pad, with LFO</text>
-<text class="t" x="654" y="312">and env buttons on its right.</text>
-<text class="t" x="654" y="329"></text>
-<text class="h" x="654" y="346">x0-3, row 10</text>
-<text class="t" x="654" y="363">Switch voice without leaving.</text>
-<text class="t" x="654" y="380"></text>
-<text class="h" x="654" y="397">x0-5, row 12</text>
-<text class="t" x="654" y="414">simple / tune / chop /</text>
-<text class="t" x="654" y="431">loop / sync / lowpass gate</text>
-<text class="t" x="654" y="448"></text>
-<text class="h" x="654" y="465">(0,14)  back</text>
-<text class="t" x="654" y="482">x returns to the world.</text>
+<text class="t" x="654" y="91">The familiar Plinky synth</text>
+<text class="t" x="654" y="108">editor, pointed at whichever</text>
+<text class="t" x="654" y="125">voice you are editing.</text>
+<text class="t" x="654" y="142"></text>
+<text class="t" x="654" y="159">Voice 1 plays preset 1,</text>
+<text class="t" x="654" y="176">and so on across the four.</text>
+<text class="t" x="654" y="193"></text>
+<text class="h" x="654" y="210">rows 0-4, 5-9</text>
+<text class="t" x="654" y="227">Two banks of 16 sliders:</text>
+<text class="t" x="654" y="244">effects and mix above,</text>
+<text class="t" x="654" y="261">the main synth below.</text>
+<text class="t" x="654" y="278"></text>
+<text class="h" x="654" y="295">x8-15, rows 10-14</text>
+<text class="t" x="654" y="312">The XY pad, with LFO</text>
+<text class="t" x="654" y="329">and env buttons on its right.</text>
+<text class="t" x="654" y="346"></text>
+<text class="h" x="654" y="363">x0-3, row 10</text>
+<text class="t" x="654" y="380">Switch voice without leaving.</text>
+<text class="t" x="654" y="397"></text>
+<text class="h" x="654" y="414">x0-5, row 12</text>
+<text class="t" x="654" y="431">simple / tune / chop /</text>
+<text class="t" x="654" y="448">loop / sync / lowpass gate</text>
+<text class="t" x="654" y="465"></text>
+<text class="h" x="654" y="482">(0,14)  back</text>
+<text class="t" x="654" y="499">x returns to the world.</text>
 </svg>
