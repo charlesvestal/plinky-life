@@ -130,26 +130,113 @@ extern uint8_t current_key;
 extern uint16_t current_scale;
 void set_current_key_and_scale(uint8_t key, uint16_t scale);
 
-/* --- serialisation ------------------------------------------------------- */
-struct serialiser_t;
-extern volatile uint8_t is_serialise_in_progress;  /* 0 idle, 1 load, 2 save */
-bool serialise(serialiser_t &s, uint8_t &v);
-bool serialise(serialiser_t &s, int8_t &v);
-bool serialise(serialiser_t &s, uint16_t &v);
+/* --- serialisation -------------------------------------------------------
 
-/* The real macros come from save_and_load.h. These preserve the shape - the
-   fields are named, evaluated, and bracketed by begin/end - which is all the
-   compile check needs to catch a typo'd member or a wrong-sized array. */
-bool _stub_object_begin(serialiser_t &s);
-bool _stub_object_end(serialiser_t &s);
-bool _stub_field(serialiser_t &s, const char *key, void *data, unsigned long bytes);
+   These mirror the SHAPE of save_and_load.h, not just its names, because the
+   shape is where the mistakes are. Specifically:
+
+     - OBJECT_BEGIN opens a while + switch and every FIELD is a `case`
+     - FIELD(key, ...) forwards to serialise(s, __VA_ARGS__), so a fixed-size
+       array binds the `T (&arr)[N]` template
+     - FIELD_ARRAY(key, data, length) takes `length` by NON-CONST REFERENCE,
+       because it is for arrays whose element count is a stored variable
+
+   That last one matters: an earlier version of this file declared FIELD_ARRAY
+   loosely enough to accept a compile-time constant, so eight real errors
+   compiled clean here and failed on the server. The stub was the bug, exactly
+   as the header comment warns. */
+
+struct serialiser_t {
+    bool reading;
+    const char *active_field_key;
+
+    bool serialise(char (&str)[17]);
+    bool skip_ws(void);
+    bool consume(char c);
+    bool skip_value(void);
+    bool read_errorf(const char *fmt, ...);
+    void emit_object(bool compact);
+    void emit_end_object(void);
+    void emit_trailing_comma_and_key(const char *key);
+};
+
+extern volatile uint8_t is_serialise_in_progress;  /* 0 idle, 1 load, 2 save */
+
+/* Scalar overloads, matching save_and_load.h's set. */
+static inline bool serialise(serialiser_t &s, bool &v) { (void)s; (void)v; return true; }
+static inline bool serialise(serialiser_t &s, float &v) { (void)s; (void)v; return true; }
+static inline bool serialise(serialiser_t &s, int8_t &v) { (void)s; (void)v; return true; }
+static inline bool serialise(serialiser_t &s, uint8_t &v) { (void)s; (void)v; return true; }
+static inline bool serialise(serialiser_t &s, int16_t &v) { (void)s; (void)v; return true; }
+static inline bool serialise(serialiser_t &s, uint16_t &v) { (void)s; (void)v; return true; }
+static inline bool serialise(serialiser_t &s, int &v) { (void)s; (void)v; return true; }
+static inline bool serialise(serialiser_t &s, uint32_t &v) { (void)s; (void)v; return true; }
+static inline bool serialise(serialiser_t &s, int64_t &v) { (void)s; (void)v; return true; }
+
+/* Fixed-size array: what FIELD("key", arr) binds to. */
+template <typename T, int N> static inline bool serialise(serialiser_t &s, T (&arr)[N]) {
+    for (int i = 0; i < N; ++i)
+        if (!serialise(s, arr[i])) return false;
+    return true;
+}
+
+/* Variable-length array: what FIELD_ARRAY binds to. `length` is a NON-CONST
+   REFERENCE on purpose - passing a constant must not compile. */
+template <typename T, int N, typename LT>
+static inline bool serialise(serialiser_t &s, T (&arr)[N], LT &length, int inner_dimension_2d = 0) {
+    (void)inner_dimension_2d;
+    for (int i = 0; i < (int)length && i < N; ++i)
+        if (!serialise(s, arr[i])) return false;
+    return true;
+}
+
+template <int N> static inline bool serialise(serialiser_t &s, char (&str)[N]) {
+    (void)s; (void)str; return true;
+}
+
+/* Compile-time string hash so each FIELD really is a distinct switch case, the
+   way HASH(key) is in the firmware. */
+static constexpr unsigned literal_hash(const char *p, unsigned h = 2166136261u) {
+    return *p ? literal_hash(p + 1, (h ^ (unsigned)(unsigned char)*p) * 16777619u) : h;
+}
+#define HASH(key) literal_hash(key)
 
 #define OBJECT_BEGIN(s)                                                                            \
-    serialiser_t &_s_ref = (s);                                                                    \
-    (void)_stub_object_begin(_s_ref)
-#define OBJECT_END(s) (void)_stub_object_end(s)
-#define FIELD(key, val) _stub_field(_s_ref, key, (void *)&(val), sizeof(val))
-#define FIELD_ARRAY(key, data, length) _stub_field(_s_ref, key, (void *)(data), sizeof(*(data)) * (length))
+    char keybuf[17];                                                                               \
+    bool _plinky_object_first = true;                                                              \
+    (void)keybuf;                                                                                  \
+    (void)_plinky_object_first;                                                                    \
+    while (!(s).reading || !(s).consume('}')) {                                                    \
+        switch ((s).reading ? literal_hash(keybuf) : 1u) {                                         \
+        default:                                                                                   \
+            if (!(s).skip_value()) return false;                                                   \
+            break;                                                                                 \
+        case 1u:
+
+#define OBJECT_END(s)                                                                              \
+    }                                                                                              \
+    if (!(s).reading) {                                                                            \
+        (s).emit_end_object();                                                                     \
+        break;                                                                                     \
+    } else {                                                                                       \
+        _plinky_object_first = false;                                                              \
+    }                                                                                              \
+    }
+
+#define FIELD(key, ...)                                                                            \
+    static_assert(sizeof(key) <= 16, "FIELD key must be shorter than 16 characters");              \
+    case (HASH(key)):                                                                              \
+        s.emit_trailing_comma_and_key(key);                                                        \
+        s.active_field_key = key;                                                                  \
+        if (!serialise(s, __VA_ARGS__)) return false;                                              \
+        s.active_field_key = NULL;                                                                 \
+        if (s.reading) break;
+
+#define FIELD_ARRAY(key, data, length)                                                             \
+    case (HASH(key)):                                                                              \
+        s.emit_trailing_comma_and_key(key);                                                        \
+        if (!serialise(s, data, length)) return false;                                             \
+        if (s.reading) break;
 
 /* --- concurrency --------------------------------------------------------- */
 struct on_sequence_lock_guard_t {

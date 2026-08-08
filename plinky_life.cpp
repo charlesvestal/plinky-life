@@ -1491,14 +1491,14 @@ struct life_panel : panel_t {
         if (is_serialise_in_progress == 1) setup_default_panel_state_fields_only();
 
         OBJECT_BEGIN(s);
-        FIELD_ARRAY("world", world_rows, LIFE_H);
-        FIELD_ARRAY("ven", v_enabled, LIFE_NUM_VOICES);
-        FIELD_ARRAY("vmute", v_muted, LIFE_NUM_VOICES);
-        FIELD_ARRAY("vrate", v_rate, LIFE_NUM_VOICES);
-        FIELD_ARRAY("vordr", v_order, LIFE_NUM_VOICES);
-        FIELD_ARRAY("vrule", v_rule, LIFE_NUM_VOICES);
-        FIELD_ARRAY("vptch", v_pitch, LIFE_NUM_VOICES);
-        FIELD_ARRAY("vlen", v_length, LIFE_NUM_VOICES);
+        FIELD("world", world_rows);
+        FIELD("ven", v_enabled);
+        FIELD("vmute", v_muted);
+        FIELD("vrate", v_rate);
+        FIELD("vordr", v_order);
+        FIELD("vrule", v_rule);
+        FIELD("vptch", v_pitch);
+        FIELD("vlen", v_length);
         FIELD("gen", gen_rate);
         FIELD("floor", respawn_floor);
         FIELD("seed", respawn_amount);
