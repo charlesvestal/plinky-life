@@ -87,6 +87,8 @@ destructive, cyan for the world controls.
 
 | Pads | | |
 |---|---|---|
+| `(0,10)`–`(10,10)` | swing | 0–100%, off at the left |
+| `(0,11)`–`(11,11)` | generation rate | how often the world evolves |
 | `(0,12)`–`(5,12)` | rule | which law the world lives by |
 | `(0,13)`–`(3,13)` | edit | open that voice's editor |
 | `(0,14)`–`(3,14)` | mute | lit means you'll hear that voice |
@@ -98,6 +100,10 @@ destructive, cyan for the world controls.
 
 **Any action drops you back to the world.** The four edit pads open the voice
 editor instead.
+
+**The top three rows are the world's own controls** — its feel, its tempo and its
+law. Nothing there belongs to a voice, which is why they sit together and not in
+a voice editor.
 
 **Freeze and step are the composing tools.** Freeze holds the palette still so
 you can write against a fixed set of cells; step nudges it forward one generation
@@ -119,7 +125,7 @@ range goes.
 |---|---|---|
 | 1 | **voice** | which voice you're editing — tap to switch |
 | 3 | **rate** | `32nd · 16T · 16th · 8T · 8th · 4T · 1/4 · 1/2 · 1BAR · 2BAR · 4BAR · 8BAR` |
-| 5 | **rule** | which cell it picks — the 11 rules below |
+| 5 | **pick** | which cell it takes — the 11 rules below |
 | 7 | **order** | forward · reverse · ping-pong · random |
 | 9 | **pitch** | −7 … +7 scale degrees; the dim centre pad is 0 |
 | 11 | **length** | 10% … 100% of the step |
@@ -251,12 +257,15 @@ pads for its own buttons. `×` still gets you out.
 
 ---
 
-## 5. The rules
+## 5. Picking a cell
 
 Two separate things, and it's worth keeping them apart:
 
 - **order** — *which column* a voice moves to next.
-- **rule** — *which live cell in that column* actually sounds.
+- **pick** — *which live cell in that column* actually sounds.
+
+(Not to be confused with the world's **rule**, which is the law every cell lives
+by. `Pick` is per voice; `rule` is the whole world.)
 
 Given the live cells in the column a voice has arrived at:
 
@@ -301,23 +310,16 @@ second screen explains each page as you land on it.
 
 | | | |
 |---|---|---|
-| `KEY ` | root note | sets the whole instrument's key |
-| `SCAL` | scale | 29 of them |
-| `OCT ` | base octave | 1–7 |
-| `GEN ` | generation rate | how often the world evolves |
-| `FLOR` | respawn floor | sprinkle cells in below this population |
-| `SEED` | respawn amount | how many to sprinkle |
-| `STAB` | stall limit | generations of no change that count as stuck |
-| `OUT ` | output | synth · MIDI · both |
-| `PORT` | MIDI ports | off · USB1 · TRS1 · port 1 · all |
-| `CC  ` | simulation CCs out | on/off — see below |
-| `CIN ` | CC control | off, or the first controller number |
-| `COUT` | CC mirror | send changes back out on the same controllers |
-| `RULE` | the rule the world runs | Conway · HighLife · Maze · Coral · 34 · Seeds |
-| `SWNG` | swing | 0–100% |
-| `SWPT` | swing feel | plain 16th, or one of seven shuffle patterns |
-| `CV  ` | CV out | A = how full, B = how much is changing |
-| `NIN ` | note input | played notes draw cells |
+| | | |
+|---|---|---|
+| `KEY ` `SCAL` `OCT ` | **musical** | key, scale, base octave |
+| `GEN ` `RULE` `FLOR` `SEED` `STAB` | **the world** | tempo, law, and keeping it alive |
+| `SWNG` `SWPT` | **feel** | swing amount and shuffle pattern |
+| `OUT ` `PORT` | **output** | synth/MIDI/both, and which ports |
+| `CC  ` `CIN ` `COUT` `CV  ` `NIN ` | **control** | CCs out and in, CV out, note input |
+
+They're in that order, so the things you set once are at the end and never in
+your way.
 
 Key and scale set the **whole instrument's** harmony, not just this panel's, so
 the rest of the Plinky follows along.
@@ -357,7 +359,8 @@ the `RULE` settings page:
 | `SEED` | everything dies every step and explodes outward |
 
 **`SWNG`** shuffles every voice together while the world keeps its own straight
-time. `SWPT` picks plain 16th swing or one of seven shuffle patterns.
+time — also on the action layer. `SWPT` picks plain 16th swing or one of seven
+shuffle patterns.
 
 **`NIN`** lets you draw with a keyboard: played notes become cells, one column
 per note, left to right. Off-scale notes snap to the nearest degree, so it always

@@ -34,7 +34,7 @@ MOD_X, STOP_X, PLAY_X, ROW = 13, 14, 15, 15
 PARAM_ROWS = [
     (1, 4, "VOICE", "which voice you are editing"),
     (3, 12, "RATE", "32nd → 8 bars"),
-    (5, 11, "RULE", "which cell it plays"),
+    (5, 11, "PICK", "which cell it plays"),
     (7, 4, "ORDER", "fwd / rev / ping / rand"),
     (9, 15, "PITCH", "-7 .. +7, centre = 0"),
     (11, 10, "LENGTH", "10% .. 100% of the step"),
@@ -186,7 +186,13 @@ def action():
         for x in range(16):
             if y == ROW and x >= MOD_X:
                 continue
-            if y == 12 and x < 6:
+            if y == 10 and x < 11:
+                on = (x == 3)
+                pad(out, x, y, "#00909e" if on else ("#33333c" if x == 0 else "#052326"))
+            elif y == 11 and x < 12:
+                on = (x == 8)
+                pad(out, x, y, "#c88a00" if on else "#2a1f05")
+            elif y == 12 and x < 6:
                 names = ["LIFE", "HIGH", "MAZE", "CORL", "34", "SEED"]
                 on = (x == 2)
                 pad(out, x, y, "#8a1f80" if on else "#2a0a28", names[x],
@@ -215,9 +221,11 @@ def action():
         ("t", "The world dims underneath so"),
         ("t", "you never lose your place."),
         ("t", ""),
-        ("h", "row 12   the rule"),
-        ("t", "LIFE HIGH MAZE CORL 34 SEED"),
-        ("t", "What law the world lives by."),
+        ("h", "the world"),
+        ("t", "row 10  SWING   0-100"),
+        ("t", "row 11  GEN     32nd..8BAR"),
+        ("t", "row 12  RULE    LIFE HIGH"),
+        ("t", "        MAZE CORL 34 SEED"),
         ("t", ""),
         ("h", "row 13   E1 E2 E3 E4"),
         ("t", "Open that voice's editor."),

@@ -1213,7 +1213,7 @@ typedef struct {
 static const life_param_row_t life_param_rows[] = {
     {  1,  4, "VOICE" },   /* which voice this editor is editing */
     {  3, 12, "RATE"  },
-    {  5, 11, "RULE"  },
+    {  5, 11, "PICK"  },   /* which live cell this voice takes - NOT the world's rule */
     {  7,  4, "ORDER" },
     {  9, 15, "PITCH" },   /* bipolar, centre pad is 0 */
     { 11, 10, "LENGTH" },
@@ -1979,7 +1979,12 @@ struct life_panel : panel_t {
         printf("life: transport now %s\n", is_transport_playing() ? "playing" : "stopped");
     }
 
+    /* Swing is 0..100 in tens, like the behaviour rows. */
+    int swing_index(void) const { return (swing + 5) / 10; }
+
     bool is_action_pad(int x, int y) const {
+        if (y == 10) return x < 11;                /* swing, 0..100 in tens */
+        if (y == 11) return x < LIFE_NUM_RATES;    /* how fast the world evolves */
         if (y == 12) return x < LIFE_NUM_RULESETS; /* which law the world lives by */
         if (y == 13) return x < 4;                 /* 0-3 edit that voice */
         if (y == 14) return x < 8;                 /* 0-3 mute, 4-7 solo */
@@ -1988,8 +1993,14 @@ struct life_panel : panel_t {
     }
 
     uint32_t action_colour(int x, int y) const {
-        /* The rule is a property of the WORLD, not of any voice, so it belongs
-           with clear, seed and freeze rather than inside a per-voice editor. */
+        /* The world's own controls - its law, its tempo and its feel - live
+           together here rather than four and fourteen clicks into the settings.
+           None of them belongs to a voice. */
+        if (y == 10 && x < 11)
+            return x == swing_index() ? LED_RGB(0, 20, 22)
+                                      : (x == 0 ? LIFE_COL_OFF : LED_RGB(0, 5, 6));
+        if (y == 11 && x < LIFE_NUM_RATES)
+            return x == gen_rate ? LED_RGB(22, 14, 0) : LED_RGB(5, 3, 0);
         if (y == 12 && x < LIFE_NUM_RULESETS)
             return x == rule_set ? LED_RGB(26, 6, 24) : LED_RGB(6, 1, 6);
         if (y == 13 && x < 4) return life_voice_dim[x];
@@ -2010,6 +2021,8 @@ struct life_panel : panel_t {
     }
 
     static const char *action_help(int x, int y) {
+        if (y == 10 && x < 11) return "Swing - every voice shuffles; the world stays straight";
+        if (y == 11 && x < LIFE_NUM_RATES) return "How often the world evolves one generation";
         if (y == 12 && x < LIFE_NUM_RULESETS) return life_rule_help[x];
         if (y == 13 && x < 4) return "open this voice's editor - rate, rule, sound";
         if (y == 14) return x < 4 ? "mute this voice"
@@ -2026,6 +2039,8 @@ struct life_panel : panel_t {
 
     void do_action(int x, int y) {
         printf("life: action pad (%d,%d)\n", x, y);
+        if (y == 10 && x < 11) { swing = (uint8_t)(x * 10); settings_dirty = true; return; }
+        if (y == 11 && x < LIFE_NUM_RATES) { gen_rate = (uint8_t)x; settings_dirty = true; return; }
         if (y == 12 && x < LIFE_NUM_RULESETS) {
             rule_set = (uint8_t)x;
             settings_dirty = true;
@@ -2256,7 +2271,7 @@ struct life_panel : panel_t {
             default: break;
         } else switch (row) {
             case 1: trim4(value, life_rate_names[v_rate[v]]); break;
-            case 2: trim4(value, life_sel_names[v_rule[v]]); break;
+            case 2: trim4(value, life_sel_names[v_rule[v]]); break;   /* names itself */
             case 3: trim4(value, life_trav_names[v_order[v]]); break;
             case 4: tag = "PT"; snprintf(value, sizeof(value), "%+d", (int)v_pitch[v]); break;
             case 5: tag = "LN"; snprintf(value, sizeof(value), "%d", (int)v_length[v]); break;
@@ -2505,6 +2520,9 @@ struct life_panel : panel_t {
         int idx = -1 - page;                       /* page -1 is our page 0 */
         char buf[8];
 
+        /* Grouped: musical, then the world, then feel, then output, then the
+           control surface. The set-once I/O pages sit at the end so nothing you
+           reach for often is behind them. */
         switch (idx) {
         case 0: {
             int d = draw_system_style_enum_settings_page("KEY ", pref_root, life_note_names, 12);
@@ -2548,6 +2566,14 @@ struct life_panel : panel_t {
             break;
         }
         case 4: {
+            int d = draw_system_style_enum_settings_page("RULE", rule_set, life_ruleset_names(),
+                                                        LIFE_NUM_RULESETS);
+            if (d) { settings_dirty = true;
+                     rule_set = (uint8_t)clamp_int(rule_set + d, 0, LIFE_NUM_RULESETS - 1); }
+            set_help_text("#fc2#*Rule#. - %s", life_rule_help[rule_set]);
+            break;
+        }
+        case 5: {
             snprintf(buf, sizeof(buf), "%d", respawn_floor);
             int d = draw_system_style_settings_page("FLOR", buf, respawn_floor * 100 / 64);
             if (d) settings_dirty = true;
@@ -2557,7 +2583,7 @@ struct life_panel : panel_t {
                           respawn_floor);
             break;
         }
-        case 5: {
+        case 6: {
             snprintf(buf, sizeof(buf), "%d", respawn_amount);
             int d = draw_system_style_settings_page("SEED", buf, respawn_amount * 100 / 64);
             if (d) settings_dirty = true;
@@ -2566,7 +2592,7 @@ struct life_panel : panel_t {
                           "Also what the SEED pad in the action layer drops in.", respawn_amount);
             break;
         }
-        case 6: {
+        case 7: {
             snprintf(buf, sizeof(buf), "%d", respawn_stable);
             int d = draw_system_style_settings_page("STAB", buf, respawn_stable * 100 / 32);
             if (d) settings_dirty = true;
@@ -2580,7 +2606,29 @@ struct life_panel : panel_t {
                               "will stay frozen; only the floor can rescue it.");
             break;
         }
-        case 7: {
+        case 8: {
+            snprintf(buf, sizeof(buf), "%d", swing);
+            int d = draw_system_style_settings_page("SWNG", buf, swing);
+            if (d) { settings_dirty = true; swing = (uint8_t)clamp_int(swing + d, 0, 100); }
+            if (swing)
+                set_help_text("#fc2#*Swing#. - #fc2#*%d%%#. of %s. Every voice shuffles together; "
+                              "the world keeps its own straight time.", swing,
+                              swing_pattern ? "the chosen pattern" : "plain 16th swing");
+            else
+                set_help_text("#fc2#*Swing#. - #fc2#*straight#.. Turn it up to shuffle every "
+                              "voice together.");
+            break;
+        }
+        case 9: {
+            int d = draw_system_style_enum_settings_page("SWPT", swing_pattern,
+                                                        life_swing_names, 8);
+            if (d) { settings_dirty = true;
+                     swing_pattern = (uint8_t)clamp_int(swing_pattern + d, 0, 7); }
+            set_help_text("#fc2#*Swing feel#. - %s. Only audible with SWNG above zero.",
+                          swing_pattern ? "one of the seven shuffle patterns" : "plain 16th swing");
+            break;
+        }
+        case 10: {
             int d = draw_system_style_enum_settings_page("OUT ", pref_sink, life_sink_names, 3);
             if (d) settings_dirty = true;
             if (d) {
@@ -2593,7 +2641,7 @@ struct life_panel : panel_t {
                                                         : "#fc2#*both#. the internal synth and MIDI");
             break;
         }
-        case 8: {
+        case 11: {
             int d = draw_system_style_enum_settings_page("PORT", pref_port, life_port_names, 5);
             if (d) settings_dirty = true;
             if (d) {
@@ -2609,7 +2657,7 @@ struct life_panel : panel_t {
                                            : "#fc2#*every port#., USB and TRS 1 and 2");
             break;
         }
-        case 9: {
+        case 12: {
             bool on = pref_send_cc != 0;
             int d = draw_system_style_bool_settings_page("CC  ", on);
             if (d) settings_dirty = true;
@@ -2624,7 +2672,7 @@ struct life_panel : panel_t {
                               "per-voice movement.");
             break;
         }
-        case 10: {
+        case 13: {
             if (pref_cc_in) snprintf(buf, sizeof(buf), "%d", pref_cc_in);
             else snprintf(buf, sizeof(buf), "OFF");
             int d = draw_system_style_settings_page("CIN ", buf, pref_cc_in * 100 / 92);
@@ -2641,7 +2689,7 @@ struct life_panel : panel_t {
                               "the world and every voice from a controller or a DAW.");
             break;
         }
-        case 11: {
+        case 14: {
             bool on = pref_cc_out != 0;
             int d = draw_system_style_bool_settings_page("COUT", on);
             if (d) { pref_cc_out = on ? 0 : 1; settings_dirty = true; cc_out_primed = false; }
@@ -2652,36 +2700,6 @@ struct life_panel : panel_t {
             else
                 set_help_text("#fc2#*CC mirror#. - #fc2#*off#.. The panel listens but does not "
                               "report its own changes.");
-            break;
-        }
-        case 12: {
-            int d = draw_system_style_enum_settings_page("RULE", rule_set, life_ruleset_names(),
-                                                        LIFE_NUM_RULESETS);
-            if (d) { settings_dirty = true;
-                     rule_set = (uint8_t)clamp_int(rule_set + d, 0, LIFE_NUM_RULESETS - 1); }
-            set_help_text("#fc2#*Rule#. - %s", life_rule_help[rule_set]);
-            break;
-        }
-        case 13: {
-            snprintf(buf, sizeof(buf), "%d", swing);
-            int d = draw_system_style_settings_page("SWNG", buf, swing);
-            if (d) { settings_dirty = true; swing = (uint8_t)clamp_int(swing + d, 0, 100); }
-            if (swing)
-                set_help_text("#fc2#*Swing#. - #fc2#*%d%%#. of %s. Every voice shuffles together; "
-                              "the world keeps its own straight time.", swing,
-                              swing_pattern ? "the chosen pattern" : "plain 16th swing");
-            else
-                set_help_text("#fc2#*Swing#. - #fc2#*straight#.. Turn it up to shuffle every "
-                              "voice together.");
-            break;
-        }
-        case 14: {
-            int d = draw_system_style_enum_settings_page("SWPT", swing_pattern,
-                                                        life_swing_names, 8);
-            if (d) { settings_dirty = true;
-                     swing_pattern = (uint8_t)clamp_int(swing_pattern + d, 0, 7); }
-            set_help_text("#fc2#*Swing feel#. - %s. Only audible with SWNG above zero.",
-                          swing_pattern ? "one of the seven shuffle patterns" : "plain 16th swing");
             break;
         }
         case 15: {
@@ -2838,8 +2856,9 @@ struct life_panel : panel_t {
         if (mode == LIFE_UI_VOICE)
             set_voice_help_text();
         else if (mode == LIFE_UI_ACTION)
-            set_help_text("#fc2#*Actions#. - rule #fc2#*%s#., edit, mute, solo, clear, seed, "
-                          "freeze, step", life_rulesets[rule_set].name);
+            set_help_text("#fc2#*Actions#. - %s, gen %s, swing %d%%, edit, mute, solo, clear, "
+                          "seed, freeze, step", life_rulesets[rule_set].name,
+                          life_rate_names[gen_rate], swing);
         else
             /* The world view is where you spend the time, so its one line of
                text says what the four voices are set to - otherwise the only
