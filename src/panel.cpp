@@ -922,9 +922,14 @@ struct life_panel : panel_t {
          x8..15 rows 10..14  the synth XY pad and its LFO/env buttons
          x0..7  rows 10..14  ours: voice selector and the flag buttons
          row 15       transport, drawn by the caller */
-    /* The stock Chords synth page, whose regions the Chords manual gives exactly:
-       upper sliders 0,2..16,7 - lower 0,7..8,14 - XY pad 9,7..16,14. That leaves
-       column 8 rows 7..13 as the XY button column, hence XY_BUTTONS_ON_LEFT.
+    /* The synth page printed on the CHORDS and DRUMS overlays. Both print the
+       same one - checked against panel_art/chords.png and panel_art/drums.png,
+       label for label - and both give pad circles only on rows 2..13, with
+       printed control rows at 0,1 and 14,15.
+
+       Regions: upper sliders 0,2..16,7 - lower 0,7..8,14 - XY pad 9,7..16,14.
+       That leaves column 8 rows 7..13 as the XY button column, which is where
+       MOD and XY are printed, hence XY_BUTTONS_ON_LEFT.
 
        The payoff is that every printed label on the overlay is CORRECT: the
        order below is read straight off the silkscreen, and passing col = 0 lets
@@ -933,7 +938,7 @@ struct life_panel : panel_t {
 
        Rows 0..1 and 14..15 are the printed control rows on Chords, so nothing
        goes there - which conveniently leaves our transport row alone. */
-    void draw_chords_sound_page(int preset) {
+    void draw_printed_sound_page(int preset) {
         static const int top[16] = {            /* rows 2..6, 16 sliders 5 high */
             VOICE_PARAM_ATTACK,                 /* A     */
             VOICE_PARAM_DECAY,                  /* D     */
@@ -977,15 +982,30 @@ struct life_panel : panel_t {
             ui_mode = LIFE_UI_VOICE;
     }
 
+    /* What the second screen calls the sound page's layout. */
+    static const char *plate_layout_name(void) {
+        switch (get_frontpanel_code()) {
+        case FRONT_PANEL_CODE_CHORDS: return "Chords";
+        case FRONT_PANEL_CODE_DRUMS: return "Drums";
+        case FRONT_PANEL_CODE_TOADSTEP: return "Toadstep";
+        default: return "standard";
+        }
+    }
+
     void draw_preset_editor(void) {
         int preset = preset_for(edit_voice);
 
         /* The firmware reads the mounted overlay off resistor straps, so we do
-           not have to ask - get_frontpanel_code() knows. Chords is the one whose
-           printed synth page we can match exactly (its manual gives the regions);
-           every other overlay gets the general layout. */
-        if (get_frontpanel_code() == FRONT_PANEL_CODE_CHORDS) {
-            draw_chords_sound_page(preset);
+           not have to ask.
+
+           Chords and Drums print the same synth page, so they share a layout.
+           Everything else gets preset_pages_t::edit(), and that is not a
+           fallback: its column order IS Toadstep's printed fader order, top
+           bank and bottom bank both, just at 5 rows high instead of 8. Blocks
+           prints no labels at all, so nothing can be wrong there. */
+        int plate = get_frontpanel_code();
+        if (plate == FRONT_PANEL_CODE_CHORDS || plate == FRONT_PANEL_CODE_DRUMS) {
+            draw_printed_sound_page(preset);
             return;
         }
 
@@ -1216,7 +1236,7 @@ struct life_panel : panel_t {
         if (mode == LIFE_UI_PRESET) {
             draw_preset_editor();
             set_help_text("V%d #fc2#*sound#. - %s layout - x to leave", edit_voice + 1,
-                          get_frontpanel_code() == FRONT_PANEL_CODE_CHORDS ? "Chords" : "standard");
+                          plate_layout_name());
             return;
         }
 

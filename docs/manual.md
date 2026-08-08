@@ -153,11 +153,14 @@ Voice editor → `(1,15)`.
 
 The familiar Plinky synth editor, pointed at the selected voice.
 
-**With the Chords overlay fitted it rearranges itself** to match the printed
-Chords synth page, so attack, decay, sustain, release and the rest land under
-the labels they belong to and the sliders pick up the printed colour groups.
-You don't have to tell it — it knows which overlay is on the instrument. The
-second screen says which layout you're looking at.
+**It rearranges itself to match your faceplate.** With Chords or Drums fitted
+the sliders move onto the printed synth page, so attack, decay, sustain, release
+and the rest land under the labels they belong to. You don't have to tell it
+which overlay you have — it knows. The second screen names the layout you're
+looking at.
+
+On Toadstep and Blocks it uses the standard layout, whose column order already
+matches Toadstep's printed faders.
 
 | Area | |
 |---|---|
