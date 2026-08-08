@@ -796,8 +796,29 @@ static const uint8_t life_port_values[5] = {
 #define LIFE_NUM_CCS      8
 
 #define LIFE_NUM_VOICES 4
-#define LIFE_MODIFIER_X 15
+
+/* Row 15, following the Chords silkscreen - which is also the convention in
+   ide_api.md's Global Transport section:
+
+     (12,15) REC   - we have nothing to record, so it stays part of the world
+     (13,15) x     - the stock SHIFT key, so the actions modifier lives here
+     (14,15) square- stop
+     (15,15) play
+
+   Transport is PERMANENT and visible in every mode. It used to be buried under
+   the modifier on (15,15), which is the pad Plinky users reach for to start
+   playback - so the panel answered "how do I play this?" with a menu. Three
+   cells are spent; they still simulate, they just cannot be seen or painted. */
+#define LIFE_MODIFIER_X 13
 #define LIFE_MODIFIER_Y 15
+#define LIFE_STOP_X     14
+#define LIFE_PLAY_X     15
+#define LIFE_TRANSPORT_Y 15
+
+#define LIFE_COL_PLAY_ON   LED_RGB(0, 31, 6)
+#define LIFE_COL_PLAY_OFF  LED_RGB(0, 7, 2)
+#define LIFE_COL_STOP_ON   LED_RGB(28, 3, 0)
+#define LIFE_COL_STOP_OFF  LED_RGB(8, 1, 0)
 
 /* Default step length, used for the very first note of a voice before two
    divider edges have been seen and the real interval is known. */
@@ -1328,10 +1349,30 @@ struct life_panel : panel_t {
        Pads that do something while the modifier is held. Everything else keeps
        showing the world, dimmed, so you never lose your place. */
 
+    bool is_transport_pad(int x, int y) const {
+        return y == LIFE_TRANSPORT_Y && (x == LIFE_STOP_X || x == LIFE_PLAY_X);
+    }
+
+    uint32_t transport_colour(int x) const {
+        bool playing = is_transport_playing();
+        if (x == LIFE_PLAY_X) return playing ? LIFE_COL_PLAY_ON : LIFE_COL_PLAY_OFF;
+        return playing ? LIFE_COL_STOP_OFF : LIFE_COL_STOP_ON;
+    }
+
+    void do_transport(int x) {
+        if (x == LIFE_PLAY_X) {
+            if (!is_transport_playing()) start_transport();
+        } else {
+            stop_transport();
+            release_all_voices();
+        }
+        printf("life: transport now %s\n", is_transport_playing() ? "playing" : "stopped");
+    }
+
     bool is_action_pad(int x, int y) const {
         if (y == 13) return x < 4;                 /* 0-3 edit that voice */
         if (y == 14) return x < 8;                 /* 0-3 mute, 4-7 solo */
-        if (y == 15) return x < 5;                 /* clear seed freeze step play */
+        if (y == 15) return x < 4;                 /* clear seed freeze step */
         return false;
     }
 
@@ -1347,7 +1388,6 @@ struct life_panel : panel_t {
             case 1: return LIFE_COL_ACTION;
             case 2: return freeze_life ? LIFE_COL_DANGER : LIFE_COL_ACTION;
             case 3: return LIFE_COL_ACTION;
-            case 4: return is_transport_playing() ? LIFE_COL_ACTION : LIFE_COL_OFF;
             default: break;
             }
         }
@@ -1362,7 +1402,6 @@ struct life_panel : panel_t {
         case 1: return "respawn cells now";
         case 2: return "freeze evolution";
         case 3: return "step one generation";
-        case 4: return "start or stop";
         default: break;
         }
         return nullptr;
@@ -1393,15 +1432,6 @@ struct life_panel : panel_t {
                   life_respawn_apply(&world, &respawn, (int)respawn_amount); break; }
         case 2: freeze_life = freeze_life ? 0 : 1; break;
         case 3: step_once_request = true; break;
-        case 4:
-            if (is_transport_playing()) {
-                stop_transport();
-                release_all_voices();
-            } else {
-                start_transport();
-            }
-            printf("life: transport now %s\n", is_transport_playing() ? "playing" : "stopped");
-            break;
         default: break;
         }
     }
@@ -1620,6 +1650,15 @@ struct life_panel : panel_t {
             for (int x = 0; x < LIFE_W; ++x) {
                 if (x == LIFE_MODIFIER_X && y == LIFE_MODIFIER_Y) continue;
 
+                /* Transport is the same pad, the same colour and the same
+                   action in every mode. Never modal, never hidden. */
+                if (is_transport_pad(x, y)) {
+                    if (button(x, y, transport_colour(x), NOT_ISOLATED,
+                               x == LIFE_PLAY_X ? "play" : "stop"))
+                        do_transport(x);
+                    continue;
+                }
+
                 uint32_t col;
                 const char *help;
                 if (mode == LIFE_UI_VOICE) {
@@ -1656,8 +1695,7 @@ struct life_panel : panel_t {
         if (mode == LIFE_UI_VOICE)
             set_voice_help_text();
         else if (mode == LIFE_UI_ACTION)
-            set_help_text("#fc2#*Actions#. - edit, mute, solo, clear, seed, freeze, step, %s",
-                          is_transport_playing() ? "stop" : "play");
+            set_help_text("#fc2#*Actions#. - edit, mute, solo, clear, seed, freeze, step");
         else
             set_help_text("Life - #fc2#*%d#. alive, %s %s, gen %s%s", last_stats.alive,
                           life_note_names[pref_root], life_scale_long_names[pref_scale],

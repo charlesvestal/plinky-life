@@ -12,25 +12,61 @@ alive.
 
 ## Playing it
 
+Row 15 follows the Chords silkscreen, which is also the convention in
+`ide_api.md`'s Global Transport section — so the pads are where a Plinky player
+already expects them:
+
+```
+(12,15) rec    (13,15) ×      (14,15) ▢      (15,15) ▷
+ unused         actions        stop           play
+```
+
+**Press ▷ to start.** Transport is permanent and identical in every mode — never
+modal, never hidden behind a modifier.
+
 | | |
 |---|---|
 | **Tap a pad** | toggle that cell alive or dead |
-| **Hold the bottom-right pad** | the action layer — mutes, solos, clear, respawn, freeze, single-step, transport |
+| **`×` (13,15)** | hold or tap for the action layer |
 | **Right side buttons** | page through the settings |
 | **Left side buttons** | adjust the current setting |
 
-The side buttons are system territory on every faceplate, so the panel never touches them.
+The side buttons are system territory on every faceplate, so the panel never
+touches them.
 
-Cell `(15,15)` is where the modifier badge is drawn. It still *simulates* — it just can't be
-seen or hand-painted. That is the entire cost of having a modifier without giving up a
-full-size world.
+Three cells are spent on row 15. They still *simulate* — they just can't be seen
+or hand-painted.
 
 ### The action layer
 
+Hold or tap `×`:
+
 ```
-row 14   V1 V2 V3 V4  S1 S2 S3 S4          mutes, then solos
-row 15   CLR SEED FRZ STEP PLAY            world and transport
+row 13   E1 E2 E3 E4                    edit that voice
+row 14   V1 V2 V3 V4   S1 S2 S3 S4      mutes, then solos
+row 15   CLR SEED FRZ STEP              world
 ```
+
+Any action drops you back to the world. `EDIT` opens the voice editor instead.
+
+### The voice editor
+
+One parameter per row, blank rows between them so seven stacked rows stay
+readable at arm's length. Selected pad bright, the rest of the row dim so you
+can see how far the range goes.
+
+```
+y=1    VOICE   which voice you are editing
+y=3    RATE    32nd .. 8 bars          <- polyrhythm lives here
+y=5    RULE    the 11 selection rules
+y=7    ORDER   fwd / rev / ping / rand
+y=9    SYNTH   which of the 12 presets this voice plays
+y=11   CHAN    MIDI channel 1-16
+y=13   PITCH   -7 .. +7 scale degrees, centre pad is 0
+y=15   LENGTH  10% .. 100% of the step
+```
+
+Press `×` to get back to the world.
 
 ## Selection rules
 
