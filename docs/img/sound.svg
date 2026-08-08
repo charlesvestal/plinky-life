@@ -294,8 +294,8 @@
 <rect x="596" y="596" width="34" height="34" rx="7" fill="#1fd455"/>
 <rect x="569" y="607" width="12" height="12" rx="2" fill="#fff"/>
 <path d="M608 606 L620 613 L608 620 Z" fill="#04240f"/>
-<text class="h" x="654" y="40">SOUND  (1,15) in the</text>
-<text class="h" x="654" y="57">voice editor</text>
+<text class="h" x="654" y="40">SOUND on BLOCKS</text>
+<text class="h" x="654" y="57">and TOADSTEP</text>
 <text class="t" x="654" y="74"></text>
 <text class="t" x="654" y="91">The familiar Plinky synth</text>
 <text class="t" x="654" y="108">editor, pointed at whichever</text>

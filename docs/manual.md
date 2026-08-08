@@ -152,20 +152,33 @@ into that voice's slot.
 
 ## 4. Sound
 
-![Synth editor](img/sound.svg)
-
 Voice editor → `(1,15)`.
 
 The familiar Plinky synth editor, pointed at the selected voice.
 
-**It rearranges itself to match your faceplate.** With Chords or Drums fitted
-the sliders move onto the printed synth page, so attack, decay, sustain, release
-and the rest land under the labels they belong to. You don't have to tell it
-which overlay you have — it knows. The second screen names the layout you're
+**It rearranges itself to match your faceplate.** You don't have to tell it which
+overlay you have — it knows, and the second screen names the layout you're
 looking at.
 
-On Toadstep and Blocks it uses the standard layout, whose column order already
-matches Toadstep's printed faders.
+### On Chords and Drums
+
+![Sound page on Chords and Drums](img/sound_printed.svg)
+
+Both overlays print the same synth page, and the sliders move onto it — so every
+pad sits under the label that names what it does.
+
+| Area | |
+|---|---|
+| rows 2–6 | A · D · S · R · PAN · SUB · HP · LP · RESO · DELAY · TIME · FBK · VERB · TAIL · GLOW · VOL |
+| rows 7–13, `x0–7` | GLIDE · PITCH · OCT · CHORUS · FOLD · START · END · SPEED |
+| `x8`, rows 7–13 | the MOD and XY buttons |
+| `x9–15`, rows 7–13 | the XY pad |
+| `(0,0)`–`(3,0)` | switch voice — the editor follows |
+| `(0,14)` | back to the voice editor |
+
+### On Blocks and Toadstep
+
+![Sound page, standard layout](img/sound.svg)
 
 | Area | |
 |---|---|
@@ -175,6 +188,9 @@ matches Toadstep's printed faders.
 | `(0,10)`–`(3,10)` | switch voice — the editor follows |
 | `(0,12)`–`(5,12)` | simple · tune · chop · loop · sync · lowpass gate |
 | `(0,14)` | back to the voice editor |
+
+The column order here already matches Toadstep's printed faders. Blocks prints no
+labels at all.
 
 ### Loading a preset
 

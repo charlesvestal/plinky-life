@@ -271,6 +271,87 @@ def voice():
     return "\n".join(out)
 
 
+# ------------------------------------------------------------------ sound (printed)
+
+# Read off panel_art/chords.png and panel_art/drums.png, which print the same
+# synth page. Shortened where a full word will not fit inside a pad.
+PRINTED_TOP = ["A", "D", "S", "R", "PAN", "SUB", "HP", "LP",
+               "RESO", "DLY", "TIME", "FBK", "VERB", "TAIL", "GLOW", "VOL"]
+PRINTED_BOT = ["GLID", "PTCH", "OCT", "CHOR", "FOLD", "STRT", "END", "SPD"]
+
+
+def sound_printed():
+    """The sound page as it lands on the CHORDS and DRUMS overlays, whose pad
+    circles run rows 2..13 with printed control rows above and below."""
+    w, h = grid_size(300)
+    out = svg_open(w, h, "plinky-life sound page on Chords and Drums")
+    axes(out)
+    TOP = "#2b3f6b"
+    BOT = "#1f5147"
+    XY = "#3a2b5e"
+    BTN = "#5a5570"
+    for y in range(16):
+        for x in range(16):
+            if y == ROW and x >= MOD_X:
+                continue
+            if y == 0 and x < 4:
+                pad(out, x, y, V[1] if x == 1 else V_DIM[x])
+            elif 2 <= y <= 6:
+                lit = (6 - y) <= (x % 5)
+                pad(out, x, y, TOP if lit else "#12151f")
+                if y == 2:
+                    pad(out, x, y, TOP if lit else "#12151f", PRINTED_TOP[x], "#cfe0ff")
+            elif 7 <= y <= 13 and x < 8:
+                lit = (13 - y) <= ((x + 2) % 7)
+                pad(out, x, y, BOT if lit else "#101a18")
+                if y == 7:
+                    pad(out, x, y, BOT if lit else "#101a18", PRINTED_BOT[x], "#bfeee0")
+            elif 7 <= y <= 13 and x == 8:
+                pad(out, x, y, BTN)
+            elif 7 <= y <= 13:
+                pad(out, x, y, XY)
+            elif y == 14 and x == 0:
+                pad(out, x, y, ACTION, "<", "#000")
+            else:
+                pad(out, x, y, "#0e0e12")
+    out.append(
+        f'<circle cx="{PAD + 12*(CELL+GAP) + CELL/2}" cy="{PAD + 10*(CELL+GAP) + CELL/2}" '
+        f'r="9" fill="#d8ccff"/>'
+    )
+    transport(out)
+    lx = PAD + 16 * (CELL + GAP) + 20
+    note(out, lx, PAD + 14, [
+        ("h", "SOUND on CHORDS"),
+        ("h", "and DRUMS"),
+        ("t", ""),
+        ("t", "Both overlays print the same"),
+        ("t", "synth page, and the sliders"),
+        ("t", "move onto it - so each pad"),
+        ("t", "sits under the label that"),
+        ("t", "names what it does."),
+        ("t", ""),
+        ("h", "rows 2-6"),
+        ("t", "A D S R PAN SUB HP LP"),
+        ("t", "RESO DELAY TIME FBK"),
+        ("t", "VERB TAIL GLOW VOL"),
+        ("t", ""),
+        ("h", "rows 7-13, x0-7"),
+        ("t", "GLIDE PITCH OCT CHORUS"),
+        ("t", "FOLD START END SPEED"),
+        ("t", ""),
+        ("h", "x8, rows 7-13"),
+        ("t", "MOD and XY buttons"),
+        ("t", ""),
+        ("h", "x9-15, rows 7-13"),
+        ("t", "the XY pad"),
+        ("t", ""),
+        ("h", "row 0 / (0,14)"),
+        ("t", "switch voice / back"),
+    ])
+    out.append("</svg>")
+    return "\n".join(out)
+
+
 # --------------------------------------------------------------------------- sound
 def sound():
     """The stock preset editor, hosted. Layout mirrors the reference panel in
@@ -308,8 +389,8 @@ def sound():
     transport(out)
     lx = PAD + 16 * (CELL + GAP) + 20
     note(out, lx, PAD + 14, [
-        ("h", "SOUND  (1,15) in the"),
-        ("h", "voice editor"),
+        ("h", "SOUND on BLOCKS"),
+        ("h", "and TOADSTEP"),
         ("t", ""),
         ("t", "The familiar Plinky synth"),
         ("t", "editor, pointed at whichever"),
@@ -345,7 +426,8 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     outdir = os.path.join(here, "img")
     os.makedirs(outdir, exist_ok=True)
-    for name, fn in (("world", world), ("action", action), ("voice", voice), ("sound", sound)):
+    for name, fn in (("world", world), ("action", action), ("voice", voice),
+                     ("sound", sound), ("sound_printed", sound_printed)):
         path = os.path.join(outdir, name + ".svg")
         with open(path, "w") as f:
             f.write(fn())
