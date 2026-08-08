@@ -165,6 +165,17 @@ hard it bites.
 | 7 | **tie** | how often a cell that survived holds instead of striking again |
 | 9 | **every** | play only every 2nd, 3rd or 4th crossing of the world |
 
+### Reading a value
+
+These rows are pads with no numbers on them, so **hold one and the value is
+spelled out** in a four-row font. It appears in the zone *furthest from your
+hand* — hold something in the top half and it shows at the bottom, and the other
+way round — so you are never reading through your own fingers. The colour is the
+voice's own, so the number needs no label.
+
+This works on both voice pages: rate reads `8th`, rule reads `WALK`, pitch reads
+`+3`, every reads `x2`.
+
 **These are read off the cell the voice actually landed on**, not drawn onto
 steps. A cell with eight neighbours always fires and rolls; a lone cell gets
 skipped. A cell that was already alive last generation can hold the previous

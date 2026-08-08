@@ -22,6 +22,9 @@
 #define WHITE LED_RGB(15, 15, 15)
 void set_led(int x, int y, uint32_t rgb15);
 void leds_clear(void);
+enum { FONT_4, FONT_4_BOLD, FONT_5 };
+void leds_draw_string(int x, int y, uint8_t font, uint32_t rgb15, const char *c);
+int leds_string_width(const char *c, uint8_t fontidx);
 
 /* --- widgets ------------------------------------------------------------- */
 #define ISOLATED true

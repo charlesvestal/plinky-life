@@ -316,5 +316,11 @@
 <text class="t" x="654" y="543">LD   load a preset</text>
 <text class="t" x="654" y="560">SND  the sound editor</text>
 <text class="t" x="654" y="577">P2   flip play / chance</text>
-<text class="t" x="26" y="652">Left-hand pad of each row is OFF. These read the cell the voice landed on, so what you see on the world is what you hear.</text>
+<line x1="21" y1="21" x2="635" y2="21" stroke="#e8a72a" stroke-width="1.5"/>
+<line x1="21" y1="179" x2="635" y2="179" stroke="#e8a72a" stroke-width="1.5"/>
+<line x1="21" y1="21" x2="21" y2="179" stroke="#e8a72a" stroke-width="1.5"/>
+<line x1="635" y1="21" x2="635" y2="179" stroke="#e8a72a" stroke-width="1.5"/>
+<text x="330" y="108" text-anchor="middle" fill="#e8a72a" style="font-size:26px;font-weight:700;font-family:ui-monospace,monospace">60</text>
+<text class="k" x="635" y="195" text-anchor="end" fill="#e8a72a">readout zone - the held value appears here</text>
+<text class="t" x="26" y="652">Left-hand pad of each row is OFF. Hold a pad and its value is spelled out in the zone furthest from your hand.</text>
 </svg>

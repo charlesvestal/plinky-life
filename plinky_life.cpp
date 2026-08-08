@@ -1320,7 +1320,8 @@ struct life_panel : panel_t {
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
-    uint8_t voice_page;       /* 0 = rate/rule/pitch, 1 = the chance controls */
+    uint8_t voice_page;       /* 0 = rate/rule/pitch, 1 = the behaviour controls */
+    char readout[8];          /* the value text under your finger, built each frame */
     bool modifier_held;
     uint8_t ui_mode;          /* LIFE_UI_WORLD / _ACTION / _VOICE */
     uint8_t solo_mask;
@@ -2203,6 +2204,62 @@ struct life_panel : panel_t {
 
     /* One line describing the whole voice, for the second-screen help view -
        the only place this panel can show words. */
+    /* --- the readout ------------------------------------------------------
+
+       These rows are pads with no numbers on them, so while you hold one the
+       value is spelled out in a 4-row font. The catch is that your hand covers
+       whatever is under it, so it is drawn in the zone FURTHEST from the row you
+       are touching: hold something in the top half and the value appears at the
+       bottom, and the other way round. You never read through your own fingers.
+
+       Colour is the voice's own, so the number needs no label. */
+    static void trim4(char *dst, const char *src) {
+        int n = 0;
+        for (int i = 0; i < 4 && src[i]; ++i)
+            if (src[i] != ' ') dst[n++] = src[i];
+        dst[n] = 0;
+    }
+
+    const char *readout_text(int row) {
+        int v = edit_voice;
+        readout[0] = 0;
+
+        if (row == 0) { readout[0] = 'V'; readout[1] = (char)('1' + v); readout[2] = 0; }
+        else if (voice_page) {
+            const uint8_t *f = chance_field(row);
+            if (!f) return readout;
+            if (row == 4) snprintf(readout, sizeof(readout), "x%d", chance_pass_divisor(*f));
+            else snprintf(readout, sizeof(readout), "%d", *f);
+        } else switch (row) {
+            case 1: trim4(readout, life_rate_names[v_rate[v]]); break;
+            case 2: trim4(readout, life_sel_names[v_rule[v]]); break;
+            case 3: trim4(readout, life_trav_names[v_order[v]]); break;
+            case 4: snprintf(readout, sizeof(readout), "%d",
+                             (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] : v + 1);
+                    break;
+            case 5: snprintf(readout, sizeof(readout), "%+d", (int)v_pitch[v]); break;
+            case 6: snprintf(readout, sizeof(readout), "%d", (int)v_length[v]); break;
+            default: break;
+        }
+        return readout;
+    }
+
+    /* Top zone is rows 0..3, bottom is 11..14 - never row 15, which carries the
+       transport and must not be covered by anything. */
+    void draw_readout(int touched_y) {
+        int row = param_row_for_y(touched_y);
+        if (row < 0) return;
+
+        const char *txt = readout_text(row);
+        if (!txt[0]) return;
+
+        int w = leds_string_width(txt, FONT_4);
+        int x = (LIFE_W - w) / 2;
+        if (x < 0) x = 0;
+        int zone_y = (touched_y <= 7) ? 11 : 0;
+        leds_draw_string(x, zone_y, FONT_4, life_voice_bright[edit_voice], txt);
+    }
+
     void set_voice_help_text(void) {
         int v = edit_voice;
         if (voice_page) {
@@ -2689,6 +2746,7 @@ struct life_panel : panel_t {
            The mode changes only each pad's colour and what a press does, which
            is why the voice editor lives inside this loop rather than drawing
            itself alongside it. */
+        int touched_y = -1;
         for (int y = 0; y < LIFE_H; ++y) {
             for (int x = 0; x < LIFE_W; ++x) {
                 if (x == LIFE_MODIFIER_X && y == LIFE_MODIFIER_Y) continue;
@@ -2707,7 +2765,11 @@ struct life_panel : panel_t {
                     help = nullptr;
                 }
 
-                if (!button(x, y, col, NOT_ISOLATED, help)) continue;
+                bool pressed = button(x, y, col, NOT_ISOLATED, help);
+                /* Read the level immediately: is_last_widget_held() refers to
+                   the most recently emitted widget, so nothing may come between. */
+                if (mode == LIFE_UI_VOICE && is_last_widget_held()) touched_y = y;
+                if (!pressed) continue;
 
                 if (mode == LIFE_UI_VOICE) {
                     do_voice_edit(x, y);
@@ -2728,6 +2790,9 @@ struct life_panel : panel_t {
         }
 
         send_param_ccs();
+
+        /* After the pads, so it lands on top of them. */
+        if (mode == LIFE_UI_VOICE && touched_y >= 0) draw_readout(touched_y);
 
         if (mode == LIFE_UI_VOICE)
             set_voice_help_text();
