@@ -131,6 +131,7 @@ And on row 15:
 |---|---|
 | `(0,15)` | **load** a preset into this voice |
 | `(1,15)` | **edit** this voice's sound |
+| `(2,15)` | flip to the **chance** page |
 
 Press `×` to go back to the world.
 
@@ -148,6 +149,34 @@ step, which is rarely what you want.
 
 Four voices, four sounds, straight across. To use a different patch, **load** it
 into that voice's slot.
+
+### The chance page
+
+![Chance page](img/chance.svg)
+
+`(2,15)` flips here. Four behaviours, each **off at the left-hand pad** and
+turning up from there — one control both switches a behaviour on and says how
+hard it bites.
+
+| Row | | |
+|---|---|---|
+| 3 | **chance** | how much lone cells get skipped |
+| 5 | **ratchet** | how much a crowded cell repeats inside its step |
+| 7 | **tie** | how often a cell that survived holds instead of striking again |
+| 9 | **every** | play only every 2nd, 3rd or 4th crossing of the world |
+
+**These are read off the cell the voice actually landed on**, not drawn onto
+steps. A cell with eight neighbours always fires and rolls; a lone cell gets
+skipped. A cell that was already alive last generation can hold the previous
+note; one born this generation always strikes.
+
+So a glider drifting through a voice's path audibly changes its rhythm, and what
+you see on the grid is what you hear. Turn `ratchet` up on a voice and watch
+where the world is dense — that's where it'll roll.
+
+`every` is the one that isn't about cells: it gives a voice a phrase longer than
+a single crossing, which nothing else here does. Set two voices to different
+values and they'll drift in and out of each other.
 
 ---
 

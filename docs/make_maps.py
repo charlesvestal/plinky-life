@@ -43,6 +43,15 @@ PARAM_ROWS = [
 
 LOAD_X, SOUND_X, SOUND_Y = 0, 1, 15   # load a preset / edit this voice's sound
 ACCENT_X0, ACCENT_N = 3, 10           # accent, along the rest of row 15
+VPAGE_X = 2                           # flip to the chance page
+
+CHANCE_ROWS = [
+    (1, 4, "VOICE", "which voice you are editing"),
+    (3, 11, "CHANCE", "lone cells get skipped"),
+    (5, 11, "RATCHET", "crowding adds repeats"),
+    (7, 11, "TIE", "survivors hold instead"),
+    (9, 11, "EVERY", "play every 2nd/3rd/4th pass"),
+]
 
 
 def esc(s):
@@ -256,6 +265,7 @@ def voice():
         pad(out, ACCENT_X0 + i, SOUND_Y, V[1] if i == 5 else V_DIM[1])
     pad(out, LOAD_X, SOUND_Y, "#4a3c8f", "LD", "#fff")
     pad(out, SOUND_X, SOUND_Y, ACTION, "SND", "#000")
+    pad(out, VPAGE_X, SOUND_Y, "#5a3000", "P2", "#000")
     transport(out)
     lx = PAD + 16 * (CELL + GAP) + 20
     ly = PAD
@@ -267,8 +277,8 @@ def voice():
         out.append(f'<text class="k" x="{lx}" y="{py + 12}">{esc(desc)}</text>')
     out.append(
         f'<text class="t" x="{PAD}" y="{PAD + 16*(CELL+GAP) + 18}">'
-        'Row 15: LD loads a preset, SND edits the sound, and x3-12 is ACCENT - how much '
-        'crowded cells hit harder.</text>'
+        'Row 15: LD loads a preset, SND edits the sound, P2 flips to the chance page, and '
+        'x3-12 is ACCENT.</text>'
     )
     out.append("</svg>")
     return "\n".join(out)
@@ -355,6 +365,55 @@ def sound_printed():
     return "\n".join(out)
 
 
+# --------------------------------------------------------------------------- chance
+def chance():
+    """The voice editor's second page: four behaviours read off the world."""
+    w, h = grid_size(300)
+    out = svg_open(w, h, "plinky-life voice chance page")
+    axes(out)
+    sel = {1: 1, 3: 4, 5: 6, 7: 0, 9: 2}
+    rows = {y: n for y, n, _, _ in CHANCE_ROWS}
+    for y in range(16):
+        for x in range(16):
+            if y == ROW and x >= MOD_X:
+                continue
+            if y not in rows:
+                pad(out, x, y, "#0e0e12")
+                continue
+            n = rows[y]
+            if x >= n:
+                pad(out, x, y, "#0e0e12")
+            elif y == 1:
+                pad(out, x, y, V[x] if x == sel[y] else V_DIM[x])
+            elif x == sel[y]:
+                pad(out, x, y, V[1])
+            elif x == 0:
+                pad(out, x, y, "#33333c")
+            else:
+                pad(out, x, y, V_DIM[1])
+    for i in range(ACCENT_N):
+        pad(out, ACCENT_X0 + i, SOUND_Y, V[1] if i == 5 else V_DIM[1])
+    pad(out, LOAD_X, SOUND_Y, "#4a3c8f", "LD", "#fff")
+    pad(out, SOUND_X, SOUND_Y, ACTION, "SND", "#000")
+    pad(out, VPAGE_X, SOUND_Y, "#c86400", "P2", "#000")
+    transport(out)
+    lx = PAD + 16 * (CELL + GAP) + 20
+    ly = PAD
+    out.append(f'<text class="h" x="{lx}" y="{ly + 14}">CHANCE PAGE</text>')
+    out.append(f'<text class="t" x="{lx}" y="{ly + 34}">P2 (2,15) flips here</text>')
+    for y, n, name, desc in CHANCE_ROWS:
+        py = PAD + y * (CELL + GAP) + CELL / 2 + 4
+        out.append(f'<text class="h" x="{lx}" y="{py - 2}">{esc(name)}</text>')
+        out.append(f'<text class="k" x="{lx}" y="{py + 12}">{esc(desc)}</text>')
+    out.append(
+        f'<text class="t" x="{PAD}" y="{PAD + 16*(CELL+GAP) + 18}">'
+        'Left-hand pad is OFF. These read the cell the voice landed on, so what you see on the '
+        'world is what you hear.</text>'
+    )
+    out.append("</svg>")
+    return "\n".join(out)
+
+
 # --------------------------------------------------------------------------- sound
 def sound():
     """The stock preset editor, hosted. Layout mirrors the reference panel in
@@ -430,7 +489,7 @@ def main():
     outdir = os.path.join(here, "img")
     os.makedirs(outdir, exist_ok=True)
     for name, fn in (("world", world), ("action", action), ("voice", voice),
-                     ("sound", sound), ("sound_printed", sound_printed)):
+                     ("chance", chance), ("sound", sound), ("sound_printed", sound_printed)):
         path = os.path.join(outdir, name + ".svg")
         with open(path, "w") as f:
             f.write(fn())

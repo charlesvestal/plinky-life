@@ -189,6 +189,22 @@ static const life_param_row_t life_param_rows[] = {
     { 13, 10, "LENGTH" },
 };
 #define LIFE_NUM_PARAM_ROWS ((int)(sizeof(life_param_rows) / sizeof(life_param_rows[0])))
+
+/* The voice editor's second page. Four behaviours, each 0..100 in tens, and 0
+   is off - so one control both enables a behaviour and sets how hard it bites.
+   The voice selector repeats on both pages so you never lose track of who you
+   are editing. */
+static const life_param_row_t life_chance_rows[] = {
+    {  1,  4, "VOICE" },
+    {  3, 11, "CHANCE" },   /* how much lone cells get skipped */
+    {  5, 11, "RATCHET" },  /* how much crowding adds repeats */
+    {  7, 11, "TIE" },      /* how often survivors hold instead of striking */
+    {  9, 11, "EVERY" },    /* play only every Nth crossing */
+};
+#define LIFE_NUM_CHANCE_ROWS ((int)(sizeof(life_chance_rows) / sizeof(life_chance_rows[0])))
+
+/* Row 15, x2: flip between the two pages of the voice editor. */
+#define LIFE_VPAGE_X 2
 #define LIFE_PITCH_CENTRE 7
 
 /* Voice N always plays preset N. There is no preset-selector row: four
@@ -209,6 +225,7 @@ struct life_panel : panel_t {
     /* --- world --- */
     life_world_t world;
     life_world_t scratch;
+    life_world_t prev_world;   /* last generation, so ties know what survived */
     life_respawn_t respawn;
     life_stats_t last_stats;
 
@@ -216,6 +233,14 @@ struct life_panel : panel_t {
     clock_divider_t voice_div[LIFE_NUM_VOICES];
     traversal_state_t trav[LIFE_NUM_VOICES];
     selection_state_t sel[LIFE_NUM_VOICES];
+    chance_state_t chance[LIFE_NUM_VOICES];
+
+    /* A ratchet is the same note struck again inside one step. */
+    uint8_t rat_left[LIFE_NUM_VOICES];
+    uint8_t rat_note[LIFE_NUM_VOICES];
+    uint8_t rat_vel[LIFE_NUM_VOICES];
+    uint32_t rat_gap_us[LIFE_NUM_VOICES];
+    uint32_t rat_next_us[LIFE_NUM_VOICES];
     voice_notes_t notes[LIFE_NUM_VOICES];
     voice_allocator_t allocator;
     preset_pages_t preset_pages;   /* the stock synth editor, hosted per voice */
@@ -249,6 +274,10 @@ struct life_panel : panel_t {
     uint8_t swing;            /* 0..100, applied to every voice */
     uint8_t swing_pattern;    /* 0 = plain swing, 1..7 = the stolper patterns */
     uint8_t v_accent[LIFE_NUM_VOICES];  /* 0..100: how much crowding drives velocity */
+    uint8_t v_prob[LIFE_NUM_VOICES];    /* 0..100: how much lone cells get skipped */
+    uint8_t v_ratchet[LIFE_NUM_VOICES]; /* 0..100: how much crowding adds repeats */
+    uint8_t v_tie[LIFE_NUM_VOICES];     /* 0..100: how often survivors hold */
+    uint8_t v_cond[LIFE_NUM_VOICES];    /* 0..100: play every Nth crossing */
 
     /* --- durable preferences (on_serialise_settings) --- */
     uint8_t pref_root;        /* 0..11 */
@@ -264,6 +293,7 @@ struct life_panel : panel_t {
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
+    uint8_t voice_page;       /* 0 = rate/rule/pitch, 1 = the chance controls */
     bool modifier_held;
     uint8_t ui_mode;          /* LIFE_UI_WORLD / _ACTION / _VOICE */
     uint8_t solo_mask;
@@ -306,15 +336,18 @@ struct life_panel : panel_t {
         for (int v = 0; v < LIFE_NUM_VOICES; ++v) {
             traversal_reset(&trav[v], TRAV_FORWARD, LIFE_W, 0x1000u + v * 977u);
             selection_reset(&sel[v], 0x2000u + v * 613u);
+            chance_reset(&chance[v], 0x3000u + v * 271u);
             voice_notes_init(&notes[v]);
             last_edge_us[v] = 0;
             step_us[v] = LIFE_DEFAULT_STEP_US;
             last_played_mask[v] = 0;
+            rat_left[v] = 0;
             voice_dev[v] = 0;
         }
 
         solo_mask = 0;
         edit_voice = 0;
+        voice_page = 0;
         modifier_held = false;
         ui_mode = LIFE_UI_WORLD;
         cc_primed = false;
@@ -402,10 +435,12 @@ struct life_panel : panel_t {
         for (int v = 0; v < LIFE_NUM_VOICES; ++v) {
             traversal_reset(&trav[v], (traversal_order_t)v_order[v], LIFE_W, 0x1000u + v * 977u);
             selection_reset(&sel[v], 0x2000u + v * 613u);
+            chance_reset(&chance[v], 0x3000u + v * 271u);
             voice_notes_init(&notes[v]);
             last_edge_us[v] = 0;
             step_us[v] = LIFE_DEFAULT_STEP_US;
             last_played_mask[v] = 0;
+            rat_left[v] = 0;
         }
         /* The arena is zeroed before construction, which would leave these
            dividers with denominator 0. update() latches the requested values,
@@ -434,6 +469,10 @@ struct life_panel : panel_t {
             if (v_length[v] < 10) v_length[v] = 10;
             if (v_length[v] > 100) v_length[v] = 100;
             if (v_accent[v] > 100) v_accent[v] = 60;
+            if (v_prob[v] > 100) v_prob[v] = 0;
+            if (v_ratchet[v] > 100) v_ratchet[v] = 0;
+            if (v_tie[v] > 100) v_tie[v] = 0;
+            if (v_cond[v] > 100) v_cond[v] = 0;
             if (v_pitch[v] < -30) v_pitch[v] = -30;
             if (v_pitch[v] > 30) v_pitch[v] = 30;
             if (v_channel[v] < -1 || v_channel[v] > 16) v_channel[v] = (int8_t)(v + 1);
@@ -592,6 +631,7 @@ struct life_panel : panel_t {
        release function is what makes them impossible. */
     void release_voice(int v) {
         uint8_t released[LIFE_MAX_HELD];
+        rat_left[v] = 0;
         int n = voice_release_all(&notes[v], released);
         for (int i = 0; i < n; ++i) synth_note_off(v, released[i]);
         last_played_mask[v] = 0;   /* MIDI needs nothing: it is level-triggered */
@@ -613,6 +653,7 @@ struct life_panel : panel_t {
 
     void step_generation(void) {
         life_stats_t st;
+        for (int i = 0; i < LIFE_CELLS; ++i) prev_world.cell[i] = world.cell[i];
         life_step_rule(&world, &scratch, &st, rule_set);
         for (int i = 0; i < LIFE_CELLS; ++i) world.cell[i] = scratch.cell[i];
         last_stats = st;
@@ -648,6 +689,10 @@ struct life_panel : panel_t {
     }
 
     void fire_voice(int v) {
+        /* Every Nth crossing. Checked before anything else - a voice sitting
+           out this pass should not even consult the world. */
+        if (!chance_pass_ok(v_cond[v], &chance[v])) { last_played_mask[v] = 0; return; }
+
         int col = traversal_position(&trav[v], LIFE_W);
         uint16_t col_mask = life_column_mask(&world, col);
         int prev = sel[v].prev_row;
@@ -661,6 +706,7 @@ struct life_panel : panel_t {
         int ticks = voice_length_ticks((int)step_us[v], (int)v_length[v]);
         int budget = poly_budget(v);
         int sounded = 0;
+        rat_left[v] = 0;
 
         /* Lowest pitch first (row 15 up), so a chord that has to be trimmed
            keeps its roots and loses the top rather than the other way round. */
@@ -675,6 +721,20 @@ struct life_panel : panel_t {
                at 0 every note is the same weight, at 100 the crowding owns the
                dynamics. */
             int n = life_neighbours(&world, col, y);
+
+            /* Lone cells drop out, crowded ones are certain. */
+            if (!chance_should_fire(v_prob[v], n, &chance[v])) continue;
+
+            /* A cell that was already alive last generation can hold the
+               previous note instead of striking a new one. */
+            int survived = prev_world.cell[y * LIFE_W + col] ? 1 : 0;
+            if (voice_num_held(&notes[v]) && chance_should_tie(v_tie[v], survived, &chance[v])) {
+                for (int i = 0; i < LIFE_MAX_HELD; ++i)
+                    if (notes[v].held[i].active) notes[v].held[i].ticks_left = ticks;
+                ++sounded;
+                continue;
+            }
+
             int depth = v_accent[v];
             int velocity = 100 - (depth * 32) / 100 + (n * 7 * depth) / 100;
             if (velocity < 1) velocity = 1;
@@ -683,6 +743,19 @@ struct life_panel : panel_t {
             if (voice_arm(&notes[v], note, velocity, ticks) >= 0) {
                 synth_note_on(v, note, velocity);
                 ++sounded;
+
+                /* Crowding rolls the note. Only for the single-note rules: a
+                   ratcheting 16-note chord is not a musical idea. */
+                if (v_rule[v] != SEL_ALL) {
+                    int reps = chance_ratchets(v_ratchet[v], n);
+                    if (reps > 1) {
+                        rat_left[v] = (uint8_t)(reps - 1);
+                        rat_gap_us[v] = step_us[v] / (uint32_t)reps;
+                        rat_next_us[v] = time_us() + rat_gap_us[v];
+                        rat_note[v] = (uint8_t)note;
+                        rat_vel[v] = (uint8_t)velocity;
+                    }
+                }
             }
         }
     }
@@ -739,6 +812,19 @@ struct life_panel : panel_t {
         }
 
         uint32_t now = time_us();
+
+        /* Ratchets land between divider edges, so they are their own pass. */
+        for (int v = 0; v < LIFE_NUM_VOICES; ++v) {
+            if (!rat_left[v]) continue;
+            if (!voice_is_audible(v)) { rat_left[v] = 0; continue; }
+            if ((int32_t)(now - rat_next_us[v]) < 0) continue;
+            int ticks = voice_length_ticks((int)rat_gap_us[v], (int)v_length[v]);
+            if (voice_arm(&notes[v], rat_note[v], rat_vel[v], ticks) >= 0)
+                synth_note_on(v, rat_note[v], rat_vel[v]);
+            rat_next_us[v] += rat_gap_us[v];
+            --rat_left[v];
+        }
+
         for (int v = 0; v < LIFE_NUM_VOICES; ++v) {
             const life_rate_t *r = &life_rates[v_rate[v]];
             int edges = voice_div[v].update(phase, r->num, r->den, UPDATE_DIV_ON_QUARTER_NOTE);
@@ -746,6 +832,7 @@ struct life_panel : panel_t {
 
             if (!voice_is_audible(v)) {
                 if (voice_num_held(&notes[v])) release_voice(v);
+                rat_left[v] = 0;
                 continue;
             }
 
@@ -755,8 +842,12 @@ struct life_panel : panel_t {
             }
             last_edge_us[v] = now;
 
-            if (sequencer_should_advance_playhead())
-                traversal_advance(&trav[v], (traversal_order_t)v_order[v], LIFE_W);
+            if (sequencer_should_advance_playhead()) {
+                int before = traversal_position(&trav[v], LIFE_W);
+                int after = traversal_advance(&trav[v], (traversal_order_t)v_order[v], LIFE_W);
+                /* Wrapping counts as one crossing of the world. */
+                if (after <= before) ++chance[v].pass;
+            }
             fire_voice(v);
         }
 
@@ -934,14 +1025,40 @@ struct life_panel : panel_t {
        parameter is visible at once rather than one page at a time. Selected pad
        bright, the rest of the row dim so you can see how far the range goes. */
 
+    const life_param_row_t *rows(void) const {
+        return voice_page ? life_chance_rows : life_param_rows;
+    }
+    int num_rows(void) const {
+        return voice_page ? LIFE_NUM_CHANCE_ROWS : LIFE_NUM_PARAM_ROWS;
+    }
+
     int param_row_for_y(int y) const {
-        for (int i = 0; i < LIFE_NUM_PARAM_ROWS; ++i)
-            if (life_param_rows[i].y == y) return i;
+        for (int i = 0; i < num_rows(); ++i)
+            if (rows()[i].y == y) return i;
         return -1;
+    }
+
+    /* The four chance controls live in tens, so pad n is n * 10 percent. */
+    uint8_t *chance_field(int row) {
+        switch (row) {
+        case 1: return &v_prob[edit_voice];
+        case 2: return &v_ratchet[edit_voice];
+        case 3: return &v_tie[edit_voice];
+        case 4: return &v_cond[edit_voice];
+        default: return 0;
+        }
+    }
+    const uint8_t *chance_field(int row) const {
+        return const_cast<life_panel *>(this)->chance_field(row);
     }
 
     int get_param(int row) const {
         int v = edit_voice;
+        if (voice_page) {
+            if (row == 0) return edit_voice;
+            const uint8_t *f = chance_field(row);
+            return f ? (*f + 5) / 10 : 0;
+        }
         switch (row) {
         case 0: return edit_voice;
         case 1: return v_rate[v];
@@ -956,6 +1073,12 @@ struct life_panel : panel_t {
 
     void set_param(int row, int i) {
         int v = edit_voice;
+        if (voice_page) {
+            if (row == 0) { edit_voice = (uint8_t)i; return; }
+            uint8_t *f = chance_field(row);
+            if (f) *f = (uint8_t)(i * 10);
+            return;
+        }
         switch (row) {
         case 0: edit_voice = (uint8_t)i; return;
         case 1:
@@ -983,17 +1106,21 @@ struct life_panel : panel_t {
         if (y == LIFE_SOUND_Y && x >= LIFE_ACCENT_X0 && x < LIFE_ACCENT_X0 + LIFE_ACCENT_N)
             return (x - LIFE_ACCENT_X0) == accent_index(edit_voice)
                        ? life_voice_bright[edit_voice] : life_voice_dim[edit_voice];
+        if (y == LIFE_SOUND_Y && x == LIFE_VPAGE_X)
+            return voice_page ? LED_RGB(20, 10, 0) : LED_RGB(5, 3, 0);
+
         int row = param_row_for_y(y);
         if (row < 0) return 0;                       /* the blank separator rows */
-        if (x >= life_param_rows[row].n) return 0;
+        if (x >= rows()[row].n) return 0;
 
         /* the voice selector paints each pad in its own voice's colour */
         if (row == 0) return (x == edit_voice) ? life_voice_bright[x] : life_voice_dim[x];
 
         int v = edit_voice;
         if (x == get_param(row)) return life_voice_bright[v];
-        /* PITCH centre stays findable even when it is not selected */
-        if (row == 5 && x == LIFE_PITCH_CENTRE) return LIFE_COL_OFF;
+        /* the zero end of a chance row, and the PITCH centre, stay findable */
+        if (voice_page && x == 0) return LIFE_COL_OFF;
+        if (!voice_page && row == 5 && x == LIFE_PITCH_CENTRE) return LIFE_COL_OFF;
         return life_voice_dim[v];
     }
 
@@ -1010,8 +1137,20 @@ struct life_panel : panel_t {
         if (y == LIFE_SOUND_Y && x >= LIFE_ACCENT_X0 && x < LIFE_ACCENT_X0 + LIFE_ACCENT_N)
             return "accent - how much crowded cells hit harder";
 
+        if (y == LIFE_SOUND_Y && x == LIFE_VPAGE_X)
+            return "flip between the voice's timing and its chance controls";
+
         int row = param_row_for_y(y);
-        if (row < 0 || x >= life_param_rows[row].n) return nullptr;
+        if (row < 0 || x >= rows()[row].n) return nullptr;
+
+        if (voice_page) switch (row) {
+        case 0: return "which voice you are editing";
+        case 1: return "Chance - how much lone cells get skipped. Left is off";
+        case 2: return "Ratchet - how much a crowded cell repeats inside its step";
+        case 3: return "Tie - how often a cell that survived holds instead of striking";
+        case 4: return "Every - play only every 2nd, 3rd or 4th crossing of the world";
+        default: return rows()[row].name;
+        }
 
         switch (row) {
         case 0: return "which voice you are editing";
@@ -1021,7 +1160,7 @@ struct life_panel : panel_t {
         case 4: return "MIDI channel for this voice";
         case 5: return "pitch offset in scale degrees; the dim centre pad is 0";
         case 6: return "note length, as a share of this voice's step";
-        default: return life_param_rows[row].name;
+        default: return rows()[row].name;
         }
     }
 
@@ -1034,13 +1173,14 @@ struct life_panel : panel_t {
             ui_mode = LIFE_UI_PRESET;
             return;
         }
+        if (y == LIFE_SOUND_Y && x == LIFE_VPAGE_X) { voice_page = voice_page ? 0 : 1; return; }
         if (y == LIFE_SOUND_Y && x >= LIFE_ACCENT_X0 && x < LIFE_ACCENT_X0 + LIFE_ACCENT_N) {
             v_accent[edit_voice] =
                 (uint8_t)((x - LIFE_ACCENT_X0) * 100 / (LIFE_ACCENT_N - 1));
             return;
         }
         int row = param_row_for_y(y);
-        if (row < 0 || x >= life_param_rows[row].n) return;
+        if (row < 0 || x >= rows()[row].n) return;
         set_param(row, x);
     }
 
@@ -1048,6 +1188,13 @@ struct life_panel : panel_t {
        the only place this panel can show words. */
     void set_voice_help_text(void) {
         int v = edit_voice;
+        if (voice_page) {
+            set_help_text("#fc2#*Voice %d chance#. - skip %d%%, ratchet %d%%, tie %d%%, "
+                          "every %d crossing%s", v + 1, v_prob[v], v_ratchet[v], v_tie[v],
+                          chance_pass_divisor(v_cond[v]),
+                          chance_pass_divisor(v_cond[v]) == 1 ? "" : "s");
+            return;
+        }
         set_help_text("#fc2#*Voice %d#. every %s, %s going %s. ch %d, pitch %+d, len %d%%",
                       v + 1, life_rate_names[v_rate[v]], life_sel_help[v_rule[v]],
                       life_trav_names[v_order[v]],
@@ -1801,6 +1948,10 @@ struct life_panel : panel_t {
         FIELD("swing", swing);
         FIELD("swpat", swing_pattern);
         FIELD("vacc", v_accent);
+        FIELD("vprb", v_prob);
+        FIELD("vrat", v_ratchet);
+        FIELD("vtie", v_tie);
+        FIELD("vcnd", v_cond);
         FIELD("init", initialised);
         OBJECT_END(s);
 
@@ -1823,6 +1974,10 @@ struct life_panel : panel_t {
             v_pitch[v] = (int8_t)(v * -3);
             v_length[v] = 60;
             v_accent[v] = 60;
+            v_prob[v] = 0;
+            v_ratchet[v] = 0;
+            v_tie[v] = 0;
+            v_cond[v] = 0;
             v_channel[v] = (int8_t)(v + 1);   /* a different MIDI channel each */
         }
         gen_rate = 8;

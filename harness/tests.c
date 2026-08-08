@@ -16,6 +16,7 @@
 #include "../src/scales.h"
 #include "../src/voice.h"
 #include "../src/ccmap.h"
+#include "../src/chance.h"
 
 static int failures = 0;
 static int checks = 0;
@@ -849,6 +850,89 @@ static void test_cc_echo_is_a_fixed_point(void) {
     }
 }
 
+/* -------------------------------------------------------------- chance.h -- */
+
+static void test_chance_depth_zero_is_off(void) {
+    chance_state_t c; chance_reset(&c, 1);
+    for (int n = 0; n <= 8; ++n) {
+        CHECK(chance_should_fire(0, n, &c), "depth 0 must always fire");
+        CHECK(chance_ratchets(0, n) == 1, "depth 0 must not ratchet");
+        CHECK(!chance_should_tie(0, 1, &c), "depth 0 must not tie");
+    }
+    CHECK(chance_pass_ok(0, &c), "depth 0 must play every pass");
+    CHECK(chance_pass_divisor(0) == 1, "depth 0 divisor must be 1");
+}
+
+static void test_crowded_cells_always_fire(void) {
+    /* 8 neighbours is certain at any depth - the world at its densest must not
+       start dropping notes. */
+    chance_state_t c; chance_reset(&c, 7);
+    for (int depth = 0; depth <= 100; ++depth)
+        for (int i = 0; i < 20; ++i)
+            CHECK(chance_should_fire(depth, 8, &c), "a fully crowded cell was dropped at depth %d",
+                  depth);
+}
+
+static void test_lonely_cells_drop_out_with_depth(void) {
+    /* More depth must mean fewer lone cells firing, monotonically enough to be
+       usable as a control. */
+    int prev = 1000;
+    for (int depth = 0; depth <= 100; depth += 20) {
+        chance_state_t c; chance_reset(&c, 99);
+        int fired = 0;
+        for (int i = 0; i < 1000; ++i) fired += chance_should_fire(depth, 0, &c) ? 1 : 0;
+        CHECK(fired <= prev, "depth %d fired %d, more than the shallower %d", depth, fired, prev);
+        prev = fired;
+    }
+    CHECK(prev == 0, "a lone cell at full depth should never fire, got %d", prev);
+}
+
+static void test_ratchets_stay_in_range_and_grow(void) {
+    for (int depth = 0; depth <= 100; ++depth)
+        for (int n = 0; n <= 8; ++n) {
+            int r = chance_ratchets(depth, n);
+            CHECK(r >= 1 && r <= 4, "ratchets %d out of range at depth %d, %d neighbours",
+                  r, depth, n);
+            if (r < 1 || r > 4) return;
+        }
+    CHECK(chance_ratchets(100, 8) == 4, "full depth on a crowded cell should give 4");
+    CHECK(chance_ratchets(100, 0) == 1, "a lone cell should never ratchet");
+    for (int n = 1; n <= 8; ++n)
+        CHECK(chance_ratchets(100, n) >= chance_ratchets(100, n - 1),
+              "ratchets must not fall as crowding rises");
+}
+
+static void test_ratchets_are_deterministic(void) {
+    /* Same cell, same answer - ratchets you cannot predict are unplayable. */
+    for (int i = 0; i < 50; ++i)
+        CHECK(chance_ratchets(70, 5) == chance_ratchets(70, 5), "ratchets are not deterministic");
+}
+
+static void test_only_survivors_tie(void) {
+    chance_state_t c; chance_reset(&c, 3);
+    for (int depth = 0; depth <= 100; ++depth)
+        for (int i = 0; i < 10; ++i)
+            CHECK(!chance_should_tie(depth, 0, &c), "a newly born cell must not tie");
+
+    chance_state_t d; chance_reset(&d, 3);
+    int tied = 0;
+    for (int i = 0; i < 1000; ++i) tied += chance_should_tie(100, 1, &d) ? 1 : 0;
+    CHECK(tied == 1000, "a survivor at full depth should always tie, got %d", tied);
+}
+
+static void test_pass_divisor_range_and_gating(void) {
+    for (int depth = 0; depth <= 100; ++depth) {
+        int n = chance_pass_divisor(depth);
+        CHECK(n >= 1 && n <= 4, "pass divisor %d out of range at depth %d", n, depth);
+        if (n < 1 || n > 4) return;
+    }
+    chance_state_t c; chance_reset(&c, 1);
+    int n = chance_pass_divisor(100);
+    int played = 0;
+    for (c.pass = 0; c.pass < 40; ++c.pass) played += chance_pass_ok(100, &c) ? 1 : 0;
+    CHECK(played == 40 / n, "every-Nth played %d of 40 with divisor %d", played, n);
+}
+
 /* ------------------------------------------------------------------------- */
 
 int main(void) {
@@ -921,6 +1005,14 @@ int main(void) {
     test_cc_round_trip_is_stable();
     test_cc_range_round_trip();
     test_cc_echo_is_a_fixed_point();
+
+    test_chance_depth_zero_is_off();
+    test_crowded_cells_always_fire();
+    test_lonely_cells_drop_out_with_depth();
+    test_ratchets_stay_in_range_and_grow();
+    test_ratchets_are_deterministic();
+    test_only_survivors_tie();
+    test_pass_divisor_range_and_gating();
 
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
