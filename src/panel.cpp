@@ -290,7 +290,7 @@ struct life_panel : panel_t {
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
     uint8_t voice_page;       /* 0 = rate/rule/pitch, 1 = the behaviour controls */
-    char readout[8];          /* the value text under your finger, built each frame */
+    char readout[12];         /* the value text under your finger, built each frame */
     bool modifier_held;
     uint8_t ui_mode;          /* LIFE_UI_WORLD / _ACTION / _VOICE */
     uint8_t solo_mask;
@@ -1192,9 +1192,10 @@ struct life_panel : panel_t {
     /* A bare "30" says nothing - thirty of what? So a number gets a two-letter
        tag. Values that already name themselves - 8th, WALK, FWD - do not.
 
-       Sixteen columns is not much at FONT_4, so the tag is dropped rather than
-       clipped if the pair will not fit. leds_string_width() decides that at
-       runtime; guessing the font metrics here would be guessing. */
+       "AC 60" fits across the sixteen columns - confirmed on hardware, not
+       guessed. Narrower values keep the space; if a wider one ever needs the
+       room it loses the space first, then the tag, rather than being clipped.
+       leds_string_width() makes that call at runtime. */
     const char *readout_text(int row) {
         int v = edit_voice;
         char value[8];
@@ -1233,6 +1234,8 @@ struct life_panel : panel_t {
 
         if (!value[0]) return readout;
         if (tag) {
+            snprintf(readout, sizeof(readout), "%s %s", tag, value);
+            if (leds_string_width(readout, FONT_4) <= LIFE_W) return readout;
             snprintf(readout, sizeof(readout), "%s%s", tag, value);
             if (leds_string_width(readout, FONT_4) <= LIFE_W) return readout;
         }

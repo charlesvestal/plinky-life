@@ -173,7 +173,7 @@ in the top half and it shows at the bottom, and the other way round — so you a
 never reading through your own fingers. That zone blanks while you hold, so the
 text is never fighting the pads underneath it.
 
-Numbers are tagged, because `30` on its own says nothing:
+Numbers are tagged, because `30` on its own says nothing — `AC 60`, `SK 30`:
 
 | | |
 |---|---|

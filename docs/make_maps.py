@@ -420,7 +420,7 @@ def chance():
                    f'stroke-width="1.5"/>')
     out.append(f'<text x="{PAD + 8*(CELL+GAP)}" y="{zy + 2*(CELL+GAP) + 6}" '
                f'text-anchor="middle" fill="{V[3]}" '
-               f'style="font-size:26px;font-weight:700;font-family:ui-monospace,monospace">AC60</text>')
+               f'style="font-size:26px;font-weight:700;font-family:ui-monospace,monospace">AC 60</text>')
     out.append(f'<text class="k" x="{zx1}" y="{zy1 + 16}" text-anchor="end" fill="{V[3]}">'
                'readout zone - the held value appears here</text>')
     out.append(
