@@ -1980,6 +1980,7 @@ struct life_panel : panel_t {
     }
 
     bool is_action_pad(int x, int y) const {
+        if (y == 12) return x < LIFE_NUM_RULESETS; /* which law the world lives by */
         if (y == 13) return x < 4;                 /* 0-3 edit that voice */
         if (y == 14) return x < 8;                 /* 0-3 mute, 4-7 solo */
         if (y == 15) return x < 4;                 /* clear seed freeze step */
@@ -1987,6 +1988,10 @@ struct life_panel : panel_t {
     }
 
     uint32_t action_colour(int x, int y) const {
+        /* The rule is a property of the WORLD, not of any voice, so it belongs
+           with clear, seed and freeze rather than inside a per-voice editor. */
+        if (y == 12 && x < LIFE_NUM_RULESETS)
+            return x == rule_set ? LED_RGB(26, 6, 24) : LED_RGB(6, 1, 6);
         if (y == 13 && x < 4) return life_voice_dim[x];
         if (y == 14) {
             if (x < 4) return voice_is_audible(x) ? life_voice_bright[x] : LIFE_COL_OFF;
@@ -2005,6 +2010,7 @@ struct life_panel : panel_t {
     }
 
     static const char *action_help(int x, int y) {
+        if (y == 12 && x < LIFE_NUM_RULESETS) return life_rule_help[x];
         if (y == 13 && x < 4) return "open this voice's editor - rate, rule, sound";
         if (y == 14) return x < 4 ? "mute this voice"
                                   : "solo this voice - silences the other three";
@@ -2020,6 +2026,11 @@ struct life_panel : panel_t {
 
     void do_action(int x, int y) {
         printf("life: action pad (%d,%d)\n", x, y);
+        if (y == 12 && x < LIFE_NUM_RULESETS) {
+            rule_set = (uint8_t)x;
+            settings_dirty = true;
+            return;
+        }
         if (y == 13 && x < 4) {
             edit_voice = (uint8_t)x;
             ui_mode = LIFE_UI_VOICE;
@@ -2827,7 +2838,8 @@ struct life_panel : panel_t {
         if (mode == LIFE_UI_VOICE)
             set_voice_help_text();
         else if (mode == LIFE_UI_ACTION)
-            set_help_text("#fc2#*Actions#. - edit, mute, solo, clear, seed, freeze, step");
+            set_help_text("#fc2#*Actions#. - rule #fc2#*%s#., edit, mute, solo, clear, seed, "
+                          "freeze, step", life_rulesets[rule_set].name);
         else
             /* The world view is where you spend the time, so its one line of
                text says what the four voices are set to - otherwise the only

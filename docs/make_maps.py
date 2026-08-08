@@ -186,7 +186,12 @@ def action():
         for x in range(16):
             if y == ROW and x >= MOD_X:
                 continue
-            if y == 13 and x < 4:
+            if y == 12 and x < 6:
+                names = ["LIFE", "HIGH", "MAZE", "CORL", "34", "SEED"]
+                on = (x == 2)
+                pad(out, x, y, "#8a1f80" if on else "#2a0a28", names[x],
+                    "#fff" if on else "#a060a0")
+            elif y == 13 and x < 4:
                 pad(out, x, y, V_DIM[x], f"E{x+1}", V[x])
             elif y == 14 and x < 4:
                 pad(out, x, y, V[x], f"M{x+1}", "#000")
@@ -210,6 +215,10 @@ def action():
         ("t", "The world dims underneath so"),
         ("t", "you never lose your place."),
         ("t", ""),
+        ("h", "row 12   the rule"),
+        ("t", "LIFE HIGH MAZE CORL 34 SEED"),
+        ("t", "What law the world lives by."),
+        ("t", ""),
         ("h", "row 13   E1 E2 E3 E4"),
         ("t", "Open that voice's editor."),
         ("t", ""),
@@ -228,9 +237,7 @@ def action():
         ("t", "the world. E1..E4 open the"),
         ("t", "voice editor instead."),
         ("t", ""),
-        ("t", "STP works while stopped, so"),
-        ("t", "you can walk the world"),
-        ("t", "forward by hand."),
+        ("t", "STP works while stopped."),
     ])
     out.append("</svg>")
     return "\n".join(out)

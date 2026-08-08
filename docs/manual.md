@@ -87,6 +87,7 @@ destructive, cyan for the world controls.
 
 | Pads | | |
 |---|---|---|
+| `(0,12)`–`(5,12)` | rule | which law the world lives by |
 | `(0,13)`–`(3,13)` | edit | open that voice's editor |
 | `(0,14)`–`(3,14)` | mute | lit means you'll hear that voice |
 | `(4,14)`–`(7,14)` | solo | silences the other three |
@@ -342,7 +343,9 @@ preferences, saved automatically as you change them and shared by every scene.
 
 ## 8. Rules, swing and drawing from a keyboard
 
-**`RULE`** changes the law the world lives by, and it changes what the panel is:
+**The rule** changes the law the world lives by, and it changes what the panel
+is. It is the top row of the action layer — one tap from playing — and also on
+the `RULE` settings page:
 
 | | |
 |---|---|
