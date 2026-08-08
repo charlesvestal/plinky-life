@@ -11,18 +11,9 @@ independent voices walk through it at their own speeds, playing whatever they fi
 
 **→ [Manual](docs/manual.md)** — how to play it, with pad maps of every mode.
 
-## Installing
+## The panel
 
-Flash `plinky_life.cpp` from a commit-pinned raw URL:
-
-```
-https://raw.githubusercontent.com/charlesvestal/plinky-life/<sha>/plinky_life.cpp
-```
-
-Pinned rather than branch URLs, so a link stays valid after the next push.
-
-Use **plinky12.com**, not `stage.plinky12.com` — `printf` and Device Logs silently do nothing on
-staging.
+**[`plinky_life.cpp`](https://raw.githubusercontent.com/charlesvestal/plinky-life/main/plinky_life.cpp)** — load this into the Plinky IDE.
 
 ## Building
 
@@ -42,6 +33,9 @@ ahead of it to produce the single `plinky_life.cpp` that gets flashed.
 generated file can be type-checked locally instead of flash-and-see. **If it and the real
 firmware disagree, the firmware is right** — it has been wrong at least once, and the resulting
 errors only showed up server-side.
+
+Flash from `plinky12.com` rather than `stage.plinky12.com` when you need `printf` — Device Logs
+silently do nothing on staging.
 
 ## Layout
 
