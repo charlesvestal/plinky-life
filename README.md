@@ -91,9 +91,14 @@ lone one.
 
 ## Output
 
-Voice *N* maps to preset *N* (0–3), which gives each voice its own Plinky patch **and** its own
-MIDI channel, following the instrument's existing preset↔channel convention. The `OUT` setting
-picks internal synth, MIDI, or both.
+Each voice picks its own synth preset (`SYNTH`) and its own MIDI channel (`CHAN`), defaulting to
+preset *N* on channel *N+1* so the four are separate out of the box. The `OUT` setting picks
+internal synth, MIDI, or both.
+
+MIDI is **level-triggered**: `declare_midi_note_for_preset_idx(...)` declares which notes should
+be down each frame and `send_declared_midi_notes()` commits, so the runtime derives the on/off
+traffic. There is no note-off to forget — mute, rate change, transport stop and sink changes all
+release correctly without any of them knowing they had to.
 
 ### Simulation CCs
 
