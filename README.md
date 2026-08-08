@@ -10,6 +10,8 @@ alive.
 
 **An empty column is a rest.** That is what makes the shape of the automaton become the rhythm.
 
+**→ [Read the manual](docs/manual.md)** for pad maps of every mode.
+
 ## Playing it
 
 Row 15 follows the Chords silkscreen, which is also the convention in
