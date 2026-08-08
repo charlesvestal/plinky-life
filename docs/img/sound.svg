@@ -294,14 +294,14 @@
 <rect x="596" y="596" width="34" height="34" rx="7" fill="#1fd455"/>
 <rect x="569" y="607" width="12" height="12" rx="2" fill="#fff"/>
 <path d="M608 606 L620 613 L608 620 Z" fill="#04240f"/>
-<text class="h" x="654" y="40">SOUND  (14,9) in the</text>
+<text class="h" x="654" y="40">SOUND  (1,15) in the</text>
 <text class="h" x="654" y="57">voice editor</text>
 <text class="t" x="654" y="74"></text>
 <text class="t" x="654" y="91">This is the STOCK synth</text>
-<text class="t" x="654" y="108">editor, not ours. It takes a</text>
-<text class="t" x="654" y="125">preset index, so it edits</text>
-<text class="t" x="654" y="142">whichever preset the selected</text>
-<text class="t" x="654" y="159">voice plays.</text>
+<text class="t" x="654" y="108">editor, not ours.</text>
+<text class="t" x="654" y="125"></text>
+<text class="t" x="654" y="142">Voice N plays preset N.</text>
+<text class="t" x="654" y="159">No selector, no indirection.</text>
 <text class="t" x="654" y="176"></text>
 <text class="h" x="654" y="193">rows 0-4, 5-9</text>
 <text class="t" x="654" y="210">Two banks of 16 sliders:</text>

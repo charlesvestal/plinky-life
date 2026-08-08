@@ -116,21 +116,27 @@ goes.
 | 3 | **RATE** | `32nd · 16T · 16th · 8T · 8th · 4T · 1/4 · 1/2 · 1BAR · 2BAR · 4BAR · 8BAR` |
 | 5 | **RULE** | the 11 selection rules (below) |
 | 7 | **ORDER** | `FWD · REV · PING · RAND` |
-| 9 | **SYNTH** | which of the 12 synth presets this voice plays |
-| 11 | **CHAN** | MIDI channel 1–16 |
-| 13 | **PITCH** | −7 … +7 scale degrees; the centre pad is 0 and stays visible |
-| 15 | **LENGTH** | 10% … 100% of that voice's step |
+| 9 | **CHAN** | MIDI channel 1–16 |
+| 11 | **PITCH** | −7 … +7 scale degrees; the centre pad is 0 and stays visible |
+| 13 | **LENGTH** | 10% … 100% of that voice's step |
 
-One extra pad sits at the end of the `SYNTH` row:
+Row 15 carries the two sound pads:
 
 | Pad | |
 |---|---|
-| `(14,9)` | **SOUND** — open the stock synth editor for this voice's preset |
-
-The pad that *picks* a preset and the pad that *edits* it are on the same row,
-deliberately.
+| `(0,15)` | **LOAD** — pick a preset from the bank into this voice |
+| `(1,15)` | **SOUND** — edit this voice's sound |
 
 Press `×` to go back to the world.
+
+### There is no preset selector
+
+**Voice N plays preset N.** Four playheads, four presets, direct mapping — an
+indirection between them only earns you the question *"which preset is voice 3
+on again?"*.
+
+Presets 5–12 aren't lost: **LOAD** puts any preset from the bank into this
+voice's slot.
 
 ### RATE is where the polyrhythm lives
 
@@ -145,7 +151,7 @@ lockstep, which is almost never what you want.
 
 ![Hosted synth editor](img/sound.svg)
 
-Voice editor → `(14,9)`.
+Voice editor → `(1,15)`.
 
 **This is Plinky's own preset editor, not ours.** `preset_pages_t` takes a preset
 index, so handing it the selected voice's preset makes it edit that voice's
@@ -163,13 +169,19 @@ buttons are the firmware's.
 
 `×` returns to the world from here, as everywhere.
 
-Which preset a voice *plays* is ours — that's the `SYNTH` row. How that preset
-*sounds* is the instrument's. `ide_api.md` puts it well: *"start from the largest
-matching helper and only drop down a layer for the parts that are genuinely
-custom."* Routing a playhead to a preset is custom; editing the preset is not.
+### Loading a preset
 
-Two voices can share a preset if you point them at the same one — then they play
-the same patch on different rhythms.
+Voice editor → `(0,15)` opens the stock picker: folders on the left, 64 slots on
+the right, with its own cancel and OK buttons.
+
+**This is the one mode with no transport pads.** The picker puts its buttons at
+`(14,15)` and `(15,15)` — exactly where stop and play live — so it owns row 15
+while it's up. That's the right call for a modal dialog, and `×` still escapes
+because the picker leaves `(13,15)` alone.
+
+`ide_api.md` puts the principle well: *"start from the largest matching helper and
+only drop down a layer for the parts that are genuinely custom."* Routing a
+playhead is custom. Editing and loading presets is not.
 
 ---
 

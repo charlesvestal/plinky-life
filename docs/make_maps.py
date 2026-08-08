@@ -36,13 +36,12 @@ PARAM_ROWS = [
     (3, 12, "RATE", "32nd → 8 bars"),
     (5, 11, "RULE", "the 11 selection rules"),
     (7, 4, "ORDER", "fwd / rev / ping / rand"),
-    (9, 12, "SYNTH", "which of the 12 presets"),
-    (11, 16, "CHAN", "MIDI channel 1-16"),
-    (13, 15, "PITCH", "-7 .. +7, centre = 0"),
-    (15, 10, "LENGTH", "10% .. 100% of the step"),
+    (9, 16, "CHAN", "MIDI channel 1-16"),
+    (11, 15, "PITCH", "-7 .. +7, centre = 0"),
+    (13, 10, "LENGTH", "10% .. 100% of the step"),
 ]
 
-SOUND_X, SOUND_Y = 14, 9    # opens the hosted synth editor, on the SYNTH row
+LOAD_X, SOUND_X, SOUND_Y = 0, 1, 15   # load a preset / edit this voice's sound
 
 
 def esc(s):
@@ -231,7 +230,7 @@ def voice():
     w, h = grid_size(300)
     out = svg_open(w, h, "plinky-life voice editor")
     axes(out)
-    sel = {1: 1, 3: 4, 5: 7, 7: 0, 9: 1, 11: 1, 13: 4, 15: 5}   # the illustrated voice 2
+    sel = {1: 1, 3: 4, 5: 7, 7: 0, 9: 1, 11: 4, 13: 5}   # the illustrated voice 2
     rows = {y: (n, name) for y, n, name, _ in PARAM_ROWS}
     for y in range(16):
         for x in range(16):
@@ -247,10 +246,11 @@ def voice():
                 pad(out, x, y, V[x] if x == sel[y] else V_DIM[x])
             elif x == sel[y]:
                 pad(out, x, y, V[1])
-            elif y == 13 and x == 7:
+            elif y == 11 and x == 7:
                 pad(out, x, y, "#33333c")
             else:
                 pad(out, x, y, V_DIM[1])
+    pad(out, LOAD_X, SOUND_Y, "#4a3c8f", "LD", "#fff")
     pad(out, SOUND_X, SOUND_Y, ACTION, "SND", "#000")
     transport(out)
     lx = PAD + 16 * (CELL + GAP) + 20
@@ -263,8 +263,8 @@ def voice():
         out.append(f'<text class="k" x="{lx}" y="{py + 12}">{esc(desc)}</text>')
     out.append(
         f'<text class="t" x="{PAD}" y="{PAD + 16*(CELL+GAP) + 18}">'
-        'Selected pad bright; the rest of the row dim. SND (14,9) opens the stock synth editor '
-        'for this voice\u2019s preset.</text>'
+        'Selected pad bright; the rest of the row dim. LD (0,15) loads a preset into this voice; '
+        'SND (1,15) edits its sound.</text>'
     )
     out.append("</svg>")
     return "\n".join(out)
@@ -307,14 +307,14 @@ def sound():
     transport(out)
     lx = PAD + 16 * (CELL + GAP) + 20
     note(out, lx, PAD + 14, [
-        ("h", "SOUND  (14,9) in the"),
+        ("h", "SOUND  (1,15) in the"),
         ("h", "voice editor"),
         ("t", ""),
         ("t", "This is the STOCK synth"),
-        ("t", "editor, not ours. It takes a"),
-        ("t", "preset index, so it edits"),
-        ("t", "whichever preset the selected"),
-        ("t", "voice plays."),
+        ("t", "editor, not ours."),
+        ("t", ""),
+        ("t", "Voice N plays preset N."),
+        ("t", "No selector, no indirection."),
         ("t", ""),
         ("h", "rows 0-4, 5-9"),
         ("t", "Two banks of 16 sliders:"),

@@ -62,11 +62,11 @@ y=1    VOICE   which voice you are editing
 y=3    RATE    32nd .. 8 bars          <- polyrhythm lives here
 y=5    RULE    the 11 selection rules
 y=7    ORDER   fwd / rev / ping / rand
-y=9    SYNTH   which of the 12 presets this voice plays
-       (14,9)  opens Plinky's own preset editor for it
-y=11   CHAN    MIDI channel 1-16
-y=13   PITCH   -7 .. +7 scale degrees, centre pad is 0
-y=15   LENGTH  10% .. 100% of the step
+y=9    CHAN    MIDI channel 1-16
+y=11   PITCH   -7 .. +7 scale degrees, centre pad is 0
+y=13   LENGTH  10% .. 100% of the step
+(0,15) LOAD    pick a preset from the bank into this voice
+(1,15) SOUND   edit this voice's sound (Plinky's own editor)
 ```
 
 Press `×` to get back to the world.
@@ -94,10 +94,10 @@ lone one.
 
 ## Output
 
-Each voice picks its own synth preset (`SYNTH`) and its own MIDI channel (`CHAN`), defaulting to
-preset *N* on channel *N+1* so the four are separate out of the box. `(14,9)` in the voice editor
-opens Plinky's stock preset editor (`preset_pages_t`) for that voice's patch — sliders, XY pad and
-flag buttons are all the firmware's, not ours. The `OUT` setting picks
+**Voice *N* plays preset *N*.** No selector — four playheads and four presets is a direct mapping.
+`(0,15)` in the voice editor loads any preset from the bank into that voice's slot, and `(1,15)`
+opens Plinky's own editor (`preset_pages_t`) for it: sliders, XY pad and flag buttons are all the
+firmware's, not ours. MIDI channel is separate and defaults to *N+1*. The `OUT` setting picks
 internal synth, MIDI, or both.
 
 MIDI is **level-triggered**: `declare_midi_note_for_preset_idx(...)` declares which notes should

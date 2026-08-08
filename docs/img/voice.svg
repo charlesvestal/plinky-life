@@ -189,10 +189,10 @@
 <rect x="368" y="368" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="406" y="368" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="444" y="368" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="482" y="368" width="34" height="34" rx="7" fill="#0e0e12"/>
-<rect x="520" y="368" width="34" height="34" rx="7" fill="#0e0e12"/>
-<rect x="558" y="368" width="34" height="34" rx="7" fill="#0e0e12"/>
-<rect x="596" y="368" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="482" y="368" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="520" y="368" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="558" y="368" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="596" y="368" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="26" y="406" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="64" y="406" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="102" y="406" width="34" height="34" rx="7" fill="#0e0e12"/>
@@ -210,13 +210,13 @@
 <rect x="558" y="406" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="596" y="406" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="26" y="444" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="64" y="444" width="34" height="34" rx="7" fill="#3fd45a"/>
+<rect x="64" y="444" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="102" y="444" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="140" y="444" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="178" y="444" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="178" y="444" width="34" height="34" rx="7" fill="#3fd45a"/>
 <rect x="216" y="444" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="254" y="444" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="292" y="444" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="292" y="444" width="34" height="34" rx="7" fill="#33333c"/>
 <rect x="330" y="444" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="368" y="444" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="406" y="444" width="34" height="34" rx="7" fill="#12401b"/>
@@ -224,7 +224,7 @@
 <rect x="482" y="444" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="520" y="444" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="558" y="444" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="596" y="444" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="596" y="444" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="26" y="482" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="64" y="482" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="102" y="482" width="34" height="34" rx="7" fill="#0e0e12"/>
@@ -245,17 +245,17 @@
 <rect x="64" y="520" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="102" y="520" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="140" y="520" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="178" y="520" width="34" height="34" rx="7" fill="#3fd45a"/>
-<rect x="216" y="520" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="178" y="520" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="216" y="520" width="34" height="34" rx="7" fill="#3fd45a"/>
 <rect x="254" y="520" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="292" y="520" width="34" height="34" rx="7" fill="#33333c"/>
+<rect x="292" y="520" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="330" y="520" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="368" y="520" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="406" y="520" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="444" y="520" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="482" y="520" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="520" y="520" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="558" y="520" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="406" y="520" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="444" y="520" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="482" y="520" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="520" y="520" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="558" y="520" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="596" y="520" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="26" y="558" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="64" y="558" width="34" height="34" rx="7" fill="#0e0e12"/>
@@ -273,21 +273,23 @@
 <rect x="520" y="558" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="558" y="558" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="596" y="558" width="34" height="34" rx="7" fill="#0e0e12"/>
-<rect x="26" y="596" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="64" y="596" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="102" y="596" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="140" y="596" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="178" y="596" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="216" y="596" width="34" height="34" rx="7" fill="#3fd45a"/>
-<rect x="254" y="596" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="292" y="596" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="330" y="596" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="368" y="596" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="26" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="64" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="102" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="140" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="178" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="216" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="254" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="292" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="330" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="368" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="406" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="444" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="482" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
-<rect x="558" y="368" width="34" height="34" rx="7" fill="#18a8bf"/>
-<text class="p" x="575.0" y="388.5" text-anchor="middle" fill="#000">SND</text>
+<rect x="26" y="596" width="34" height="34" rx="7" fill="#4a3c8f"/>
+<text class="p" x="43.0" y="616.5" text-anchor="middle" fill="#fff">LD</text>
+<rect x="64" y="596" width="34" height="34" rx="7" fill="#18a8bf"/>
+<text class="p" x="81.0" y="616.5" text-anchor="middle" fill="#000">SND</text>
 <rect x="520" y="596" width="34" height="34" rx="7" fill="#c81ea0"/>
 <text class="p" x="537.0" y="616.5" text-anchor="middle" fill="#fff">×</text>
 <rect x="558" y="596" width="34" height="34" rx="7" fill="#d4341a"/>
@@ -304,13 +306,11 @@
 <text class="k" x="654" y="249.0">the 11 selection rules</text>
 <text class="h" x="654" y="311.0">ORDER</text>
 <text class="k" x="654" y="325.0">fwd / rev / ping / rand</text>
-<text class="h" x="654" y="387.0">SYNTH</text>
-<text class="k" x="654" y="401.0">which of the 12 presets</text>
-<text class="h" x="654" y="463.0">CHAN</text>
-<text class="k" x="654" y="477.0">MIDI channel 1-16</text>
-<text class="h" x="654" y="539.0">PITCH</text>
-<text class="k" x="654" y="553.0">-7 .. +7, centre = 0</text>
-<text class="h" x="654" y="615.0">LENGTH</text>
-<text class="k" x="654" y="629.0">10% .. 100% of the step</text>
-<text class="t" x="26" y="652">Selected pad bright; the rest of the row dim. SND (14,9) opens the stock synth editor for this voice’s preset.</text>
+<text class="h" x="654" y="387.0">CHAN</text>
+<text class="k" x="654" y="401.0">MIDI channel 1-16</text>
+<text class="h" x="654" y="463.0">PITCH</text>
+<text class="k" x="654" y="477.0">-7 .. +7, centre = 0</text>
+<text class="h" x="654" y="539.0">LENGTH</text>
+<text class="k" x="654" y="553.0">10% .. 100% of the step</text>
+<text class="t" x="26" y="652">Selected pad bright; the rest of the row dim. LD (0,15) loads a preset into this voice; SND (1,15) edits its sound.</text>
 </svg>

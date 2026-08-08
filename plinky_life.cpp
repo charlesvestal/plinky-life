@@ -826,7 +826,7 @@ static const uint8_t life_port_values[5] = {
 
 /* The three things the grid can be showing. The grid is the entire screen, so
    these are modes rather than panes. */
-enum { LIFE_UI_WORLD = 0, LIFE_UI_ACTION, LIFE_UI_VOICE, LIFE_UI_PRESET };
+enum { LIFE_UI_WORLD = 0, LIFE_UI_ACTION, LIFE_UI_VOICE, LIFE_UI_PRESET, LIFE_UI_LOAD };
 
 /* The on-grid voice editor. One parameter per row, on odd rows only: the blank
    even rows between them are what makes seven stacked rows readable at arm's
@@ -842,19 +842,21 @@ static const life_param_row_t life_param_rows[] = {
     {  3, 12, "RATE"  },
     {  5, 11, "RULE"  },
     {  7,  4, "ORDER" },
-    {  9, 12, "SYNTH" },
-    { 11, 16, "CHAN"  },
-    { 13, 15, "PITCH" },   /* bipolar, centre pad is 0 */
-    { 15, 10, "LENGTH" },
+    {  9, 16, "CHAN"  },
+    { 11, 15, "PITCH" },   /* bipolar, centre pad is 0 */
+    { 13, 10, "LENGTH" },
 };
 #define LIFE_NUM_PARAM_ROWS ((int)(sizeof(life_param_rows) / sizeof(life_param_rows[0])))
 #define LIFE_PITCH_CENTRE 7
 
-/* The voice editor's SYNTH row is 12 pads wide (x0..11), so the far end of that
-   same row is free. Putting "open the sound editor" there keeps the pad that
-   PICKS a preset next to the pad that EDITS it. */
-#define LIFE_SOUND_X 14
-#define LIFE_SOUND_Y 9
+/* Voice N always plays preset N. There is no preset-selector row: four
+   playheads and four presets is a direct mapping, and an indirection between
+   them only earns you the question "which preset is voice 3 on again?".
+   Presets 5-12 are still reachable - load one into slots 1-4 from the preset
+   editor's own save/load picker. */
+#define LIFE_LOAD_X  0
+#define LIFE_SOUND_X 1
+#define LIFE_SOUND_Y 15
 
 struct life_panel : panel_t {
     /* --- world --- */
@@ -887,7 +889,6 @@ struct life_panel : panel_t {
     uint8_t v_rule[LIFE_NUM_VOICES];
     int8_t v_pitch[LIFE_NUM_VOICES];
     uint8_t v_length[LIFE_NUM_VOICES];
-    uint8_t v_preset[LIFE_NUM_VOICES];    /* which of the 12 synth presets this voice plays */
     int8_t v_channel[LIFE_NUM_VOICES];    /* MIDI channel 1-16, or -1 to follow the preset */
 
     uint8_t initialised;      /* 0 only on a zeroed arena - see on_load_finished */
@@ -1041,7 +1042,6 @@ struct life_panel : panel_t {
             if (v_length[v] > 100) v_length[v] = 100;
             if (v_pitch[v] < -30) v_pitch[v] = -30;
             if (v_pitch[v] > 30) v_pitch[v] = 30;
-            if (v_preset[v] > 11) v_preset[v] = (uint8_t)v;
             if (v_channel[v] < -1 || v_channel[v] > 16) v_channel[v] = (int8_t)(v + 1);
             v_enabled[v] = v_enabled[v] ? 1 : 0;
             v_muted[v] = v_muted[v] ? 1 : 0;
@@ -1098,7 +1098,8 @@ struct life_panel : panel_t {
         return 0x11FE0000u | ((uint32_t)v << 8) | (uint32_t)(note & 127);
     }
 
-    int preset_for(int v) const { return v_preset[v] <= 11 ? v_preset[v] : v; }
+    /* Voice N plays preset N. Deliberately not configurable - see LIFE_SOUND_X. */
+    int preset_for(int v) const { return v; }
 
     /* -1 means "follow the preset's own channel", which is what
        get_midi_channel_for_preset_idx(...) is for. Otherwise the user pinned an
@@ -1462,10 +1463,9 @@ struct life_panel : panel_t {
         case 1: return v_rate[v];
         case 2: return v_rule[v];
         case 3: return v_order[v];
-        case 4: return v_preset[v];
-        case 5: return (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] - 1 : v;
-        case 6: return v_pitch[v] + LIFE_PITCH_CENTRE;
-        case 7: return (v_length[v] - 10) / 10;
+        case 4: return (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] - 1 : v;
+        case 5: return v_pitch[v] + LIFE_PITCH_CENTRE;
+        case 6: return (v_length[v] - 10) / 10;
         default: return 0;
         }
     }
@@ -1484,16 +1484,16 @@ struct life_panel : panel_t {
             return;
         case 2: v_rule[v] = (uint8_t)i; return;
         case 3: v_order[v] = (uint8_t)i; return;
-        case 4: release_voice(v); v_preset[v] = (uint8_t)i; return;
-        case 5: release_voice(v); v_channel[v] = (int8_t)(i + 1); return;
-        case 6: v_pitch[v] = (int8_t)(i - LIFE_PITCH_CENTRE); return;
-        case 7: v_length[v] = (uint8_t)(10 + i * 10); return;
+        case 4: release_voice(v); v_channel[v] = (int8_t)(i + 1); return;
+        case 5: v_pitch[v] = (int8_t)(i - LIFE_PITCH_CENTRE); return;
+        case 6: v_length[v] = (uint8_t)(10 + i * 10); return;
         default: return;
         }
     }
 
     uint32_t voice_colour(int x, int y) const {
-        if (x == LIFE_SOUND_X && y == LIFE_SOUND_Y) return LIFE_COL_ACTION;
+        if (y == LIFE_SOUND_Y && x == LIFE_LOAD_X) return LED_RGB(6, 4, 14);
+        if (y == LIFE_SOUND_Y && x == LIFE_SOUND_X) return LIFE_COL_ACTION;
         int row = param_row_for_y(y);
         if (row < 0) return 0;                       /* the blank separator rows */
         if (x >= life_param_rows[row].n) return 0;
@@ -1504,19 +1504,24 @@ struct life_panel : panel_t {
         int v = edit_voice;
         if (x == get_param(row)) return life_voice_bright[v];
         /* PITCH centre stays findable even when it is not selected */
-        if (row == 6 && x == LIFE_PITCH_CENTRE) return LIFE_COL_OFF;
+        if (row == 5 && x == LIFE_PITCH_CENTRE) return LIFE_COL_OFF;
         return life_voice_dim[v];
     }
 
     const char *voice_help(int x, int y) const {
-        if (x == LIFE_SOUND_X && y == LIFE_SOUND_Y) return "edit this voice's sound";
+        if (y == LIFE_SOUND_Y && x == LIFE_LOAD_X) return "load a preset into this voice";
+        if (y == LIFE_SOUND_Y && x == LIFE_SOUND_X) return "edit this voice's sound";
         int row = param_row_for_y(y);
         if (row < 0 || x >= life_param_rows[row].n) return nullptr;
         return life_param_rows[row].name;
     }
 
     void do_voice_edit(int x, int y) {
-        if (x == LIFE_SOUND_X && y == LIFE_SOUND_Y) {
+        if (y == LIFE_SOUND_Y && x == LIFE_LOAD_X) {
+            ui_mode = LIFE_UI_LOAD;
+            return;
+        }
+        if (y == LIFE_SOUND_Y && x == LIFE_SOUND_X) {
             ui_mode = LIFE_UI_PRESET;
             return;
         }
@@ -1529,9 +1534,9 @@ struct life_panel : panel_t {
        the only place this panel can show words. */
     void set_voice_help_text(void) {
         int v = edit_voice;
-        set_help_text("V%d #fc2#*%s#. %s %s  synth %d ch %d  pitch %+d  len %d%%",
+        set_help_text("V%d #fc2#*%s#. %s %s  ch %d  pitch %+d  len %d%%",
                       v + 1, life_rate_names[v_rate[v]], life_sel_names[v_rule[v]],
-                      life_trav_names[v_order[v]], v_preset[v] + 1,
+                      life_trav_names[v_order[v]],
                       (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] : v + 1,
                       (int)v_pitch[v], (int)v_length[v]);
     }
@@ -1576,6 +1581,19 @@ struct life_panel : panel_t {
         /* back to the voice editor */
         if (button(0, 14, LIFE_COL_ACTION, NOT_ISOLATED, "back to the voice editor"))
             ui_mode = LIFE_UI_VOICE;
+    }
+
+    /* The preset picker: folders on the left, 64 slots on the right, with its
+       own cancel and OK buttons.
+
+       It places those buttons at (14, y+15) and (15, y+15) - exactly where our
+       stop and play pads live. So this is the ONE mode that does not draw
+       transport: the picker owns row 15 while it is up. That is the right call
+       for a modal file dialog, and x still escapes because the picker leaves
+       (13,15) alone. */
+    void draw_preset_loader(void) {
+        int r = preset_pages.saveload_action(preset_for(edit_voice), 0);
+        if (r != 0) ui_mode = LIFE_UI_VOICE;   /* loaded, saved, or cancelled */
     }
 
     /* --- settings pages -------------------------------------------------
@@ -1697,8 +1715,15 @@ struct life_panel : panel_t {
         if (mode != LIFE_UI_WORLD)
             set_led(LIFE_MODIFIER_X, LIFE_MODIFIER_Y, LED_RGB(31, 0, 24));
 
-        /* Transport, once, before anything else and in every mode. Same pad,
-           same colour, same action - never modal, never hidden. */
+        /* The preset picker owns row 15 while it is up - see draw_preset_loader. */
+        if (mode == LIFE_UI_LOAD) {
+            draw_preset_loader();
+            set_help_text("V%d #fc2#*load preset#. - pick a slot, or cancel", edit_voice + 1);
+            return;
+        }
+
+        /* Transport, once, before anything else and in every other mode. Same
+           pad, same colour, same action - never modal, never hidden. */
         for (int i = 0; i < 2; ++i) {
             int tx = i ? LIFE_PLAY_X : LIFE_STOP_X;
             if (button(tx, LIFE_TRANSPORT_Y, transport_colour(tx), NOT_ISOLATED,
@@ -1711,8 +1736,7 @@ struct life_panel : panel_t {
            the top of it. */
         if (mode == LIFE_UI_PRESET) {
             draw_preset_editor();
-            set_help_text("V%d sound - #fc2#*preset %d#.  x to leave",
-                          edit_voice + 1, preset_for(edit_voice) + 1);
+            set_help_text("V%d #fc2#*sound#. - x to leave", edit_voice + 1);
             return;
         }
 
@@ -1798,7 +1822,6 @@ struct life_panel : panel_t {
         FIELD("vrule", v_rule);
         FIELD("vptch", v_pitch);
         FIELD("vlen", v_length);
-        FIELD("vpre", v_preset);
         FIELD("vchan", v_channel);
         FIELD("gen", gen_rate);
         FIELD("floor", respawn_floor);
@@ -1826,8 +1849,7 @@ struct life_panel : panel_t {
                                                    : SEL_LAST);
             v_pitch[v] = (int8_t)(v * -3);
             v_length[v] = 60;
-            v_preset[v] = (uint8_t)v;      /* a different synth patch per voice */
-            v_channel[v] = (int8_t)(v + 1); /* and a different MIDI channel */
+            v_channel[v] = (int8_t)(v + 1);   /* a different MIDI channel each */
         }
         gen_rate = 8;
         respawn_floor = 12;
