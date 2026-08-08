@@ -121,6 +121,15 @@ goes.
 | 13 | **PITCH** | −7 … +7 scale degrees; the centre pad is 0 and stays visible |
 | 15 | **LENGTH** | 10% … 100% of that voice's step |
 
+One extra pad sits at the end of the `SYNTH` row:
+
+| Pad | |
+|---|---|
+| `(14,9)` | **SOUND** — open the stock synth editor for this voice's preset |
+
+The pad that *picks* a preset and the pad that *edits* it are on the same row,
+deliberately.
+
 Press `×` to go back to the world.
 
 ### RATE is where the polyrhythm lives
@@ -132,7 +141,39 @@ lockstep, which is almost never what you want.
 
 ---
 
-## 4. The selection rules
+## 4. Editing a voice's sound
+
+![Hosted synth editor](img/sound.svg)
+
+Voice editor → `(14,9)`.
+
+**This is Plinky's own preset editor, not ours.** `preset_pages_t` takes a preset
+index, so handing it the selected voice's preset makes it edit that voice's
+sound. Every slider, the XY pad, the LFO and envelope buttons and the flag
+buttons are the firmware's.
+
+| Area | |
+|---|---|
+| rows 0–4 | 16 sliders: fx sends and the mix parameters |
+| rows 5–9 | 16 sliders: the main synth parameters |
+| `x8–15`, rows 10–14 | the synth XY pad, LFO and env buttons down its right edge |
+| `(0,10)`–`(3,10)` | switch voice — the editor follows, without leaving |
+| `(0,12)`–`(5,12)` | simple · tune · chop · loop · sync · lowpass gate |
+| `(0,14)` | back to the voice editor |
+
+`×` returns to the world from here, as everywhere.
+
+Which preset a voice *plays* is ours — that's the `SYNTH` row. How that preset
+*sounds* is the instrument's. `ide_api.md` puts it well: *"start from the largest
+matching helper and only drop down a layer for the parts that are genuinely
+custom."* Routing a playhead to a preset is custom; editing the preset is not.
+
+Two voices can share a preset if you point them at the same one — then they play
+the same patch on different rhythms.
+
+---
+
+## 5. The selection rules
 
 Two separate ideas, and keeping them apart is what makes the panel describable:
 
@@ -167,7 +208,7 @@ harder than a lone one.
 
 ---
 
-## 5. Settings pages
+## 6. Settings pages
 
 Right side buttons page through them, left side buttons change the value. Both
 pairs are system territory on every faceplate, so the panel never touches them.
@@ -195,7 +236,7 @@ rest of the instrument follows.
 
 ---
 
-## 6. Keeping the world alive
+## 7. Keeping the world alive
 
 Pure Conway on a 16×16 torus settles into still-lifes and blinkers within roughly
 100–200 generations. A frozen palette means four playheads walking a static loop,
@@ -213,7 +254,7 @@ smearing into a still-life at the border.
 
 ---
 
-## 7. Output
+## 8. Output
 
 Each voice picks its own **synth preset** (`SYNTH`) and its own **MIDI channel**
 (`CHAN`), defaulting to preset *N* on channel *N+1* so all four are separate out
@@ -237,7 +278,7 @@ Turn them off with `SIM`.
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 **Nothing plays.** Check transport is running — `(15,15)` lights bright green.
 Nothing advances while stopped.

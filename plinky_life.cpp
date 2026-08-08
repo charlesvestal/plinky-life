@@ -826,7 +826,7 @@ static const uint8_t life_port_values[5] = {
 
 /* The three things the grid can be showing. The grid is the entire screen, so
    these are modes rather than panes. */
-enum { LIFE_UI_WORLD = 0, LIFE_UI_ACTION, LIFE_UI_VOICE };
+enum { LIFE_UI_WORLD = 0, LIFE_UI_ACTION, LIFE_UI_VOICE, LIFE_UI_PRESET };
 
 /* The on-grid voice editor. One parameter per row, on odd rows only: the blank
    even rows between them are what makes seven stacked rows readable at arm's
@@ -850,6 +850,12 @@ static const life_param_row_t life_param_rows[] = {
 #define LIFE_NUM_PARAM_ROWS ((int)(sizeof(life_param_rows) / sizeof(life_param_rows[0])))
 #define LIFE_PITCH_CENTRE 7
 
+/* The voice editor's SYNTH row is 12 pads wide (x0..11), so the far end of that
+   same row is free. Putting "open the sound editor" there keeps the pad that
+   PICKS a preset next to the pad that EDITS it. */
+#define LIFE_SOUND_X 14
+#define LIFE_SOUND_Y 9
+
 struct life_panel : panel_t {
     /* --- world --- */
     life_world_t world;
@@ -863,6 +869,7 @@ struct life_panel : panel_t {
     selection_state_t sel[LIFE_NUM_VOICES];
     voice_notes_t notes[LIFE_NUM_VOICES];
     voice_allocator_t allocator;
+    preset_pages_t preset_pages;   /* the stock synth editor, hosted per voice */
 
     uint32_t last_edge_us[LIFE_NUM_VOICES];
     uint32_t step_us[LIFE_NUM_VOICES];
@@ -1486,6 +1493,7 @@ struct life_panel : panel_t {
     }
 
     uint32_t voice_colour(int x, int y) const {
+        if (x == LIFE_SOUND_X && y == LIFE_SOUND_Y) return LIFE_COL_ACTION;
         int row = param_row_for_y(y);
         if (row < 0) return 0;                       /* the blank separator rows */
         if (x >= life_param_rows[row].n) return 0;
@@ -1501,12 +1509,17 @@ struct life_panel : panel_t {
     }
 
     const char *voice_help(int x, int y) const {
+        if (x == LIFE_SOUND_X && y == LIFE_SOUND_Y) return "edit this voice's sound";
         int row = param_row_for_y(y);
         if (row < 0 || x >= life_param_rows[row].n) return nullptr;
         return life_param_rows[row].name;
     }
 
     void do_voice_edit(int x, int y) {
+        if (x == LIFE_SOUND_X && y == LIFE_SOUND_Y) {
+            ui_mode = LIFE_UI_PRESET;
+            return;
+        }
         int row = param_row_for_y(y);
         if (row < 0 || x >= life_param_rows[row].n) return;
         set_param(row, x);
@@ -1521,6 +1534,48 @@ struct life_panel : panel_t {
                       life_trav_names[v_order[v]], v_preset[v] + 1,
                       (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] : v + 1,
                       (int)v_pitch[v], (int)v_length[v]);
+    }
+
+    /* --- the hosted synth editor ------------------------------------------
+
+       preset_pages_t is the stock preset editor and it takes a preset_idx, so
+       handing it this voice's preset makes it edit this voice's sound. We write
+       none of it: two slider banks, the XY pad, the flag buttons and the LFO
+       controls are all the firmware's.
+
+       ide_api.md, Choosing The Right Layer: "start from the largest matching
+       helper and only drop down a layer for the parts that are genuinely
+       custom." Routing a playhead to a preset is custom. Editing that preset
+       is not.
+
+       Layout follows the reference panel in llm.txt exactly:
+         rows 0..9    two 16-wide slider banks (flag buttons suppressed)
+         x8..15 rows 10..14  the synth XY pad and its LFO/env buttons
+         x0..7  rows 10..14  ours: voice selector and the flag buttons
+         row 15       transport, drawn by the caller */
+    void draw_preset_editor(void) {
+        int preset = preset_for(edit_voice);
+
+        preset_pages.edit(preset, 0, 0, false);
+        preset_pages.xy_pad(preset, 8, 10);
+
+        /* Switch voice without leaving: the editor follows whichever voice is
+           selected, which is the whole point of hosting it here. */
+        for (int v = 0; v < LIFE_NUM_VOICES; ++v)
+            if (button(v, 10, v == edit_voice ? life_voice_bright[v] : life_voice_dim[v],
+                       NOT_ISOLATED, "edit this voice's sound"))
+                edit_voice = (uint8_t)v;
+
+        synth_flags_button(0, 12, preset, SYNTH_FLAG_BUTTON_SIMPLE);
+        synth_flags_button(1, 12, preset, SYNTH_FLAG_BUTTON_TUNE);
+        synth_flags_button(2, 12, preset, SYNTH_FLAG_BUTTON_CHOP);
+        synth_flags_button(3, 12, preset, SYNTH_FLAG_BUTTON_LOOP);
+        synth_flags_button(4, 12, preset, SYNTH_FLAG_BUTTON_SYNC);
+        synth_flags_button(5, 12, preset, SYNTH_FLAG_BUTTON_LOWPASS_GATE);
+
+        /* back to the voice editor */
+        if (button(0, 14, LIFE_COL_ACTION, NOT_ISOLATED, "back to the voice editor"))
+            ui_mode = LIFE_UI_VOICE;
     }
 
     /* --- settings pages -------------------------------------------------
@@ -1642,6 +1697,25 @@ struct life_panel : panel_t {
         if (mode != LIFE_UI_WORLD)
             set_led(LIFE_MODIFIER_X, LIFE_MODIFIER_Y, LED_RGB(31, 0, 24));
 
+        /* Transport, once, before anything else and in every mode. Same pad,
+           same colour, same action - never modal, never hidden. */
+        for (int i = 0; i < 2; ++i) {
+            int tx = i ? LIFE_PLAY_X : LIFE_STOP_X;
+            if (button(tx, LIFE_TRANSPORT_Y, transport_colour(tx), NOT_ISOLATED,
+                       tx == LIFE_PLAY_X ? "play" : "stop"))
+                do_transport(tx);
+        }
+
+        /* The hosted synth editor owns the grid: it emits sliders and an XY pad
+           rather than one button per pad, so the per-pad loop must not run over
+           the top of it. */
+        if (mode == LIFE_UI_PRESET) {
+            draw_preset_editor();
+            set_help_text("V%d sound - #fc2#*preset %d#.  x to leave",
+                          edit_voice + 1, preset_for(edit_voice) + 1);
+            return;
+        }
+
         /* ONE widget per pad, in the SAME order, EVERY frame, in every mode.
            The mode changes only each pad's colour and what a press does, which
            is why the voice editor lives inside this loop rather than drawing
@@ -1649,15 +1723,7 @@ struct life_panel : panel_t {
         for (int y = 0; y < LIFE_H; ++y) {
             for (int x = 0; x < LIFE_W; ++x) {
                 if (x == LIFE_MODIFIER_X && y == LIFE_MODIFIER_Y) continue;
-
-                /* Transport is the same pad, the same colour and the same
-                   action in every mode. Never modal, never hidden. */
-                if (is_transport_pad(x, y)) {
-                    if (button(x, y, transport_colour(x), NOT_ISOLATED,
-                               x == LIFE_PLAY_X ? "play" : "stop"))
-                        do_transport(x);
-                    continue;
-                }
+                if (is_transport_pad(x, y)) continue;   /* emitted once, above */
 
                 uint32_t col;
                 const char *help;

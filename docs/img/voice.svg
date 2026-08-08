@@ -286,6 +286,8 @@
 <rect x="406" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="444" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="482" y="596" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="558" y="368" width="34" height="34" rx="7" fill="#18a8bf"/>
+<text class="p" x="575.0" y="388.5" text-anchor="middle" fill="#000">SND</text>
 <rect x="520" y="596" width="34" height="34" rx="7" fill="#c81ea0"/>
 <text class="p" x="537.0" y="616.5" text-anchor="middle" fill="#fff">×</text>
 <rect x="558" y="596" width="34" height="34" rx="7" fill="#d4341a"/>
@@ -310,5 +312,5 @@
 <text class="k" x="654" y="553.0">-7 .. +7, centre = 0</text>
 <text class="h" x="654" y="615.0">LENGTH</text>
 <text class="k" x="654" y="629.0">10% .. 100% of the step</text>
-<text class="t" x="26" y="652">Selected pad bright; the rest of the row dim so you can see how far the range goes. Blank rows keep it readable.</text>
+<text class="t" x="26" y="652">Selected pad bright; the rest of the row dim. SND (14,9) opens the stock synth editor for this voice’s preset.</text>
 </svg>

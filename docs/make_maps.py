@@ -42,6 +42,8 @@ PARAM_ROWS = [
     (15, 10, "LENGTH", "10% .. 100% of the step"),
 ]
 
+SOUND_X, SOUND_Y = 14, 9    # opens the hosted synth editor, on the SYNTH row
+
 
 def esc(s):
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -249,6 +251,7 @@ def voice():
                 pad(out, x, y, "#33333c")
             else:
                 pad(out, x, y, V_DIM[1])
+    pad(out, SOUND_X, SOUND_Y, ACTION, "SND", "#000")
     transport(out)
     lx = PAD + 16 * (CELL + GAP) + 20
     ly = PAD
@@ -260,9 +263,78 @@ def voice():
         out.append(f'<text class="k" x="{lx}" y="{py + 12}">{esc(desc)}</text>')
     out.append(
         f'<text class="t" x="{PAD}" y="{PAD + 16*(CELL+GAP) + 18}">'
-        'Selected pad bright; the rest of the row dim so you can see how far the range goes. '
-        'Blank rows keep it readable.</text>'
+        'Selected pad bright; the rest of the row dim. SND (14,9) opens the stock synth editor '
+        'for this voice\u2019s preset.</text>'
     )
+    out.append("</svg>")
+    return "\n".join(out)
+
+
+# --------------------------------------------------------------------------- sound
+def sound():
+    """The stock preset editor, hosted. Layout mirrors the reference panel in
+    llm.txt: two slider banks on rows 0-9, the XY pad at x8 y10."""
+    w, h = grid_size(300)
+    out = svg_open(w, h, "plinky-life hosted synth editor")
+    axes(out)
+    SLIDER_A = "#2b3f6b"
+    SLIDER_B = "#1f5147"
+    XY = "#3a2b5e"
+    for y in range(16):
+        for x in range(16):
+            if y == ROW and x >= MOD_X:
+                continue
+            if y <= 4:
+                lit = (4 - y) <= (x % 5)
+                pad(out, x, y, SLIDER_A if lit else "#12151f")
+            elif y <= 9:
+                lit = (9 - y) <= ((x + 2) % 5)
+                pad(out, x, y, SLIDER_B if lit else "#101a18")
+            elif y <= 14 and x >= 8:
+                pad(out, x, y, XY if x < 15 else "#241a3d")
+            elif y == 10 and x < 4:
+                pad(out, x, y, V[1] if x == 1 else V_DIM[x])
+            elif y == 12 and x < 6:
+                pad(out, x, y, "#3d3d46")
+            elif y == 14 and x == 0:
+                pad(out, x, y, ACTION, "<", "#000")
+            else:
+                pad(out, x, y, "#0e0e12")
+    out.append(
+        f'<circle cx="{PAD + 11*(CELL+GAP) + CELL/2}" cy="{PAD + 12*(CELL+GAP) + CELL/2}" '
+        f'r="9" fill="#d8ccff"/>'
+    )
+    transport(out)
+    lx = PAD + 16 * (CELL + GAP) + 20
+    note(out, lx, PAD + 14, [
+        ("h", "SOUND  (14,9) in the"),
+        ("h", "voice editor"),
+        ("t", ""),
+        ("t", "This is the STOCK synth"),
+        ("t", "editor, not ours. It takes a"),
+        ("t", "preset index, so it edits"),
+        ("t", "whichever preset the selected"),
+        ("t", "voice plays."),
+        ("t", ""),
+        ("h", "rows 0-4, 5-9"),
+        ("t", "Two banks of 16 sliders:"),
+        ("t", "mix and fx above, the main"),
+        ("t", "synth params below."),
+        ("t", ""),
+        ("h", "x8-15, rows 10-14"),
+        ("t", "The synth XY pad, with LFO"),
+        ("t", "and env buttons on its right."),
+        ("t", ""),
+        ("h", "x0-3, row 10"),
+        ("t", "Switch voice without leaving."),
+        ("t", ""),
+        ("h", "x0-5, row 12"),
+        ("t", "simple / tune / chop /"),
+        ("t", "loop / sync / lowpass gate"),
+        ("t", ""),
+        ("h", "(0,14)  back"),
+        ("t", "x returns to the world."),
+    ])
     out.append("</svg>")
     return "\n".join(out)
 
@@ -271,7 +343,7 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     outdir = os.path.join(here, "img")
     os.makedirs(outdir, exist_ok=True)
-    for name, fn in (("world", world), ("action", action), ("voice", voice)):
+    for name, fn in (("world", world), ("action", action), ("voice", voice), ("sound", sound)):
         path = os.path.join(outdir, name + ".svg")
         with open(path, "w") as f:
             f.write(fn())

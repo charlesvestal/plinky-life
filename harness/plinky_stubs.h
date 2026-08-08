@@ -132,6 +132,46 @@ void send_declared_midi_notes(int enable_aftertouch_on_ports = -1);
 int get_system_midi_channel(void);
 uint8_t get_midi_channel_for_preset_idx(int preset_idx, bool respect_system_midi_channel);
 
+/* --- synth preset editing -----------------------------------------------
+
+   preset_pages_t is panel-HOSTED, not a system page: it takes a preset_idx, so
+   passing the selected voice's preset makes it edit that voice's sound. The
+   real struct owns 32 slider_t plus an xy_pad_t and a file_picker_t; the stub
+   only needs the call shapes, so its size here is NOT representative. */
+enum {
+    SYNTH_FLAG_BUTTON_SIMPLE,
+    SYNTH_FLAG_BUTTON_TUNE,
+    SYNTH_FLAG_BUTTON_CHOP,
+    SYNTH_FLAG_BUTTON_LOOP,
+    SYNTH_FLAG_BUTTON_SYNC,
+    SYNTH_FLAG_BUTTON_LOWPASS_GATE,
+    SYNTH_FLAG_BUTTON_TUNINGMODE,
+};
+
+int synth_flags_button(int x, int y, int preset_idx, int synth_flag_enum,
+                       int preset_idx_write_copies_mask = 0, int col = 0);
+
+struct slider_t { int _pad[8]; };
+struct xy_pad_t { int _pad[12]; };
+struct file_picker_t { int _pad[32]; };
+
+#define FLAG_PICKER_ENABLE_DELETE 1
+
+struct preset_pages_t {
+    slider_t slider_banks[2][16];
+    xy_pad_t the_xy_pad;
+    file_picker_t picker;
+
+    int edit(int preset_idx, int y, int preset_idx_write_copies_mask = 0,
+             bool include_flag_buttons = true, int slider_flags = 0);
+    void xy_pad(int preset_idx, int x = 8, int y = 10, int preset_idx_write_copies_mask = 0,
+                bool require_record_button_down_for_speed = false);
+    int saveload_action(int preset_idx, int y, int flags = FLAG_PICKER_ENABLE_DELETE,
+                        int preset_idx_write_copies_mask = 0);
+    bool saveload(int preset_idx, int y, int flags = FLAG_PICKER_ENABLE_DELETE,
+                  int preset_idx_write_copies_mask = 0);
+};
+
 /* --- musical state ------------------------------------------------------- */
 extern uint8_t current_key;
 extern uint16_t current_scale;
