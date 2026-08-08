@@ -4,9 +4,10 @@
 **Status:** implemented
 **Target:** Plinky 12 panel, blank/universal faceplate
 
-> **Two deviations were made during implementation.** Both are recorded in §14 at the
-> bottom, and both are the same kind of decision: an API the published docs describe but do
-> not pin down precisely enough to rely on.
+> **This is the original v1 design, kept as written.** The panel has since grown well past
+> it — see the manual for what it actually does now. Two implementation deviations are
+> recorded in §14; §13's "cut from v1" list is largely no longer true, and §16 says what
+> landed since.
 
 A Conway's Game of Life sequencer for the Plinky 12, in the spirit of
 [ZOA: Living MIDI Sequencer](https://apps.apple.com/us/app/zoa-living-midi-sequencer/id1581881354).
@@ -326,6 +327,26 @@ cell age and decay · golden-ratio note values · preset sharing · per-voice lo
 8×8 world mode.
 
 ---
+
+## 16. Added after v1
+
+Everything in §13 below was cut from the first version. Most of it has since landed, in some
+cases in a different form:
+
+- **Conditional triggers** — built, but *derived from the world* rather than drawn per step.
+  Chance, ratchet, tie and every read the cell the voice landed on, so a glider crossing a
+  voice's path changes its rhythm. `src/chance.h`.
+- **Selectable rulesets** — six: Conway, HighLife, Maze, Coral, 34, Seeds. On the action layer.
+- **Accent** — per voice, how much crowding drives velocity.
+
+Also new, and not contemplated in v1 at all: swing and the seven shuffle patterns; MIDI CC
+control in *and* out over a 35-controller block; note input drawing cells; CV out; front-panel
+detection with a Chords/Drums sound-page layout; the hosted preset editor and scene picker;
+per-voice MIDI channels; key and scale followed from the instrument's globals rather than kept
+privately.
+
+Still cut, deliberately: per-voice loop bounds, 8×8 world, cell age and decay, golden-ratio note
+values, accelerometer input, queued scene switching.
 
 ## 14. Deviations made during implementation
 

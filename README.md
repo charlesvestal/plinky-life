@@ -41,8 +41,9 @@ src/life.h        Conway world, population stats, respawn trigger
 src/selection.h   the 11 selection rules over a column
 src/traversal.h   column order: forward, reverse, ping-pong, random
 src/scales.h      29 scale masks, degree -> note
-src/voice.h       note lifecycle, one exit path so notes cannot stick
-src/ccmap.h       incoming MIDI CC map and value scaling
+src/voice.h       note lifecycle, polyphony budget, one exit path
+src/ccmap.h       the MIDI CC block, in and out, and its value scaling
+src/chance.h      conditional triggers derived from the world
 src/panel.cpp     clocks, output, drawing, touch, settings pages
 
 harness/          desktop tests + stubbed headers for the compile check
