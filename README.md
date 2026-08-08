@@ -34,9 +34,6 @@ generated file can be type-checked locally instead of flash-and-see. **If it and
 firmware disagree, the firmware is right** — it has been wrong at least once, and the resulting
 errors only showed up server-side.
 
-Flash from `plinky12.com` rather than `stage.plinky12.com` when you need `printf` — Device Logs
-silently do nothing on staging.
-
 ## Layout
 
 ```
