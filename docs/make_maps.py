@@ -36,9 +36,9 @@ PARAM_ROWS = [
     (3, 12, "RATE", "32nd → 8 bars"),
     (5, 11, "RULE", "which cell it plays"),
     (7, 4, "ORDER", "fwd / rev / ping / rand"),
-    (9, 16, "CHAN", "MIDI channel 1-16"),
-    (11, 15, "PITCH", "-7 .. +7, centre = 0"),
-    (13, 10, "LENGTH", "10% .. 100% of the step"),
+    (9, 15, "PITCH", "-7 .. +7, centre = 0"),
+    (11, 10, "LENGTH", "10% .. 100% of the step"),
+    (13, 11, "ACCENT", "crowded cells hit harder"),
 ]
 
 LOAD_X, SOUND_X, SOUND_Y = 0, 1, 15   # load a preset / edit this voice's sound
@@ -50,7 +50,7 @@ CHANCE_ROWS = [
     (5, 11, "RATCHET", "crowding adds repeats"),
     (7, 11, "TIE", "survivors hold instead"),
     (9, 11, "EVERY", "play every 2nd/3rd/4th pass"),
-    (11, 11, "ACCENT", "crowded cells hit harder"),
+    (11, 16, "CHAN", "MIDI channel 1-16"),
 ]
 
 
@@ -241,7 +241,7 @@ def voice():
     w, h = grid_size(300)
     out = svg_open(w, h, "plinky-life voice editor")
     axes(out)
-    sel = {1: 1, 3: 4, 5: 7, 7: 0, 9: 1, 11: 4, 13: 5}   # the illustrated voice 2
+    sel = {1: 1, 3: 4, 5: 7, 7: 0, 9: 4, 11: 5, 13: 6}   # the illustrated voice 2
     rows = {y: (n, name) for y, n, name, _ in PARAM_ROWS}
     for y in range(16):
         for x in range(16):
@@ -257,7 +257,7 @@ def voice():
                 pad(out, x, y, V[x] if x == sel[y] else V_DIM[x])
             elif x == sel[y]:
                 pad(out, x, y, V[1])
-            elif y == 11 and x == 7:
+            elif y == 9 and x == 7:
                 pad(out, x, y, "#33333c")
             else:
                 pad(out, x, y, V_DIM[1])
@@ -369,7 +369,7 @@ def chance():
     w, h = grid_size(300)
     out = svg_open(w, h, "plinky-life voice chance page")
     axes(out)
-    sel = {1: 1, 3: 4, 5: 6, 7: 0, 9: 2, 11: 6}
+    sel = {1: 1, 3: 4, 5: 6, 7: 0, 9: 2, 11: 1}
     rows = {y: n for y, n, _, _ in CHANCE_ROWS}
     for y in range(16):
         for x in range(16):
@@ -385,7 +385,7 @@ def chance():
                 pad(out, x, y, V[x] if x == sel[y] else V_DIM[x])
             elif x == sel[y]:
                 pad(out, x, y, V[1])
-            elif x == 0:
+            elif x == 0 and y < 11:
                 pad(out, x, y, "#33333c")
             else:
                 pad(out, x, y, V_DIM[1])

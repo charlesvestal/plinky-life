@@ -178,13 +178,13 @@
 <rect x="558" y="330" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="596" y="330" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="26" y="368" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="64" y="368" width="34" height="34" rx="7" fill="#3fd45a"/>
+<rect x="64" y="368" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="102" y="368" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="140" y="368" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="178" y="368" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="178" y="368" width="34" height="34" rx="7" fill="#3fd45a"/>
 <rect x="216" y="368" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="254" y="368" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="292" y="368" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="292" y="368" width="34" height="34" rx="7" fill="#33333c"/>
 <rect x="330" y="368" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="368" y="368" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="406" y="368" width="34" height="34" rx="7" fill="#12401b"/>
@@ -192,7 +192,7 @@
 <rect x="482" y="368" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="520" y="368" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="558" y="368" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="596" y="368" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="596" y="368" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="26" y="406" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="64" y="406" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="102" y="406" width="34" height="34" rx="7" fill="#0e0e12"/>
@@ -213,17 +213,17 @@
 <rect x="64" y="444" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="102" y="444" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="140" y="444" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="178" y="444" width="34" height="34" rx="7" fill="#3fd45a"/>
-<rect x="216" y="444" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="178" y="444" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="216" y="444" width="34" height="34" rx="7" fill="#3fd45a"/>
 <rect x="254" y="444" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="292" y="444" width="34" height="34" rx="7" fill="#33333c"/>
+<rect x="292" y="444" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="330" y="444" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="368" y="444" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="406" y="444" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="444" y="444" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="482" y="444" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="520" y="444" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="558" y="444" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="406" y="444" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="444" y="444" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="482" y="444" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="520" y="444" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="558" y="444" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="596" y="444" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="26" y="482" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="64" y="482" width="34" height="34" rx="7" fill="#0e0e12"/>
@@ -246,12 +246,12 @@
 <rect x="102" y="520" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="140" y="520" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="178" y="520" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="216" y="520" width="34" height="34" rx="7" fill="#3fd45a"/>
-<rect x="254" y="520" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="216" y="520" width="34" height="34" rx="7" fill="#12401b"/>
+<rect x="254" y="520" width="34" height="34" rx="7" fill="#3fd45a"/>
 <rect x="292" y="520" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="330" y="520" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="368" y="520" width="34" height="34" rx="7" fill="#12401b"/>
-<rect x="406" y="520" width="34" height="34" rx="7" fill="#0e0e12"/>
+<rect x="406" y="520" width="34" height="34" rx="7" fill="#12401b"/>
 <rect x="444" y="520" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="482" y="520" width="34" height="34" rx="7" fill="#0e0e12"/>
 <rect x="520" y="520" width="34" height="34" rx="7" fill="#0e0e12"/>
@@ -308,11 +308,11 @@
 <text class="k" x="654" y="249.0">which cell it plays</text>
 <text class="h" x="654" y="311.0">ORDER</text>
 <text class="k" x="654" y="325.0">fwd / rev / ping / rand</text>
-<text class="h" x="654" y="387.0">CHAN</text>
-<text class="k" x="654" y="401.0">MIDI channel 1-16</text>
-<text class="h" x="654" y="463.0">PITCH</text>
-<text class="k" x="654" y="477.0">-7 .. +7, centre = 0</text>
-<text class="h" x="654" y="539.0">LENGTH</text>
-<text class="k" x="654" y="553.0">10% .. 100% of the step</text>
+<text class="h" x="654" y="387.0">PITCH</text>
+<text class="k" x="654" y="401.0">-7 .. +7, centre = 0</text>
+<text class="h" x="654" y="463.0">LENGTH</text>
+<text class="k" x="654" y="477.0">10% .. 100% of the step</text>
+<text class="h" x="654" y="539.0">ACCENT</text>
+<text class="k" x="654" y="553.0">crowded cells hit harder</text>
 <text class="t" x="26" y="652">Selected pad bright; the rest of the row dim. Row 15: LD loads a preset, SND edits the sound, P2 flips to the behaviour page.</text>
 </svg>

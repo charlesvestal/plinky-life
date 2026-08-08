@@ -184,9 +184,9 @@ static const life_param_row_t life_param_rows[] = {
     {  3, 12, "RATE"  },
     {  5, 11, "RULE"  },
     {  7,  4, "ORDER" },
-    {  9, 16, "CHAN"  },
-    { 11, 15, "PITCH" },   /* bipolar, centre pad is 0 */
-    { 13, 10, "LENGTH" },
+    {  9, 15, "PITCH" },   /* bipolar, centre pad is 0 */
+    { 11, 10, "LENGTH" },
+    { 13, 11, "ACCENT" },  /* how much crowding drives velocity */
 };
 #define LIFE_NUM_PARAM_ROWS ((int)(sizeof(life_param_rows) / sizeof(life_param_rows[0])))
 
@@ -200,7 +200,7 @@ static const life_param_row_t life_chance_rows[] = {
     {  5, 11, "RATCHET" },  /* how much crowding adds repeats */
     {  7, 11, "TIE" },      /* how often survivors hold instead of striking */
     {  9, 11, "EVERY" },    /* play only every Nth crossing */
-    { 11, 11, "ACCENT" },   /* how much crowding drives velocity */
+    { 11, 16, "CHAN" },     /* MIDI channel - routing, not timing */
 };
 #define LIFE_NUM_CHANCE_ROWS ((int)(sizeof(life_chance_rows) / sizeof(life_chance_rows[0])))
 
@@ -1035,50 +1035,44 @@ struct life_panel : panel_t {
         return -1;
     }
 
-    /* The four chance controls live in tens, so pad n is n * 10 percent. */
-    uint8_t *chance_field(int row) {
-        switch (row) {
-        case 1: return &v_prob[edit_voice];
-        case 2: return &v_ratchet[edit_voice];
-        case 3: return &v_tie[edit_voice];
-        case 4: return &v_cond[edit_voice];
-        case 5: return &v_accent[edit_voice];
-        default: return 0;
-        }
-    }
-    const uint8_t *chance_field(int row) const {
-        return const_cast<life_panel *>(this)->chance_field(row);
-    }
-
     int get_param(int row) const {
         int v = edit_voice;
-        if (voice_page) {
-            if (row == 0) return edit_voice;
-            const uint8_t *f = chance_field(row);
-            return f ? (*f + 5) / 10 : 0;
+        if (row == 0) return edit_voice;
+
+        if (voice_page) switch (row) {
+        case 1: return (v_prob[v] + 5) / 10;
+        case 2: return (v_ratchet[v] + 5) / 10;
+        case 3: return (v_tie[v] + 5) / 10;
+        case 4: return (v_cond[v] + 5) / 10;
+        case 5: return (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] - 1 : v;
+        default: return 0;
         }
+
         switch (row) {
-        case 0: return edit_voice;
         case 1: return v_rate[v];
         case 2: return v_rule[v];
         case 3: return v_order[v];
-        case 4: return (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] - 1 : v;
-        case 5: return v_pitch[v] + LIFE_PITCH_CENTRE;
-        case 6: return (v_length[v] - 10) / 10;
+        case 4: return v_pitch[v] + LIFE_PITCH_CENTRE;
+        case 5: return (v_length[v] - 10) / 10;
+        case 6: return (v_accent[v] + 5) / 10;
         default: return 0;
         }
     }
 
     void set_param(int row, int i) {
         int v = edit_voice;
-        if (voice_page) {
-            if (row == 0) { edit_voice = (uint8_t)i; return; }
-            uint8_t *f = chance_field(row);
-            if (f) *f = (uint8_t)(i * 10);
-            return;
+        if (row == 0) { edit_voice = (uint8_t)i; return; }
+
+        if (voice_page) switch (row) {
+        case 1: v_prob[v] = (uint8_t)(i * 10); return;
+        case 2: v_ratchet[v] = (uint8_t)(i * 10); return;
+        case 3: v_tie[v] = (uint8_t)(i * 10); return;
+        case 4: v_cond[v] = (uint8_t)(i * 10); return;
+        case 5: release_voice(v); v_channel[v] = (int8_t)(i + 1); return;
+        default: return;
         }
+
         switch (row) {
-        case 0: edit_voice = (uint8_t)i; return;
         case 1:
             /* the step length just changed, so the held note's countdown is
                measured against the wrong interval */
@@ -1089,9 +1083,9 @@ struct life_panel : panel_t {
             return;
         case 2: v_rule[v] = (uint8_t)i; return;
         case 3: v_order[v] = (uint8_t)i; return;
-        case 4: release_voice(v); v_channel[v] = (int8_t)(i + 1); return;
-        case 5: v_pitch[v] = (int8_t)(i - LIFE_PITCH_CENTRE); return;
-        case 6: v_length[v] = (uint8_t)(10 + i * 10); return;
+        case 4: v_pitch[v] = (int8_t)(i - LIFE_PITCH_CENTRE); return;
+        case 5: v_length[v] = (uint8_t)(10 + i * 10); return;
+        case 6: v_accent[v] = (uint8_t)(i * 10); return;
         default: return;
         }
     }
@@ -1112,8 +1106,8 @@ struct life_panel : panel_t {
         int v = edit_voice;
         if (x == get_param(row)) return life_voice_bright[v];
         /* the zero end of a chance row, and the PITCH centre, stay findable */
-        if (voice_page && x == 0) return LIFE_COL_OFF;
-        if (!voice_page && row == 5 && x == LIFE_PITCH_CENTRE) return LIFE_COL_OFF;
+        if (voice_page && row < 5 && x == 0) return LIFE_COL_OFF;
+        if (!voice_page && row == 4 && x == LIFE_PITCH_CENTRE) return LIFE_COL_OFF;
         return life_voice_dim[v];
     }
 
@@ -1140,7 +1134,7 @@ struct life_panel : panel_t {
         case 2: return "Ratchet - how much a crowded cell repeats inside its step";
         case 3: return "Tie - how often a cell that survived holds instead of striking";
         case 4: return "Every - play only every 2nd, 3rd or 4th crossing of the world";
-        case 5: return "Accent - how much a crowded cell hits harder than a lone one";
+        case 5: return "MIDI channel for this voice";
         default: return rows()[row].name;
         }
 
@@ -1149,9 +1143,9 @@ struct life_panel : panel_t {
         case 1: return life_rate_names[x];
         case 2: return life_sel_help[x];
         case 3: return life_trav_help[x];
-        case 4: return "MIDI channel for this voice";
-        case 5: return "pitch offset in scale degrees; the dim centre pad is 0";
-        case 6: return "note length, as a share of this voice's step";
+        case 4: return "pitch offset in scale degrees; the dim centre pad is 0";
+        case 5: return "note length, as a share of this voice's step";
+        case 6: return "Accent - how much a crowded cell hits harder than a lone one";
         default: return rows()[row].name;
         }
     }
@@ -1206,29 +1200,25 @@ struct life_panel : panel_t {
         if (row == 0) { readout[0] = 'V'; readout[1] = (char)('1' + v); readout[2] = 0;
                         return readout; }
 
-        if (voice_page) {
-            const uint8_t *f = chance_field(row);
-            if (!f) return readout;
-            switch (row) {
-            case 1: tag = "SK"; break;      /* skip */
-            case 2: tag = "RT"; break;      /* ratchet */
-            case 3: tag = "TI"; break;      /* tie */
-            case 4: tag = "EV"; break;      /* every */
-            case 5: tag = "AC"; break;      /* accent */
+        if (voice_page) switch (row) {
+            case 1: tag = "SK"; snprintf(value, sizeof(value), "%d", v_prob[v]); break;
+            case 2: tag = "RT"; snprintf(value, sizeof(value), "%d", v_ratchet[v]); break;
+            case 3: tag = "TI"; snprintf(value, sizeof(value), "%d", v_tie[v]); break;
+            case 4: tag = "EV";
+                    snprintf(value, sizeof(value), "%d", chance_pass_divisor(v_cond[v]));
+                    break;
+            case 5: tag = "CH";
+                    snprintf(value, sizeof(value), "%d",
+                             (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] : v + 1);
+                    break;
             default: break;
-            }
-            if (row == 4) snprintf(value, sizeof(value), "%d", chance_pass_divisor(*f));
-            else snprintf(value, sizeof(value), "%d", *f);
         } else switch (row) {
             case 1: trim4(value, life_rate_names[v_rate[v]]); break;
             case 2: trim4(value, life_sel_names[v_rule[v]]); break;
             case 3: trim4(value, life_trav_names[v_order[v]]); break;
-            case 4: tag = "CH";
-                    snprintf(value, sizeof(value), "%d",
-                             (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] : v + 1);
-                    break;
-            case 5: tag = "PT"; snprintf(value, sizeof(value), "%+d", (int)v_pitch[v]); break;
-            case 6: tag = "LN"; snprintf(value, sizeof(value), "%d", (int)v_length[v]); break;
+            case 4: tag = "PT"; snprintf(value, sizeof(value), "%+d", (int)v_pitch[v]); break;
+            case 5: tag = "LN"; snprintf(value, sizeof(value), "%d", (int)v_length[v]); break;
+            case 6: tag = "AC"; snprintf(value, sizeof(value), "%d", (int)v_accent[v]); break;
             default: break;
         }
 
@@ -1273,16 +1263,16 @@ struct life_panel : panel_t {
         int v = edit_voice;
         if (voice_page) {
             set_help_text("#fc2#*Voice %d behaviour#. - skip %d%%, ratchet %d%%, tie %d%%, "
-                          "accent %d%%, every %d crossing%s", v + 1, v_prob[v], v_ratchet[v],
-                          v_tie[v], v_accent[v], chance_pass_divisor(v_cond[v]),
-                          chance_pass_divisor(v_cond[v]) == 1 ? "" : "s");
+                          "every %d crossing%s, ch %d", v + 1, v_prob[v], v_ratchet[v],
+                          v_tie[v], chance_pass_divisor(v_cond[v]),
+                          chance_pass_divisor(v_cond[v]) == 1 ? "" : "s",
+                          (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] : v + 1);
             return;
         }
-        set_help_text("#fc2#*Voice %d#. every %s, %s going %s. ch %d, pitch %+d, len %d%%",
+        set_help_text("#fc2#*Voice %d#. every %s, %s going %s. pitch %+d, len %d%%, accent %d%%",
                       v + 1, life_rate_names[v_rate[v]], life_sel_help[v_rule[v]],
-                      life_trav_names[v_order[v]],
-                      (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] : v + 1,
-                      (int)v_pitch[v], (int)v_length[v]);
+                      life_trav_names[v_order[v]], (int)v_pitch[v], (int)v_length[v],
+                      (int)v_accent[v]);
         (void)0;
     }
 

@@ -120,9 +120,9 @@ range goes.
 | 3 | **rate** | `32nd · 16T · 16th · 8T · 8th · 4T · 1/4 · 1/2 · 1BAR · 2BAR · 4BAR · 8BAR` |
 | 5 | **rule** | which cell it picks — the 11 rules below |
 | 7 | **order** | forward · reverse · ping-pong · random |
-| 9 | **channel** | MIDI channel 1–16 |
-| 11 | **pitch** | −7 … +7 scale degrees; the dim centre pad is 0 |
-| 13 | **length** | 10% … 100% of the step |
+| 9 | **pitch** | −7 … +7 scale degrees; the dim centre pad is 0 |
+| 11 | **length** | 10% … 100% of the step |
+| 13 | **accent** | how much a crowded cell hits harder than a lone one |
 
 And on row 15:
 
@@ -289,8 +289,7 @@ eight to itself.
 Sending to MIDI only? Then there's no ceiling and chords go out whole.
 
 **Loud cells:** a cell surrounded by neighbours hits harder than a lone one, so
-dense clusters accent themselves. How much is each voice's **accent**, on its
-behaviour page.
+dense clusters accent themselves. How much is each voice's **accent**.
 
 ---
 
