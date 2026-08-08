@@ -122,6 +122,13 @@ static inline int midi_write_cc(int ports, int channel, int cc, int val) {
     midi_write((uint8_t)ports, MAKE_CCMSG(channel, cc, val));
     return val;
 }
+/* Level-triggered MIDI note declaration: declare what should be down each
+   update, then send_declared_midi_notes() as the commit marker. */
+uint8_t declare_midi_note(uint8_t channel, uint8_t note, uint8_t velocity, uint8_t midi_ports = MIDI_PORT_1);
+uint8_t declare_midi_note_for_preset_idx(int preset_idx, uint8_t note, uint8_t velocity,
+                                         uint8_t midi_ports = MIDI_PORT_1, int midi_channel_wire = -1);
+void send_declared_midi_notes(int enable_aftertouch_on_ports = -1);
+
 int get_system_midi_channel(void);
 uint8_t get_midi_channel_for_preset_idx(int preset_idx, bool respect_system_midi_channel);
 

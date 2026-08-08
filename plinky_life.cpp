@@ -833,6 +833,8 @@ struct life_panel : panel_t {
     uint8_t v_rule[LIFE_NUM_VOICES];
     int8_t v_pitch[LIFE_NUM_VOICES];
     uint8_t v_length[LIFE_NUM_VOICES];
+    uint8_t v_preset[LIFE_NUM_VOICES];    /* which of the 12 synth presets this voice plays */
+    int8_t v_channel[LIFE_NUM_VOICES];    /* MIDI channel 1-16, or -1 to follow the preset */
 
     uint8_t initialised;      /* 0 only on a zeroed arena - see on_load_finished */
     uint8_t gen_rate;
@@ -985,6 +987,8 @@ struct life_panel : panel_t {
             if (v_length[v] > 100) v_length[v] = 100;
             if (v_pitch[v] < -30) v_pitch[v] = -30;
             if (v_pitch[v] > 30) v_pitch[v] = 30;
+            if (v_preset[v] > 11) v_preset[v] = (uint8_t)v;
+            if (v_channel[v] < -1 || v_channel[v] > 16) v_channel[v] = (int8_t)(v + 1);
             v_enabled[v] = v_enabled[v] ? 1 : 0;
             v_muted[v] = v_muted[v] ? 1 : 0;
         }
@@ -1040,38 +1044,67 @@ struct life_panel : panel_t {
         return 0x11FE0000u | ((uint32_t)v << 8) | (uint32_t)(note & 127);
     }
 
-    int midi_channel_for(int v) const {
-        return (int)get_midi_channel_for_preset_idx(v, true);
+    int preset_for(int v) const { return v_preset[v] <= 11 ? v_preset[v] : v; }
+
+    /* -1 means "follow the preset's own channel", which is what
+       get_midi_channel_for_preset_idx(...) is for. Otherwise the user pinned an
+       explicit channel; the API wants a zero-based wire channel. */
+    int midi_wire_channel_for(int v) const {
+        if (v_channel[v] >= 1 && v_channel[v] <= 16) return v_channel[v] - 1;
+        return -1;
     }
 
-    void note_on(int v, int note, int velocity) {
-        if (pref_sink == LIFE_SINK_SYNTH || pref_sink == LIFE_SINK_BOTH) {
-            uint32_t sid = source_id_for(v, note);
-            int old_voice = allocator.find_voice(sid);
-            int new_voice = allocator.voice_allocate(sid, (uint8_t)(1 + v));
-            if (new_voice >= 0) {
-                if (new_voice != old_voice && old_voice >= 0) synth_note_up(old_voice);
-                play_synth(new_voice, v, velocity, note << 8, true);
-            }
-        }
-        if (pref_sink == LIFE_SINK_MIDI || pref_sink == LIFE_SINK_BOTH) {
-            uint8_t ports = midi_ports();
-            if (ports) midi_write(ports, MAKE_NOTEONMSG(midi_channel_for(v), note, velocity));
-        }
+    bool midi_enabled(void) const {
+        return (pref_sink == LIFE_SINK_MIDI || pref_sink == LIFE_SINK_BOTH) && midi_ports() != 0;
     }
 
-    void note_off(int v, int note) {
-        if (pref_sink == LIFE_SINK_SYNTH || pref_sink == LIFE_SINK_BOTH) {
-            uint32_t sid = source_id_for(v, note);
-            int voice = allocator.find_voice(sid);
-            if (voice >= 0) {
-                synth_note_up(voice);
-                allocator.voice_deallocate(sid);
+    bool synth_enabled(void) const {
+        return pref_sink == LIFE_SINK_SYNTH || pref_sink == LIFE_SINK_BOTH;
+    }
+
+    /* --- MIDI is LEVEL-TRIGGERED ------------------------------------------
+
+       declare_midi_note_for_preset_idx(...) + send_declared_midi_notes() take
+       "which notes should be down right now" and derive the on/off/aftertouch
+       traffic themselves. That deletes the entire stuck-note failure mode on
+       the MIDI side: there is no note-off to forget, because a note that stops
+       being declared stops sounding.
+
+       The commit marker runs EVERY sequence frame, not only frames that made a
+       note. That is what makes muting, a rate change, transport stop and a sink
+       change all release correctly without any of them knowing they had to. */
+    void declare_midi_for_frame(void) {
+        if (midi_enabled()) {
+            uint8_t ports = midi_ports();
+            for (int v = 0; v < LIFE_NUM_VOICES; ++v) {
+                if (!voice_is_audible(v)) continue;
+                for (int i = 0; i < LIFE_MAX_HELD; ++i) {
+                    const held_note_t *h = &notes[v].held[i];
+                    if (!h->active) continue;
+                    declare_midi_note_for_preset_idx(preset_for(v), h->note, h->vel, ports,
+                                                     midi_wire_channel_for(v));
+                }
             }
         }
-        if (pref_sink == LIFE_SINK_MIDI || pref_sink == LIFE_SINK_BOTH) {
-            uint8_t ports = midi_ports();
-            if (ports) midi_write(ports, MAKE_NOTEOFFMSG(midi_channel_for(v), note, 0));
+        send_declared_midi_notes();
+    }
+
+    void synth_note_on(int v, int note, int velocity) {
+        if (!synth_enabled()) return;
+        uint32_t sid = source_id_for(v, note);
+        int old_voice = allocator.find_voice(sid);
+        int new_voice = allocator.voice_allocate(sid, (uint8_t)(1 + v));
+        if (new_voice < 0) return;
+        if (new_voice != old_voice && old_voice >= 0) synth_note_up(old_voice);
+        play_synth(new_voice, preset_for(v), velocity, note << 8, true);
+    }
+
+    void synth_note_off(int v, int note) {
+        uint32_t sid = source_id_for(v, note);
+        int voice = allocator.find_voice(sid);
+        if (voice >= 0) {
+            synth_note_up(voice);
+            allocator.voice_deallocate(sid);
         }
     }
 
@@ -1082,8 +1115,8 @@ struct life_panel : panel_t {
     void release_voice(int v) {
         uint8_t released[LIFE_MAX_HELD];
         int n = voice_release_all(&notes[v], released);
-        for (int i = 0; i < n; ++i) note_off(v, released[i]);
-        last_played_mask[v] = 0;
+        for (int i = 0; i < n; ++i) synth_note_off(v, released[i]);
+        last_played_mask[v] = 0;   /* MIDI needs nothing: it is level-triggered */
     }
 
     void release_all_voices(void) {
@@ -1137,7 +1170,7 @@ struct life_panel : panel_t {
             if (velocity > 127) velocity = 127;
 
             if (voice_arm(&notes[v], note, velocity, ticks) >= 0)
-                note_on(v, note, velocity);
+                synth_note_on(v, note, velocity);
         }
     }
 
@@ -1150,7 +1183,7 @@ struct life_panel : panel_t {
         for (int v = 0; v < LIFE_NUM_VOICES; ++v) {
             uint8_t released[LIFE_MAX_HELD];
             int n = voice_tick(&notes[v], delta_time_us, released);
-            for (int i = 0; i < n; ++i) note_off(v, released[i]);
+            for (int i = 0; i < n; ++i) synth_note_off(v, released[i]);
         }
 
         if (!playing) {
@@ -1162,6 +1195,7 @@ struct life_panel : panel_t {
                 step_once_request = false;
                 step_generation();
             }
+            declare_midi_for_frame();   /* nothing declared -> everything releases */
             return;
         }
 
@@ -1200,6 +1234,9 @@ struct life_panel : panel_t {
                 traversal_advance(&trav[v], (traversal_order_t)v_order[v], LIFE_W);
             fire_voice(v);
         }
+
+        /* Once per frame, after every voice has had its say. */
+        declare_midi_for_frame();
     }
 
     /* --- simulation CCs --------------------------------------------------
@@ -1341,7 +1378,7 @@ struct life_panel : panel_t {
        delta. The right pair page; the left pair adjust. Both are system
        territory on every faceplate, so the panel never touches them. */
 
-    int settings_page_count(void) { return 15; }
+    int settings_page_count(void) { return 17; }
     int get_num_panel_settings_pages(void) override { return settings_page_count(); }
 
     static int clamp_int(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
@@ -1457,6 +1494,25 @@ struct life_panel : panel_t {
             if (d) v_pitch[v] = (int8_t)clamp_int(v_pitch[v] + d, -30, 30);
             break;
         }
+        case 15: {
+            snprintf(buf, sizeof(buf), "%d", v_preset[v] + 1);
+            int d = draw_system_style_settings_page("SYNT", buf, (v_preset[v] + 1) * 100 / 12,
+                                                   0, 0, life_voice_bright[v]);
+            if (d) {
+                release_voice(v);
+                v_preset[v] = (uint8_t)clamp_int(v_preset[v] + d, 0, 11);
+            }
+            break;
+        }
+        case 16: {
+            if (v_channel[v] < 1) snprintf(buf, sizeof(buf), "AUTO");
+            else snprintf(buf, sizeof(buf), "%d", v_channel[v]);
+            int d = draw_system_style_settings_page("CHAN", buf,
+                                                   v_channel[v] < 1 ? 0 : v_channel[v] * 100 / 16,
+                                                   0, 0, life_voice_bright[v]);
+            if (d) v_channel[v] = (int8_t)clamp_int(v_channel[v] + d, -1, 16);
+            break;
+        }
         default:
             break;
         }
@@ -1562,6 +1618,8 @@ struct life_panel : panel_t {
         FIELD("vrule", v_rule);
         FIELD("vptch", v_pitch);
         FIELD("vlen", v_length);
+        FIELD("vpre", v_preset);
+        FIELD("vchan", v_channel);
         FIELD("gen", gen_rate);
         FIELD("floor", respawn_floor);
         FIELD("seed", respawn_amount);
@@ -1588,6 +1646,8 @@ struct life_panel : panel_t {
                                                    : SEL_LAST);
             v_pitch[v] = (int8_t)(v * -3);
             v_length[v] = 60;
+            v_preset[v] = (uint8_t)v;      /* a different synth patch per voice */
+            v_channel[v] = (int8_t)(v + 1); /* and a different MIDI channel */
         }
         gen_rate = 8;
         respawn_floor = 12;
