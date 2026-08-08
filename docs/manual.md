@@ -154,7 +154,8 @@ into that voice's slot.
 
 ![Chance page](img/chance.svg)
 
-`(2,15)` flips here. Four behaviours, each **off at the left-hand pad** and
+`(2,15)` flips between the two voice pages, in both directions. Row 15 is the
+same on either one — load, sound, the page flip, and accent. Four behaviours, each **off at the left-hand pad** and
 turning up from there — one control both switches a behaviour on and says how
 hard it bites.
 

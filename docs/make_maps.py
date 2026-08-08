@@ -405,10 +405,18 @@ def chance():
         py = PAD + y * (CELL + GAP) + CELL / 2 + 4
         out.append(f'<text class="h" x="{lx}" y="{py - 2}">{esc(name)}</text>')
         out.append(f'<text class="k" x="{lx}" y="{py + 12}">{esc(desc)}</text>')
+    note(out, lx, PAD + 10 * (CELL + GAP) + 30, [
+        ("h", "row 15 - same on both"),
+        ("h", "voice pages"),
+        ("t", "LD   load a preset"),
+        ("t", "SND  the sound editor"),
+        ("t", "P2   flip play / chance"),
+        ("t", "x3-12  ACCENT"),
+    ])
     out.append(
         f'<text class="t" x="{PAD}" y="{PAD + 16*(CELL+GAP) + 18}">'
-        'Left-hand pad is OFF. These read the cell the voice landed on, so what you see on the '
-        'world is what you hear.</text>'
+        'Left-hand pad of each row is OFF. These read the cell the voice landed on, so what you '
+        'see on the world is what you hear.</text>'
     )
     out.append("</svg>")
     return "\n".join(out)

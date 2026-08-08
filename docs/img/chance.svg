@@ -320,5 +320,11 @@
 <text class="k" x="654" y="325.0">survivors hold instead</text>
 <text class="h" x="654" y="387.0">EVERY</text>
 <text class="k" x="654" y="401.0">play every 2nd/3rd/4th pass</text>
-<text class="t" x="26" y="652">Left-hand pad is OFF. These read the cell the voice landed on, so what you see on the world is what you hear.</text>
+<text class="h" x="654" y="436">row 15 - same on both</text>
+<text class="h" x="654" y="453">voice pages</text>
+<text class="t" x="654" y="470">LD   load a preset</text>
+<text class="t" x="654" y="487">SND  the sound editor</text>
+<text class="t" x="654" y="504">P2   flip play / chance</text>
+<text class="t" x="654" y="521">x3-12  ACCENT</text>
+<text class="t" x="26" y="652">Left-hand pad of each row is OFF. These read the cell the voice landed on, so what you see on the world is what you hear.</text>
 </svg>
