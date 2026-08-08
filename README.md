@@ -42,6 +42,7 @@ src/selection.h   the 11 selection rules over a column
 src/traversal.h   column order: forward, reverse, ping-pong, random
 src/scales.h      29 scale masks, degree -> note
 src/voice.h       note lifecycle, one exit path so notes cannot stick
+src/ccmap.h       incoming MIDI CC map and value scaling
 src/panel.cpp     clocks, output, drawing, touch, settings pages
 
 harness/          desktop tests + stubbed headers for the compile check

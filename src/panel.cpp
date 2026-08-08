@@ -230,6 +230,7 @@ struct life_panel : panel_t {
     uint8_t pref_sink;
     uint8_t pref_port;
     uint8_t pref_send_cc;
+    uint8_t pref_cc_in;       /* base controller number for the input block, 0 = off */
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
@@ -240,6 +241,15 @@ struct life_panel : panel_t {
     bool cc_primed;
     bool step_once_request;
     bool settings_dirty;      /* a preference changed and has not reached the SD card */
+
+    /* Incoming CC. on_midi() is an interrupt, so it does the cheapest possible
+       thing - record the value, set a bit - and on_ui() applies it on core0.
+       Setting the key from an interrupt would mean calling into the system's
+       harmonic state from an IRQ, which is not a thing worth risking for a knob
+       turn. */
+    uint8_t cc_in_value[CC_PARAM_COUNT];
+    uint8_t cc_in_last[CC_PARAM_COUNT];
+    uint64_t cc_in_pending;
 
     /* ---------------------------------------------------------------- */
 
@@ -268,6 +278,8 @@ struct life_panel : panel_t {
         step_once_request = false;
         settings_dirty = false;
         for (int i = 0; i < LIFE_NUM_CCS; ++i) last_cc[i] = 255;
+        for (int i = 0; i < CC_PARAM_COUNT; ++i) cc_in_value[i] = cc_in_last[i] = 0;
+        cc_in_pending = 0;
     }
 
     void setup_default_panel_state() override {
@@ -297,6 +309,7 @@ struct life_panel : panel_t {
         pref_sink = LIFE_SINK_BOTH;
         pref_port = 3;             /* MIDI_PORT_1 */
         pref_send_cc = 1;
+        pref_cc_in = CC_IN_DEFAULT_BASE;
     }
 
     void on_load_finished(void) override {
@@ -384,6 +397,7 @@ struct life_panel : panel_t {
         if (pref_octave > 7) pref_octave = 7;
         if (pref_sink > LIFE_SINK_BOTH) pref_sink = LIFE_SINK_BOTH;
         if (pref_port > 4) pref_port = 3;
+        if (pref_cc_in > 127 - (CC_PARAM_COUNT - 1)) pref_cc_in = 0;
         if (edit_voice >= LIFE_NUM_VOICES) edit_voice = 0;
     }
 
@@ -1064,7 +1078,7 @@ struct life_panel : panel_t {
 
     /* Global only. Per-voice config moved onto the grid, where it is one tap
        deep and visible all at once instead of fourteen side-button clicks. */
-    int settings_page_count(void) { return 10; }
+    int settings_page_count(void) { return 11; }
 
     /* Page 1 is the scene save/load picker. on_serialise() has always described
        the world and every voice setting, but without this there was no way to
@@ -1215,6 +1229,23 @@ struct life_panel : panel_t {
                               "per-voice movement.");
             break;
         }
+        case 10: {
+            if (pref_cc_in) snprintf(buf, sizeof(buf), "%d", pref_cc_in);
+            else snprintf(buf, sizeof(buf), "OFF");
+            int d = draw_system_style_settings_page("CIN ", buf, pref_cc_in * 100 / 92);
+            if (d) settings_dirty = true;
+            if (d) pref_cc_in = (uint8_t)clamp_int(pref_cc_in + d, 0,
+                                                  127 - (CC_PARAM_COUNT - 1));
+            if (pref_cc_in)
+                set_help_text("#fc2#*CC control#. - %d controllers from #fc2#*CC%d#. to "
+                              "#fc2#*CC%d#. on the system channel drive key, scale, the world "
+                              "and every voice.", CC_PARAM_COUNT, pref_cc_in,
+                              cc_last_number(pref_cc_in));
+            else
+                set_help_text("#fc2#*CC control#. - #fc2#*off#.. Turn on to drive key, scale, "
+                              "the world and every voice from a controller or a DAW.");
+            break;
+        }
         default:
             break;
         }
@@ -1222,6 +1253,8 @@ struct life_panel : panel_t {
 
     void on_ui(int delta_time_us) override {
         (void)delta_time_us;
+
+        apply_pending_cc();
 
         int page = get_scroll_page();
         if (page < 0) {
@@ -1349,6 +1382,102 @@ struct life_panel : panel_t {
     }
 
     /* ================================================================== */
+    /* Incoming MIDI                                                      */
+    /* ================================================================== */
+
+    void on_midi(uint32_t midimsg) override {
+        if (!IS_CC(midimsg)) return;
+        if (CHANNEL_BYTE(midimsg) != (get_system_midi_channel() - 1)) return;
+
+        int p = cc_param_for_number(CC_NUMBER(midimsg), pref_cc_in);
+        if (p < 0) return;
+
+        cc_in_value[p] = CC_VALUE(midimsg);
+        cc_in_pending |= (uint64_t)1 << p;
+    }
+
+    void apply_cc(int p) {
+        int v = cc_in_value[p];
+        int prev = cc_in_last[p];
+        cc_in_last[p] = (uint8_t)v;
+
+        int voice = cc_voice_for_param(p);
+        if (voice >= 0) {
+            switch (cc_group_for_param(p)) {
+            case 0: {                                   /* mute */
+                uint8_t want = v >= 64 ? 1 : 0;
+                if (v_muted[voice] != want) {
+                    v_muted[voice] = want;
+                    if (!voice_is_audible(voice)) release_voice(voice);
+                }
+                return;
+            }
+            case 1: {                                   /* rate */
+                uint8_t r = (uint8_t)cc_to_index(v, LIFE_NUM_RATES);
+                if (v_rate[voice] != r) {
+                    release_voice(voice);               /* the step length changed */
+                    v_rate[voice] = r;
+                    last_edge_us[voice] = 0;
+                    step_us[voice] = LIFE_DEFAULT_STEP_US;
+                }
+                return;
+            }
+            case 2: v_rule[voice] = (uint8_t)cc_to_index(v, SEL_COUNT); return;
+            case 3: v_order[voice] = (uint8_t)cc_to_index(v, TRAV_COUNT); return;
+            case 4: v_pitch[voice] = (int8_t)cc_to_range(v, -LIFE_PITCH_CENTRE,
+                                                         LIFE_PITCH_CENTRE); return;
+            case 5: v_length[voice] = (uint8_t)(cc_to_range(v, 1, 10) * 10); return;
+            default: return;
+            }
+        }
+
+        switch (p) {
+        case CC_KEY:
+            pref_root = (uint8_t)cc_to_index(v, 12);
+            apply_scale_to_system();
+            settings_dirty = true;
+            break;
+        case CC_SCALE:
+            pref_scale = (uint8_t)cc_to_index(v, LIFE_NUM_SCALES);
+            apply_scale_to_system();
+            settings_dirty = true;
+            break;
+        case CC_OCTAVE:
+            pref_octave = (uint8_t)cc_to_range(v, 1, 7);
+            settings_dirty = true;
+            break;
+        case CC_GEN_RATE: gen_rate = (uint8_t)cc_to_index(v, LIFE_NUM_RATES); break;
+        case CC_FLOOR: respawn_floor = (uint8_t)cc_to_range(v, 0, 64); break;
+        case CC_SEED_AMOUNT: respawn_amount = (uint8_t)cc_to_range(v, 1, 64); break;
+        case CC_STALL: respawn_stable = (uint8_t)cc_to_range(v, 0, 32); break;
+        case CC_FREEZE: freeze_life = v >= 64 ? 1 : 0; break;
+        case CC_CLEAR:
+            if (cc_is_press(prev, v)) { on_sequence_lock_guard_t g; life_clear(&world); }
+            break;
+        case CC_SEED_NOW:
+            if (cc_is_press(prev, v)) {
+                on_sequence_lock_guard_t g;
+                life_respawn_apply(&world, &respawn, (int)respawn_amount);
+            }
+            break;
+        case CC_STEP:
+            if (cc_is_press(prev, v)) step_once_request = true;
+            break;
+        default: break;
+        }
+    }
+
+    /* Drain on core0. on_midi can add bits while we are here, so take the whole
+       word and clear it in one go rather than testing and clearing per bit. */
+    void apply_pending_cc(void) {
+        uint64_t pending = cc_in_pending;
+        if (!pending) return;
+        cc_in_pending &= ~pending;
+        for (int p = 0; p < CC_PARAM_COUNT; ++p)
+            if (pending & ((uint64_t)1 << p)) apply_cc(p);
+    }
+
+    /* ================================================================== */
     /* Persistence                                                        */
     /* ================================================================== */
 
@@ -1423,6 +1552,7 @@ struct life_panel : panel_t {
             pref_sink = LIFE_SINK_BOTH;
             pref_port = 3;
             pref_send_cc = 1;
+            pref_cc_in = CC_IN_DEFAULT_BASE;
         }
 
         OBJECT_BEGIN(s);
@@ -1432,6 +1562,7 @@ struct life_panel : panel_t {
         FIELD("sink", pref_sink);
         FIELD("port", pref_port);
         FIELD("cc", pref_send_cc);
+        FIELD("ccin", pref_cc_in);
         OBJECT_END(s);
 
         clamp_settings();

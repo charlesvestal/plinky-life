@@ -116,6 +116,16 @@ void synth_note_up(int voice);
 #define MAKE_NOTEONMSG(channel, note, velocity) MIDIMSG(0x90u | ((channel) & 0x0f), (note), (velocity))
 #define MAKE_NOTEOFFMSG(channel, note, velocity) MIDIMSG(0x80u | ((channel) & 0x0f), (note), (velocity))
 
+/* Incoming-message accessors, from llm.txt's MIDI section. */
+#define STATUS_BYTE(m) ((uint8_t)((uint32_t)(m) >> 0))
+#define STATUS_NIBBLE(m) ((uint8_t)(STATUS_BYTE(m) & 0xf0))
+#define CHANNEL_BYTE(m) ((uint8_t)(STATUS_BYTE(m) & 0x0f))
+#define DATA1_BYTE(m) ((uint8_t)((uint32_t)(m) >> 8))
+#define DATA2_BYTE(m) ((uint8_t)((uint32_t)(m) >> 16))
+#define CC_NUMBER(m) DATA1_BYTE(m)
+#define CC_VALUE(m) DATA2_BYTE(m)
+#define IS_CC(m) (STATUS_NIBBLE(m) == 0xb0)
+
 bool midi_write(uint8_t ports, uint32_t midimsg);
 static inline int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 static inline int midi_write_cc(int ports, int channel, int cc, int val) {

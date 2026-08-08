@@ -261,7 +261,8 @@ second screen explains each page as you land on it.
 | `STAB` | stall limit | generations of no change that count as stuck |
 | `OUT ` | output | synth · MIDI · both |
 | `PORT` | MIDI ports | off · USB1 · TRS1 · port 1 · all |
-| `CC  ` | simulation CCs | on/off — see below |
+| `CC  ` | simulation CCs out | on/off — see below |
+| `CIN ` | CC control in | off, or the first controller number |
 
 Key and scale set the **whole instrument's** harmony, not just this panel's, so
 the rest of the Plinky follows along.
@@ -307,7 +308,38 @@ Set `FLOR` and `STAB` to 0 if you'd rather it be allowed to die.
 Each voice has its own **sound** and its own **MIDI channel**, defaulting to
 channels 1–4. `OUT` chooses the internal synth, MIDI, or both.
 
-### Simulation CCs
+### Controlling Life from a DAW
+
+With `CIN` set — 30 by default — a block of 35 controllers on the system MIDI
+channel drives the panel. Counting up from the base:
+
+| Offset | |
+|---|---|
+| +0 | key |
+| +1 | scale |
+| +2 | octave |
+| +3 | generation rate |
+| +4 | respawn floor |
+| +5 | respawn amount |
+| +6 | stall limit |
+| +7 | clear the world |
+| +8 | seed now |
+| +9 | freeze |
+| +10 | step one generation |
+| +11 … +14 | mute, voices 1–4 |
+| +15 … +18 | rate, voices 1–4 |
+| +19 … +22 | rule, voices 1–4 |
+| +23 … +26 | order, voices 1–4 |
+| +27 … +30 | pitch, voices 1–4 |
+| +31 … +34 | length, voices 1–4 |
+
+The per-voice controls are grouped **by parameter**, so a row of four knobs sets
+the same thing on all four voices.
+
+Clear, seed and step are momentary — they fire once when the value crosses
+halfway going up, so a button that sends 127 then 0 fires once.
+
+### Simulation CCs out
 
 With `CC` on, Life sends eight controllers describing the world itself, once per
 generation — modulation taken from the world's own behaviour:

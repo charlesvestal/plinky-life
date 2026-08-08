@@ -15,6 +15,7 @@
 #include "../src/traversal.h"
 #include "../src/scales.h"
 #include "../src/voice.h"
+#include "../src/ccmap.h"
 
 static int failures = 0;
 static int checks = 0;
@@ -603,6 +604,100 @@ static void test_poly_budget_respects_the_held_ceiling(void) {
     CHECK(voice_poly_budget(64, 0, 1, 16) == 16, "must not exceed the held-note array");
 }
 
+/* --------------------------------------------------------------- ccmap.h -- */
+
+static void test_cc_block_is_contiguous_and_bounded(void) {
+    int base = CC_IN_DEFAULT_BASE;
+    CHECK(cc_param_for_number(base - 1, base) == -1, "a CC below the block should be ignored");
+    CHECK(cc_param_for_number(base, base) == CC_KEY, "the first CC should be KEY");
+    CHECK(cc_param_for_number(cc_last_number(base), base) == CC_PARAM_COUNT - 1,
+          "the last CC should be the last parameter");
+    CHECK(cc_param_for_number(cc_last_number(base) + 1, base) == -1,
+          "a CC past the block should be ignored");
+    for (int i = 0; i < CC_PARAM_COUNT; ++i)
+        CHECK(cc_param_for_number(base + i, base) == i, "CC %d did not map to param %d",
+              base + i, i);
+}
+
+static void test_cc_block_can_be_disabled(void) {
+    for (int cc = 0; cc < 128; ++cc)
+        CHECK(cc_param_for_number(cc, 0) == -1, "base 0 must ignore CC %d", cc);
+}
+
+static void test_cc_block_clears_the_outgoing_sim_ccs_by_default(void) {
+    /* The panel SENDS 20..27. The default input block must not sit on them. */
+    for (int cc = 20; cc <= 27; ++cc)
+        CHECK(cc_param_for_number(cc, CC_IN_DEFAULT_BASE) == -1,
+              "default input block collides with outgoing CC %d", cc);
+}
+
+static void test_cc_index_spans_the_whole_range(void) {
+    /* 0 must reach the first option and 127 the last, for every size we use. */
+    const int counts[] = {2, 4, 7, 10, 11, 12, 15, 16, 29, 65};
+    for (unsigned k = 0; k < sizeof(counts) / sizeof(counts[0]); ++k) {
+        int n = counts[k];
+        CHECK(cc_to_index(0, n) == 0, "cc 0 should give option 0 of %d", n);
+        CHECK(cc_to_index(127, n) == n - 1, "cc 127 should give option %d of %d",
+              n - 1, n);
+        for (int v = 0; v <= 127; ++v) {
+            int i = cc_to_index(v, n);
+            CHECK(i >= 0 && i < n, "cc %d of %d options gave %d", v, n, i);
+            if (i < 0 || i >= n) return;
+        }
+    }
+}
+
+static void test_cc_index_is_monotonic(void) {
+    for (int n = 1; n <= 32; ++n) {
+        int last = 0;
+        for (int v = 0; v <= 127; ++v) {
+            int i = cc_to_index(v, n);
+            CHECK(i >= last, "cc_to_index went backwards at %d of %d options", v, n);
+            if (i < last) return;
+            last = i;
+        }
+    }
+}
+
+static void test_cc_to_range_hits_both_ends(void) {
+    CHECK(cc_to_range(0, 1, 7) == 1, "octave low end");
+    CHECK(cc_to_range(127, 1, 7) == 7, "octave high end");
+    CHECK(cc_to_range(0, -7, 7) == -7, "pitch low end");
+    CHECK(cc_to_range(127, -7, 7) == 7, "pitch high end");
+    CHECK(cc_to_range(64, -7, 7) == 0, "pitch centre should be 0, got %d",
+          cc_to_range(64, -7, 7));
+}
+
+static void test_cc_press_fires_once_per_press(void) {
+    CHECK(cc_is_press(0, 127), "a button press should fire");
+    CHECK(!cc_is_press(127, 127), "holding must not fire again");
+    CHECK(!cc_is_press(127, 0), "releasing must not fire");
+    CHECK(!cc_is_press(0, 63), "below halfway must not fire");
+    CHECK(cc_is_press(63, 64), "halfway is the threshold");
+}
+
+static void test_cc_voice_and_group_split(void) {
+    CHECK(cc_voice_for_param(CC_KEY) == -1, "KEY is global");
+    CHECK(cc_voice_for_param(CC_STEP) == -1, "STEP is global");
+    const int firsts[6] = { CC_MUTE_1, CC_RATE_1, CC_RULE_1, CC_ORDER_1,
+                            CC_PITCH_1, CC_LENGTH_1 };
+    for (int g = 0; g < 6; ++g)
+        for (int v = 0; v < 4; ++v) {
+            int p = firsts[g] + v;
+            CHECK(cc_voice_for_param(p) == v, "param %d should be voice %d, got %d",
+                  p, v, cc_voice_for_param(p));
+            CHECK(cc_group_for_param(p) == g, "param %d should be group %d, got %d",
+                  p, g, cc_group_for_param(p));
+        }
+}
+
+static void test_cc_per_voice_params_are_four_apart(void) {
+    /* A row of four knobs must hit the same parameter on the four voices. */
+    CHECK(CC_RATE_2 - CC_RATE_1 == 1 && CC_RATE_4 - CC_RATE_1 == 3,
+          "the four rate CCs must be consecutive");
+    CHECK(CC_RULE_1 - CC_RATE_1 == 4, "parameter groups must be four apart");
+}
+
 /* ------------------------------------------------------------------------- */
 
 int main(void) {
@@ -655,6 +750,16 @@ int main(void) {
     test_poly_budget_splits_between_chords();
     test_poly_budget_never_silences_a_voice();
     test_poly_budget_respects_the_held_ceiling();
+
+    test_cc_block_is_contiguous_and_bounded();
+    test_cc_block_can_be_disabled();
+    test_cc_block_clears_the_outgoing_sim_ccs_by_default();
+    test_cc_index_spans_the_whole_range();
+    test_cc_index_is_monotonic();
+    test_cc_to_range_hits_both_ends();
+    test_cc_press_fires_once_per_press();
+    test_cc_voice_and_group_split();
+    test_cc_per_voice_params_are_four_apart();
 
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
