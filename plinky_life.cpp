@@ -852,6 +852,7 @@ struct life_panel : panel_t {
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
     bool modifier_held;
+    bool action_latch;        /* tap the corner to keep the action layer open */
     uint8_t solo_mask;
     uint8_t last_cc[LIFE_NUM_CCS];
     bool cc_primed;
@@ -879,6 +880,7 @@ struct life_panel : panel_t {
         solo_mask = 0;
         edit_voice = 0;
         modifier_held = false;
+        action_latch = false;
         cc_primed = false;
         step_once_request = false;
         for (int i = 0; i < LIFE_NUM_CCS; ++i) last_cc[i] = 255;
@@ -1258,73 +1260,78 @@ struct life_panel : panel_t {
         return 0;
     }
 
-    void draw_world(bool dim) {
-        for (int y = 0; y < LIFE_H; ++y)
-            for (int x = 0; x < LIFE_W; ++x) {
-                if (x == LIFE_MODIFIER_X && y == LIFE_MODIFIER_Y) continue;
-                set_led(x, y, cell_colour(x, y, dim));
-            }
+    /* --- the action layer -------------------------------------------------
+
+       Pads that do something while the modifier is held. Everything else keeps
+       showing the world, dimmed, so you never lose your place. */
+
+    bool is_action_pad(int x, int y) const {
+        if (y == 14) return x < 8;                 /* 0-3 mute, 4-7 solo */
+        if (y == 15) return x < 5;                 /* clear seed freeze step play */
+        return false;
     }
 
-    /* The world is painted by tapping. Widgets, not raw touch: SYSTEM_NOTES.md
-       section 4 is emphatic that a raw pressure dip reads as a release and
-       pressure sliding in from a neighbour reads as a press. */
-    void handle_world_touch(void) {
-        for (int y = 0; y < LIFE_H; ++y) {
-            for (int x = 0; x < LIFE_W; ++x) {
-                if (x == LIFE_MODIFIER_X && y == LIFE_MODIFIER_Y) continue;
-                if (invisible_button(x, y, NOT_ISOLATED) && is_last_widget_pressed()) {
-                    /* on_ui and on_sequence share the world, and on_sequence can
-                       interrupt this at any instruction. */
-                    on_sequence_lock_guard_t guard;
-                    life_toggle(&world, x, y);
-                }
+    uint32_t action_colour(int x, int y) const {
+        if (y == 14) {
+            if (x < 4) return voice_is_audible(x) ? life_voice_bright[x] : LIFE_COL_OFF;
+            if (x < 8) return (solo_mask & (1u << (x - 4))) ? life_voice_bright[x - 4]
+                                                            : life_voice_dim[x - 4];
+        } else if (y == 15) {
+            switch (x) {
+            case 0: return LIFE_COL_DANGER;
+            case 1: return LIFE_COL_ACTION;
+            case 2: return freeze_life ? LIFE_COL_DANGER : LIFE_COL_ACTION;
+            case 3: return LIFE_COL_ACTION;
+            case 4: return is_transport_playing() ? LIFE_COL_ACTION : LIFE_COL_OFF;
+            default: break;
             }
         }
+        return cell_colour(x, y, true);            /* the dimmed world underneath */
     }
 
-    /* --- the held-modifier action layer ---------------------------------- */
-
-    void draw_action_layer(void) {
-        draw_world(true);
-
-        for (int v = 0; v < LIFE_NUM_VOICES; ++v) {
-            bool audible = voice_is_audible(v);
-            if (button(v, 14, audible ? life_voice_bright[v] : LIFE_COL_OFF, NOT_ISOLATED,
-                       "mute voice")) {
-                v_muted[v] = v_muted[v] ? 0 : 1;
-                if (!voice_is_audible(v)) release_voice(v);
-            }
-            bool soloed = (solo_mask & (1u << v)) != 0;
-            if (button(v + 4, 14, soloed ? life_voice_bright[v] : life_voice_dim[v],
-                       NOT_ISOLATED, "solo voice")) {
-                solo_mask ^= (uint8_t)(1u << v);
-                for (int i = 0; i < LIFE_NUM_VOICES; ++i)
-                    if (!voice_is_audible(i)) release_voice(i);
-            }
+    static const char *action_help(int x, int y) {
+        if (y == 14) return x < 4 ? "mute this voice" : "solo this voice";
+        if (y == 15) switch (x) {
+        case 0: return "clear the world";
+        case 1: return "respawn cells now";
+        case 2: return "freeze evolution";
+        case 3: return "step one generation";
+        case 4: return "start or stop";
+        default: break;
         }
+        return nullptr;
+    }
 
-        if (button(0, 15, LIFE_COL_DANGER, NOT_ISOLATED, "clear the world")) {
-            on_sequence_lock_guard_t guard;
-            life_clear(&world);
+    void do_action(int x, int y) {
+        printf("life: action pad (%d,%d)\n", x, y);
+        if (y == 14 && x < 4) {
+            v_muted[x] = v_muted[x] ? 0 : 1;
+            if (!voice_is_audible(x)) release_voice(x);
+            return;
         }
-        if (button(1, 15, LIFE_COL_ACTION, NOT_ISOLATED, "respawn cells now")) {
-            on_sequence_lock_guard_t guard;
-            life_respawn_apply(&world, &respawn, (int)respawn_amount);
+        if (y == 14 && x < 8) {
+            solo_mask ^= (uint8_t)(1u << (x - 4));
+            for (int i = 0; i < LIFE_NUM_VOICES; ++i)
+                if (!voice_is_audible(i)) release_voice(i);
+            return;
         }
-        if (button(2, 15, freeze_life ? LIFE_COL_DANGER : LIFE_COL_ACTION, NOT_ISOLATED,
-                   "freeze evolution"))
-            freeze_life = freeze_life ? 0 : 1;
-        if (button(3, 15, LIFE_COL_ACTION, NOT_ISOLATED, "step one generation"))
-            step_once_request = true;
-        if (button(4, 15, is_transport_playing() ? LIFE_COL_ACTION : LIFE_COL_OFF, NOT_ISOLATED,
-                   "start or stop")) {
+        if (y != 15) return;
+        switch (x) {
+        case 0: { on_sequence_lock_guard_t guard; life_clear(&world); break; }
+        case 1: { on_sequence_lock_guard_t guard;
+                  life_respawn_apply(&world, &respawn, (int)respawn_amount); break; }
+        case 2: freeze_life = freeze_life ? 0 : 1; break;
+        case 3: step_once_request = true; break;
+        case 4:
             if (is_transport_playing()) {
                 stop_transport();
                 release_all_voices();
             } else {
                 start_transport();
             }
+            printf("life: transport now %s\n", is_transport_playing() ? "playing" : "stopped");
+            break;
+        default: break;
         }
     }
 
@@ -1466,21 +1473,64 @@ struct life_panel : panel_t {
 
         leds_clear();
 
-        /* SYSTEM_NOTES.md section 4: emit the modifier ONCE, before anything
-           that tests it, and NOT_ISOLATED because being held while another pad
-           is tapped IS the gesture. Everything else reads the member. */
-        modifier_held = shift_button(LIFE_MODIFIER_X, LIFE_MODIFIER_Y, LIFE_COL_MODIFIER,
-                                     NOT_ISOLATED, "hold for mutes, clear, transport");
+        /* SYSTEM_NOTES.md section 4, and the read_modifiers() discipline in
+           plinky-ambiotica: emit the modifier ONCE, at the top, BEFORE anything
+           that tests it, NOT_ISOLATED because being held while another pad is
+           tapped IS the gesture. Read its edges immediately, with nothing in
+           between - is_last_widget_*() refers to the most recent widget.
 
-        if (modifier_held) {
-            draw_action_layer();
-            set_help_text("Life #fc2#*actions#. - mute, solo, clear, seed, freeze, step, play");
-        } else {
-            draw_world(false);
-            handle_world_touch();
-            set_help_text("Life - #fc2#*%d#. alive, %s %s", last_stats.alive,
-                          life_note_names[pref_root], life_scale_long_names[pref_scale]);
+           Pass the dim colour to the widget and set_led the bright one over it
+           when active: set_led lands after the widget and wins, so the pad
+           highlights in the same frame without emitting a second widget. */
+        modifier_held = shift_button(LIFE_MODIFIER_X, LIFE_MODIFIER_Y, LIFE_COL_MODIFIER,
+                                     NOT_ISOLATED, "hold or tap for mutes, clear, transport");
+        bool modifier_pressed = is_last_widget_pressed();
+
+        /* The layer is available by HOLD or by LATCH. Holding is the Plinky
+           grammar, but it is also the fragile half - so a tap latches the layer
+           open and any action closes it again. Either gesture works, and
+           transport is reachable without relying on hold detection at all. */
+        if (modifier_pressed) action_latch = !action_latch;
+        bool action_mode = modifier_held || action_latch;
+
+        if (action_mode) set_led(LIFE_MODIFIER_X, LIFE_MODIFIER_Y, LED_RGB(31, 0, 24));
+
+        /* ONE widget per pad, in the SAME order, EVERY frame. The mode changes
+           only the colour and what a press does.
+
+           This is the bug that made the modifier appear to cancel itself: the
+           previous version emitted 255 invisible_buttons in world mode and 13
+           buttons in action mode, so the widget set changed shape the instant
+           the corner went down, and the held state went with it. */
+        for (int y = 0; y < LIFE_H; ++y) {
+            for (int x = 0; x < LIFE_W; ++x) {
+                if (x == LIFE_MODIFIER_X && y == LIFE_MODIFIER_Y) continue;
+
+                uint32_t col = action_mode ? action_colour(x, y) : cell_colour(x, y, false);
+                const char *help = action_mode ? action_help(x, y) : nullptr;
+
+                if (button(x, y, col, NOT_ISOLATED, help)) {
+                    if (action_mode) {
+                        if (is_action_pad(x, y)) {
+                            do_action(x, y);
+                            action_latch = false;   /* a latched layer closes after one action */
+                        }
+                    } else {
+                        /* on_ui and on_sequence share the world, and on_sequence
+                           can interrupt this at any instruction. */
+                        on_sequence_lock_guard_t guard;
+                        life_toggle(&world, x, y);
+                    }
+                }
+            }
         }
+
+        if (action_mode)
+            set_help_text("Life #fc2#*actions#. - %s", is_transport_playing() ? "playing" : "stopped");
+        else
+            set_help_text("Life - #fc2#*%d#. alive, %s %s%s", last_stats.alive,
+                          life_note_names[pref_root], life_scale_long_names[pref_scale],
+                          is_transport_playing() ? "" : " (stopped)");
     }
 
     /* ================================================================== */
