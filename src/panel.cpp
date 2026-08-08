@@ -803,7 +803,9 @@ struct life_panel : panel_t {
        delta. The right pair page; the left pair adjust. Both are system
        territory on every faceplate, so the panel never touches them. */
 
-    int settings_page_count(void) { return 17; }
+    /* Global only. Per-voice config moved onto the grid, where it is one tap
+       deep and visible all at once instead of fourteen side-button clicks. */
+    int settings_page_count(void) { return 10; }
     int get_num_panel_settings_pages(void) override { return settings_page_count(); }
 
     static int clamp_int(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
@@ -811,7 +813,6 @@ struct life_panel : panel_t {
     void draw_settings(int page) {
         int idx = -1 - page;                       /* page -1 is our page 0 */
         char buf[8];
-        int v = edit_voice;
 
         switch (idx) {
         case 0: {
@@ -878,64 +879,6 @@ struct life_panel : panel_t {
             bool on = pref_send_cc != 0;
             int d = draw_system_style_bool_settings_page("SIM ", on);
             if (d) pref_send_cc = on ? 0 : 1;
-            break;
-        }
-        case 10: {
-            snprintf(buf, sizeof(buf), "V%d", v + 1);
-            int d = draw_system_style_settings_page("EDIT", buf, (v + 1) * 25,
-                                                   0, 0, life_voice_bright[v]);
-            if (d) edit_voice = (uint8_t)clamp_int(v + d, 0, LIFE_NUM_VOICES - 1);
-            break;
-        }
-        case 11: {
-            int d = draw_system_style_enum_settings_page("RATE", v_rate[v], life_rate_names,
-                                                        LIFE_NUM_RATES, life_voice_bright[v]);
-            if (d) {
-                release_voice(v);                  /* the step length just changed */
-                v_rate[v] = (uint8_t)clamp_int(v_rate[v] + d, 0, LIFE_NUM_RATES - 1);
-                last_edge_us[v] = 0;
-                step_us[v] = LIFE_DEFAULT_STEP_US;
-            }
-            break;
-        }
-        case 12: {
-            int d = draw_system_style_enum_settings_page("ORDR", v_order[v], life_trav_names,
-                                                        TRAV_COUNT, life_voice_bright[v]);
-            if (d) v_order[v] = (uint8_t)clamp_int(v_order[v] + d, 0, TRAV_COUNT - 1);
-            break;
-        }
-        case 13: {
-            int d = draw_system_style_enum_settings_page("RULE", v_rule[v], life_sel_names,
-                                                        SEL_COUNT, life_voice_bright[v]);
-            if (d) v_rule[v] = (uint8_t)clamp_int(v_rule[v] + d, 0, SEL_COUNT - 1);
-            break;
-        }
-        case 14: {
-            /* Pitch offset and note length share a page to keep the page count
-               walkable with two buttons: length is the bar, pitch the number. */
-            snprintf(buf, sizeof(buf), "%+d", v_pitch[v]);
-            int d = draw_system_style_settings_page("PTCH", buf, v_length[v],
-                                                   0, 0, life_voice_bright[v]);
-            if (d) v_pitch[v] = (int8_t)clamp_int(v_pitch[v] + d, -30, 30);
-            break;
-        }
-        case 15: {
-            snprintf(buf, sizeof(buf), "%d", v_preset[v] + 1);
-            int d = draw_system_style_settings_page("SYNT", buf, (v_preset[v] + 1) * 100 / 12,
-                                                   0, 0, life_voice_bright[v]);
-            if (d) {
-                release_voice(v);
-                v_preset[v] = (uint8_t)clamp_int(v_preset[v] + d, 0, 11);
-            }
-            break;
-        }
-        case 16: {
-            if (v_channel[v] < 1) snprintf(buf, sizeof(buf), "AUTO");
-            else snprintf(buf, sizeof(buf), "%d", v_channel[v]);
-            int d = draw_system_style_settings_page("CHAN", buf,
-                                                   v_channel[v] < 1 ? 0 : v_channel[v] * 100 / 16,
-                                                   0, 0, life_voice_bright[v]);
-            if (d) v_channel[v] = (int8_t)clamp_int(v_channel[v] + d, -1, 16);
             break;
         }
         default:
