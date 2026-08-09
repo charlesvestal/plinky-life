@@ -71,3 +71,12 @@ panel.
 
 Conway's Game of Life, by way of ZOA's idea of using it as a musical palette rather than a
 visualisation.
+
+## How this was built
+
+This panel was built with help from coding agents like Claude, but with significant design,
+oversight and hours from a human (me). If that's not to your taste, totally fine!
+
+More so than my other panels: every commit here carries a `Co-Authored-By` trailer. What the
+instrument does, how it is laid out, and everything that had to be checked on real hardware
+came from me.
