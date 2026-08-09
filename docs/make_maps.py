@@ -42,7 +42,8 @@ PARAM_ROWS = [
 ]
 
 LOAD_X, SOUND_X, SOUND_Y = 0, 1, 15   # load a preset / edit this voice's sound
-PLAY_X = 3                            # play this voice by hand
+PLY_X = 3                             # play this voice by hand (NOT the transport
+                                      # play pad, which is PLAY_X at 15)
 VPAGE_X = 2                           # flip to the chance page
 
 CHANCE_ROWS = [
@@ -114,8 +115,31 @@ def transport(out):
 
 def grid_size(label_w=LABEL_W):
     w = PAD * 2 + 16 * (CELL + GAP) + label_w
-    h = PAD * 2 + 16 * (CELL + GAP) + 30
+    h = PAD * 2 + 16 * (CELL + GAP) + 46   # room for a two-line caption
     return w, h
+
+
+def caption(out, w, h, text):
+    """Bottom-of-map caption, wrapped to the page.
+
+    A long caption used to run off the right edge and get clipped, silently.
+    Wrapping is measured against the actual width rather than guessed, and
+    check_captions() fails the build if a line still does not fit."""
+    avail = w - PAD * 2
+    per_line = max(20, int(avail / 6.6))
+    words, lines, cur = text.split(), [], ""
+    for word in words:
+        trial = (cur + " " + word).strip()
+        if len(trial) > per_line and cur:
+            lines.append(cur)
+            cur = word
+        else:
+            cur = trial
+    if cur:
+        lines.append(cur)
+    for i, line in enumerate(lines):
+        out.append(f'<text class="t" x="{PAD}" y="{h - 26 + i * 15}">{esc(line)}</text>')
+    return len(lines)
 
 
 def note(out, x, y, lines):
@@ -280,7 +304,7 @@ def voice():
     pad(out, LOAD_X, SOUND_Y, "#4a3c8f", "LD", "#fff")
     pad(out, SOUND_X, SOUND_Y, ACTION, "SND", "#000")
     pad(out, VPAGE_X, SOUND_Y, "#5a3000", "P2", "#000")
-    pad(out, PLAY_X, SOUND_Y, V[1], "PLY", "#000")
+    pad(out, PLY_X, SOUND_Y, V[1], "PLY", "#000")
     transport(out)
     lx = PAD + 16 * (CELL + GAP) + 20
     ly = PAD
@@ -290,11 +314,9 @@ def voice():
         py = PAD + y * (CELL + GAP) + CELL / 2 + 4
         out.append(f'<text class="h" x="{lx}" y="{py - 2}">{esc(name)}</text>')
         out.append(f'<text class="k" x="{lx}" y="{py + 12}">{esc(desc)}</text>')
-    out.append(
-        f'<text class="t" x="{PAD}" y="{PAD + 16*(CELL+GAP) + 18}">'
-        'Selected pad bright; the rest of the row dim. Row 15: LD loads a preset, SND edits '
-        'the sound, P2 flips to the behaviour page, PLY plays this voice by hand.</text>'
-    )
+    caption(out, w, h,
+            "Selected pad bright; the rest of the row dim. Row 15: LD loads a preset, "
+            "SND edits the sound, P2 flips to the behaviour page, PLY plays this voice by hand.")
     out.append("</svg>")
     return "\n".join(out)
 
@@ -409,7 +431,7 @@ def chance():
     pad(out, LOAD_X, SOUND_Y, "#4a3c8f", "LD", "#fff")
     pad(out, SOUND_X, SOUND_Y, ACTION, "SND", "#000")
     pad(out, VPAGE_X, SOUND_Y, "#c86400", "P2", "#000")
-    pad(out, PLAY_X, SOUND_Y, V[1], "PLY", "#000")
+    pad(out, PLY_X, SOUND_Y, V[1], "PLY", "#000")
     transport(out)
     lx = PAD + 16 * (CELL + GAP) + 20
     ly = PAD
@@ -442,11 +464,9 @@ def chance():
                f'style="font-size:26px;font-weight:700;font-family:ui-monospace,monospace">AC 60</text>')
     out.append(f'<text class="k" x="{zx1}" y="{zy1 + 16}" text-anchor="end" fill="{V[3]}">'
                'readout zone - the held value appears here</text>')
-    out.append(
-        f'<text class="t" x="{PAD}" y="{PAD + 16*(CELL+GAP) + 18}">'
-        'Left-hand pad of each row is OFF. Hold a pad and the zone furthest from your hand is '
-        'blanked and shows the value, tagged.</text>'
-    )
+    caption(out, w, h,
+            "Left-hand pad of each row is OFF. Hold a pad and the zone furthest from your "
+            "hand is blanked and shows the value, tagged.")
     out.append("</svg>")
     return "\n".join(out)
 
@@ -521,7 +541,30 @@ def sound():
     return "\n".join(out)
 
 
+def check_constants():
+    """Guard against a repeat of PLY_X being spelled PLAY_X and quietly moving
+    the transport pad. Generated maps only stay honest if the generator does."""
+    assert (MOD_X, STOP_X, PLAY_X, ROW) == (13, 14, 15, 15), "transport moved"
+    assert PLY_X == 3 and VPAGE_X == 2, "voice-editor row 15 moved"
+    assert LOAD_X == 0 and SOUND_X == 1, "voice-editor row 15 moved"
+    assert len({LOAD_X, SOUND_X, VPAGE_X, PLY_X, MOD_X, STOP_X, PLAY_X}) == 7, \
+        "two row-15 pads share a column"
+
+
+def check_captions():
+    """No caption may run off the edge of its own map."""
+    import re
+    for name in ("world", "action", "voice", "chance", "sound", "sound_printed"):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "img", name + ".svg")
+        svg = open(path).read()
+        width = int(re.search(r'width="(\d+)"', svg).group(1))
+        for m in re.finditer(r'<text class="t" x="(\d+)"[^>]*>([^<]+)</text>', svg):
+            need = int(m.group(1)) + len(m.group(2)) * 6.6
+            assert need <= width, f"{name}.svg: caption overflows by {need - width:.0f}px"
+
+
 def main():
+    check_constants()
     here = os.path.dirname(os.path.abspath(__file__))
     outdir = os.path.join(here, "img")
     os.makedirs(outdir, exist_ok=True)
@@ -531,6 +574,7 @@ def main():
         with open(path, "w") as f:
             f.write(fn())
         print("wrote", os.path.relpath(path, os.path.dirname(here)))
+    check_captions()
 
 
 if __name__ == "__main__":

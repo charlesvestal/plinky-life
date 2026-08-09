@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="910" height="690" viewBox="0 0 910 690" role="img" aria-label="plinky-life world view">
-<rect width="910" height="690" rx="10" fill="#0b0b0e"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="910" height="706" viewBox="0 0 910 706" role="img" aria-label="plinky-life world view">
+<rect width="910" height="706" rx="10" fill="#0b0b0e"/>
 <style>text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.t{font-size:11px;fill:#c9c9d4}.h{font-size:14px;font-weight:700;fill:#c9c9d4}.k{font-size:10px;fill:#71717f}.p{font-size:9px;font-weight:700}</style>
 <text class="k" x="43.0" y="18" text-anchor="middle">0</text>
 <text class="k" x="18" y="46.5" text-anchor="end">0</text>
@@ -289,9 +289,9 @@
 <rect x="520" y="596" width="34" height="34" rx="7" fill="#c81ea0"/>
 <text class="p" x="537.0" y="616.5" text-anchor="middle" fill="#fff">×</text>
 <rect x="558" y="596" width="34" height="34" rx="7" fill="#d4341a"/>
-<rect x="140" y="596" width="34" height="34" rx="7" fill="#1fd455"/>
+<rect x="596" y="596" width="34" height="34" rx="7" fill="#1fd455"/>
 <rect x="569" y="607" width="12" height="12" rx="2" fill="#fff"/>
-<path d="M152 606 L164 613 L152 620 Z" fill="#04240f"/>
+<path d="M608 606 L620 613 L608 620 Z" fill="#04240f"/>
 <text class="h" x="658" y="40">WORLD</text>
 <text class="t" x="658" y="57"></text>
 <text class="t" x="658" y="74">Tap any pad to toggle that cell.</text>
