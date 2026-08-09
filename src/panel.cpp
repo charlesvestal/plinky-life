@@ -870,12 +870,12 @@ struct life_panel : panel_t {
             int edges = voice_div[v].update(phase, r->num, r->den, UPDATE_DIV_ON_QUARTER_NOTE);
             if (edges <= 0) continue;
 
-            if (!voice_is_audible(v)) {
-                if (voice_num_held(&notes[v])) release_voice(v);
-                rat_left[v] = 0;
-                continue;
-            }
-
+            /* Everything above the audibility check keeps running while a voice
+               is muted. A mute silences a voice, it does not park it: if the
+               playhead stopped here it would resume wherever it froze, shifted
+               against the other three for good, and the every-Nth counter would
+               stall with it. Unmuting should drop the voice back into the
+               pattern where it would have been. */
             if (last_edge_us[v]) {
                 uint32_t dt = now - last_edge_us[v];
                 if (dt > 1000 && dt < 30000000u) step_us[v] = dt;
@@ -888,6 +888,14 @@ struct life_panel : panel_t {
                 /* Wrapping counts as one crossing of the world. */
                 if (after <= before) ++chance[v].pass;
             }
+
+            if (!voice_is_audible(v)) {
+                if (voice_num_held(&notes[v])) release_voice(v);
+                rat_left[v] = 0;
+                last_played_mask[v] = 0;   /* nothing sounding, so nothing marked */
+                continue;
+            }
+
             fire_voice(v);
         }
 

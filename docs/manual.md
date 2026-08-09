@@ -98,6 +98,10 @@ Position and colour are what you learn. Each voice keeps its own colour on rows
 | `(0,13)`–`(3,13)` | edit | open that voice's editor |
 | `(0,14)`–`(3,14)` | mute | lit means you will hear that voice |
 | `(4,14)`–`(7,14)` | solo | silences the other three |
+
+A muted voice keeps running, it just does not sound, so unmuting drops it back
+into the pattern where it would have been rather than where it stopped.
+
 | `(0,15)` | clear | every cell dies, the red one |
 | `(1,15)` | seed | sprinkle new cells in right now |
 | `(2,15)` | freeze | stop the world changing, glows red while frozen |
