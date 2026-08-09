@@ -110,9 +110,8 @@ stretches this by scaling the degree step.
 bit *n* = *n* semitones above) are Plinky system globals, shared across panels, with
 `set_current_key_and_scale(...)` as the setter.
 
-Every one of ZOA's 29 scales fits in one `uint16_t`. So the scale set is a
-`static const uint16_t[29]` table — **in flash, free against the 128 KB arena** — and choosing a
-scale sets the system global. The panel drives the instrument's harmonic state rather than
+Any scale fits in one `uint16_t`. So the scale set is a `static const uint16_t[29]` table —
+**in flash, free against the 128 KB arena** — and choosing a scale sets the system global. The panel drives the instrument's harmonic state rather than
 keeping a private one; change scale in plinky-life and the rest of the Plinky follows.
 
 Verified subset (bit 0 = root):
