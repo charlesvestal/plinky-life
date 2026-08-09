@@ -49,6 +49,25 @@ clear, respawn and transport. Everything else lives on the settings pages.
 #define LIFE_COL_DANGER     LED_RGB(24, 2, 0)
 #define LIFE_COL_OFF        LED_RGB(2, 2, 2)
 
+/* The cell a voice just took. Deliberately NOT the voice's own colour: that put
+   the note on the same hue as the column tint it sits in, which is why it read
+   as playhead decoration rather than as a note.
+
+   Magenta is the one hue in the world view with no green in it. Live cells are
+   white, the four voice tints are red, green, blue and yellow, so nothing else
+   can be mistaken for it. Which voice played it is already answered by the
+   column it is standing in. */
+#define LIFE_COL_TRIGGER     LED_RGB(29, 0, 29)
+#define LIFE_COL_TRIGGER_DIM LED_RGB(8, 0, 8)
+
+/* LED_RGB packs 5-bit channels as g<<24 | r<<16 | b<<8. `q` is 0..256. */
+static inline uint32_t life_scale_col(uint32_t c, int q) {
+    if (q <= 0) return 0;
+    if (q > 256) q = 256;
+    int g = (int)((c >> 24) & 31), r = (int)((c >> 16) & 31), b = (int)((c >> 8) & 31);
+    return LED_RGB((r * q) >> 8, (g * q) >> 8, (b * q) >> 8);
+}
+
 static const uint32_t life_voice_dim[4] = {
     LED_RGB(7, 0, 0), LED_RGB(0, 7, 0), LED_RGB(0, 1, 10), LED_RGB(6, 4, 0),
 };
@@ -932,15 +951,26 @@ struct life_panel : panel_t {
         uint8_t on_col = voices_on_column(x);
 
         if (on_col) {
+            /* Lowest-numbered voice owns the column when two are on it. */
+            int owner = 0;
+            for (int v = 0; v < LIFE_NUM_VOICES; ++v)
+                if (on_col & (1u << v)) { owner = v; break; }
+
+            /* The cell a voice took. Checked first: it is the one thing here
+               that is about a note rather than about the world. */
             for (int v = 0; v < LIFE_NUM_VOICES; ++v) {
                 if (!(on_col & (1u << v))) continue;
-                /* the cell this voice actually chose flashes at full brightness */
-                if (last_played_mask[v] & (1u << y)) return life_voice_bright[v];
+                if (last_played_mask[v] & (1u << y))
+                    return dim ? LIFE_COL_TRIGGER_DIM : LIFE_COL_TRIGGER;
             }
-            if (alive) return dim ? LIFE_COL_ALIVE_DIM : LIFE_COL_ALIVE;
-            /* the playhead column itself, tinted by its lowest-numbered voice */
-            for (int v = 0; v < LIFE_NUM_VOICES; ++v)
-                if (on_col & (1u << v)) return life_voice_dim[v];
+
+            /* A playhead is ON TOP of the world, so a live cell inside a column
+               takes the column's colour and gets brighter for being alive. It
+               used to return plain white here, which broke the column wherever
+               there were cells - the thing you notice as white cells sitting on
+               a red column. */
+            uint32_t col = alive ? life_voice_bright[owner] : life_voice_dim[owner];
+            return dim ? life_scale_col(col, 72) : col;
         }
 
         if (alive) return dim ? LIFE_COL_ALIVE_DIM : LIFE_COL_ALIVE;

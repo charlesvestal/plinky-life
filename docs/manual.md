@@ -68,8 +68,13 @@ Each voice tints the column it is standing on, in its own colour:
 | 🔵 | 3 |
 | 🟡 | 4 |
 
-The dim tint shows where a voice is. A cell flashing bright is what it just
-played.
+A playhead sits over the world, so cells inside its column take the column's
+colour and glow brighter for being alive. The dim tint is where the voice is,
+the bright cells are what is alive there.
+
+The cell a voice actually took lights **magenta**, which is the one colour
+nothing else on the grid uses. Which voice took it is already answered by the
+column it is standing in.
 
 ---
 

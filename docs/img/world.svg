@@ -84,7 +84,7 @@
 <rect x="26" y="140" width="34" height="34" rx="7" fill="#1c1c22"/>
 <rect x="64" y="140" width="34" height="34" rx="7" fill="#b4b4b4"/>
 <rect x="102" y="140" width="34" height="34" rx="7" fill="#b4b4b4"/>
-<rect x="140" y="140" width="34" height="34" rx="7" fill="#e03c3c"/>
+<rect x="140" y="140" width="34" height="34" rx="7" fill="#ee00ee"/>
 <rect x="178" y="140" width="34" height="34" rx="7" fill="#1c1c22"/>
 <rect x="216" y="140" width="34" height="34" rx="7" fill="#1c1c22"/>
 <rect x="254" y="140" width="34" height="34" rx="7" fill="#1c1c22"/>
@@ -124,7 +124,7 @@
 <rect x="330" y="216" width="34" height="34" rx="7" fill="#1c1c22"/>
 <rect x="368" y="216" width="34" height="34" rx="7" fill="#b4b4b4"/>
 <rect x="406" y="216" width="34" height="34" rx="7" fill="#b4b4b4"/>
-<rect x="444" y="216" width="34" height="34" rx="7" fill="#151d4d"/>
+<rect x="444" y="216" width="34" height="34" rx="7" fill="#ee00ee"/>
 <rect x="482" y="216" width="34" height="34" rx="7" fill="#1c1c22"/>
 <rect x="520" y="216" width="34" height="34" rx="7" fill="#1c1c22"/>
 <rect x="558" y="216" width="34" height="34" rx="7" fill="#4a3508"/>
@@ -184,7 +184,7 @@
 <rect x="178" y="368" width="34" height="34" rx="7" fill="#1c1c22"/>
 <rect x="216" y="368" width="34" height="34" rx="7" fill="#1c1c22"/>
 <rect x="254" y="368" width="34" height="34" rx="7" fill="#b4b4b4"/>
-<rect x="292" y="368" width="34" height="34" rx="7" fill="#3fd45a"/>
+<rect x="292" y="368" width="34" height="34" rx="7" fill="#ee00ee"/>
 <rect x="330" y="368" width="34" height="34" rx="7" fill="#b4b4b4"/>
 <rect x="368" y="368" width="34" height="34" rx="7" fill="#1c1c22"/>
 <rect x="406" y="368" width="34" height="34" rx="7" fill="#1c1c22"/>
@@ -271,7 +271,7 @@
 <rect x="444" y="558" width="34" height="34" rx="7" fill="#151d4d"/>
 <rect x="482" y="558" width="34" height="34" rx="7" fill="#1c1c22"/>
 <rect x="520" y="558" width="34" height="34" rx="7" fill="#1c1c22"/>
-<rect x="558" y="558" width="34" height="34" rx="7" fill="#4a3508"/>
+<rect x="558" y="558" width="34" height="34" rx="7" fill="#ee00ee"/>
 <rect x="596" y="558" width="34" height="34" rx="7" fill="#1c1c22"/>
 <rect x="26" y="596" width="34" height="34" rx="7" fill="#1c1c22"/>
 <rect x="64" y="596" width="34" height="34" rx="7" fill="#1c1c22"/>
@@ -303,21 +303,28 @@
 <text class="t" x="658" y="176"></text>
 <text class="h" x="658" y="193">The four playheads</text>
 <text class="t" x="658" y="210">Each voice tints the column</text>
-<text class="t" x="658" y="227">it is standing on. A live cell</text>
-<text class="t" x="658" y="244">it picks flashes bright.</text>
-<text class="t" x="658" y="261"></text>
-<text class="t" x="658" y="278">An empty column is a rest.</text>
-<text class="t" x="658" y="295"></text>
-<text class="h" x="658" y="312">Row 15, right-hand end</text>
-<text class="t" x="658" y="329">(13,15)  actions, hold or tap</text>
-<text class="t" x="658" y="346">(14,15)  stop</text>
-<text class="t" x="658" y="363">(15,15)  play</text>
+<text class="t" x="658" y="227">it is standing on.</text>
+<text class="t" x="658" y="244"></text>
+<text class="t" x="658" y="261">A live cell inside a column</text>
+<text class="t" x="658" y="278">takes that column's colour,</text>
+<text class="t" x="658" y="295">brighter for being alive.</text>
+<text class="t" x="658" y="312"></text>
+<text class="t" x="658" y="329">The cell it TOOK lights</text>
+<text class="t" x="658" y="346">MAGENTA - the one hue</text>
+<text class="t" x="658" y="363">nothing else here uses.</text>
 <text class="t" x="658" y="380"></text>
-<text class="t" x="658" y="397">Transport is the same pad in</text>
-<text class="t" x="658" y="414">every mode. Never hidden.</text>
-<text class="t" x="658" y="431"></text>
-<text class="t" x="658" y="448">Those 3 cells still live and</text>
-<text class="t" x="658" y="465">die with the rest of the</text>
-<text class="t" x="658" y="482">world - you just cannot see</text>
-<text class="t" x="658" y="499">or paint them.</text>
+<text class="t" x="658" y="397">An empty column is a rest.</text>
+<text class="t" x="658" y="414"></text>
+<text class="h" x="658" y="431">Row 15, right-hand end</text>
+<text class="t" x="658" y="448">(13,15)  actions, hold or tap</text>
+<text class="t" x="658" y="465">(14,15)  stop</text>
+<text class="t" x="658" y="482">(15,15)  play</text>
+<text class="t" x="658" y="499"></text>
+<text class="t" x="658" y="516">Transport is the same pad in</text>
+<text class="t" x="658" y="533">every mode. Never hidden.</text>
+<text class="t" x="658" y="550"></text>
+<text class="t" x="658" y="567">Those 3 cells still live and</text>
+<text class="t" x="658" y="584">die with the rest of the</text>
+<text class="t" x="658" y="601">world - you just cannot see</text>
+<text class="t" x="658" y="618">or paint them.</text>
 </svg>

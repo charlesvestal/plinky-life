@@ -27,6 +27,7 @@ MODIFIER = "#c81ea0"
 PLAY = "#1fd455"
 STOP = "#d4341a"
 CELL_ON = "#b4b4b4"
+TRIGGER = "#ee00ee"       # the cell a voice just took
 CELL_OFF = "#1c1c22"
 
 MOD_X, STOP_X, PLAY_X, ROW = 13, 14, 15, 15
@@ -156,11 +157,16 @@ def world():
             (10, 6), (6, 9), (7, 9), (8, 9), (12, 11), (13, 11), (12, 12), (5, 13),
             (6, 14), (4, 14), (5, 15), (0, 7), (1, 7), (2, 8)}
     heads = {3: 0, 7: 1, 11: 2, 14: 3}
+    triggered = {(3, 3), (7, 9), (11, 5), (14, 14)}   # the cell each voice took
     for y in range(16):
         for x in range(16):
             if y == ROW and x >= MOD_X:
                 continue
-            if x in heads:
+            if (x, y) in triggered:
+                fill = TRIGGER
+            elif x in heads:
+                # a playhead sits OVER the world: live cells take the column's
+                # colour, brighter for being alive
                 v = heads[x]
                 fill = V[v] if (x, y) in live else V_DIM[v]
             else:
@@ -180,8 +186,15 @@ def world():
         ("t", ""),
         ("h", "The four playheads"),
         ("t", "Each voice tints the column"),
-        ("t", "it is standing on. A live cell"),
-        ("t", "it picks flashes bright."),
+        ("t", "it is standing on."),
+        ("t", ""),
+        ("t", "A live cell inside a column"),
+        ("t", "takes that column's colour,"),
+        ("t", "brighter for being alive."),
+        ("t", ""),
+        ("t", "The cell it TOOK lights"),
+        ("t", "MAGENTA - the one hue"),
+        ("t", "nothing else here uses."),
         ("t", ""),
         ("t", "An empty column is a rest."),
         ("t", ""),
