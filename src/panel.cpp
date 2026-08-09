@@ -49,6 +49,30 @@ clear, respawn and transport. Everything else lives on the settings pages.
 #define LIFE_COL_DANGER     LED_RGB(24, 2, 0)
 #define LIFE_COL_OFF        LED_RGB(2, 2, 2)
 
+/* LED_RGB packs 5-bit channels as g<<24 | r<<16 | b<<8, so scaling and blending
+   have to unpack. `q` is 0..256 to keep it to a shift. */
+static inline uint32_t life_scale_col(uint32_t c, int q) {
+    if (q <= 0) return 0;
+    if (q > 256) q = 256;
+    int g = (int)((c >> 24) & 31), r = (int)((c >> 16) & 31), b = (int)((c >> 8) & 31);
+    return LED_RGB((r * q) >> 8, (g * q) >> 8, (b * q) >> 8);
+}
+
+/* `q` is how much of `top` shows over `base`. Channels are added and clamped
+   rather than interpolated, so a flash lifts what is underneath instead of
+   replacing it, and a cell already lit does not go dark at the peak. */
+static inline uint32_t life_add_col(uint32_t base, uint32_t top, int q) {
+    if (q <= 0) return base;
+    if (q > 256) q = 256;
+    int g = (int)((base >> 24) & 31) + (((int)((top >> 24) & 31) * q) >> 8);
+    int r = (int)((base >> 16) & 31) + (((int)((top >> 16) & 31) * q) >> 8);
+    int b = (int)((base >> 8) & 31) + (((int)((top >> 8) & 31) * q) >> 8);
+    if (r > 31) r = 31;
+    if (g > 31) g = 31;
+    if (b > 31) b = 31;
+    return LED_RGB(r, g, b);
+}
+
 static const uint32_t life_voice_dim[4] = {
     LED_RGB(7, 0, 0), LED_RGB(0, 7, 0), LED_RGB(0, 1, 10), LED_RGB(6, 4, 0),
 };
@@ -155,6 +179,9 @@ static const uint8_t life_port_values[5] = {
    divider edges have been seen and the real interval is known. */
 #define LIFE_DEFAULT_STEP_US 250000
 
+/* Enough for a 16-note ALL chord plus the other three voices mid-flash. */
+#define LIFE_MAX_SPARKS 24
+
 /* Plinky has 12 physical synth voices. The sequencer and the play surface both
    want some, and they allocate independently, so they are given separate ranges
    rather than left to steal from each other: the surface takes 0..3, the
@@ -245,6 +272,7 @@ struct life_panel : panel_t {
     /* A ratchet is the same note struck again inside one step. */
     uint8_t rat_left[LIFE_NUM_VOICES];
     uint8_t rat_note[LIFE_NUM_VOICES];
+    uint8_t rat_row[LIFE_NUM_VOICES];   /* the cell it is rolling on, for the flash */
     uint8_t rat_vel[LIFE_NUM_VOICES];
     uint32_t rat_gap_us[LIFE_NUM_VOICES];
     uint32_t rat_next_us[LIFE_NUM_VOICES];
@@ -254,6 +282,14 @@ struct life_panel : panel_t {
     panel_page_t panel_page;       /* the stock scene save/load picker, on page 1 */
     play_surface_t play_surface;   /* play the selected voice over the running world */
     uint8_t string_roots[16];
+
+    /* Flashes from triggered cells. A ring buffer because on_sequence writes
+       them from interrupt context and on_ui reads them: a slot that gets
+       overwritten mid-frame costs one frame of one flash, which is invisible,
+       and nothing has to be locked. */
+    struct spark_t { uint8_t x, y, v, used; uint32_t t0; };
+    spark_t sparks[LIFE_MAX_SPARKS];
+    uint8_t spark_next;
 
     uint32_t last_edge_us[LIFE_NUM_VOICES];
     uint32_t step_us[LIFE_NUM_VOICES];
@@ -299,6 +335,7 @@ struct life_panel : panel_t {
     uint8_t pref_cc_out;      /* mirror parameter changes back out on the same block */
     uint8_t pref_cv_out;      /* drive the two CV outputs from the world */
     uint8_t pref_note_in;     /* played notes draw cells into the world */
+    uint8_t pref_flash;       /* 0..100: how long a triggered cell flashes, 0 = off */
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
@@ -356,6 +393,8 @@ struct life_panel : panel_t {
             voice_dev[v] = 0;
         }
 
+        for (int i = 0; i < LIFE_MAX_SPARKS; ++i) sparks[i].used = 0;
+        spark_next = 0;
         solo_mask = 0;
         edit_voice = 0;
         voice_page = 0;
@@ -408,6 +447,7 @@ struct life_panel : panel_t {
         pref_cc_out = 1;
         pref_cv_out = 1;
         pref_note_in = 1;
+        pref_flash = 45;
     }
 
     void on_load_finished(void) override {
@@ -514,6 +554,7 @@ struct life_panel : panel_t {
         if (pref_sink > LIFE_SINK_BOTH) pref_sink = LIFE_SINK_BOTH;
         if (pref_port > 4) pref_port = 3;
         if (pref_cc_in > 127 - (CC_PARAM_COUNT - 1)) pref_cc_in = 0;
+        if (pref_flash > 100) pref_flash = 45;
         if (edit_voice >= LIFE_NUM_VOICES) edit_voice = 0;
     }
 
@@ -709,6 +750,17 @@ struct life_panel : panel_t {
         return voice_poly_budget(LIFE_SYNTH_VOICES, mono, chords, LIFE_MAX_HELD);
     }
 
+    void add_spark(int x, int y, int v) {
+        if (!pref_flash) return;
+        spark_t *sp = &sparks[spark_next];
+        spark_next = (uint8_t)((spark_next + 1) % LIFE_MAX_SPARKS);
+        sp->x = (uint8_t)x;
+        sp->y = (uint8_t)y;
+        sp->v = (uint8_t)v;
+        sp->t0 = time_us();
+        sp->used = 1;
+    }
+
     void fire_voice(int v) {
         /* Every Nth crossing. Checked before anything else - a voice sitting
            out this pass should not even consult the world. */
@@ -763,6 +815,7 @@ struct life_panel : panel_t {
 
             if (voice_arm(&notes[v], note, velocity, ticks) >= 0) {
                 synth_note_on(v, note, velocity);
+                add_spark(col, y, v);
                 ++sounded;
 
                 /* Crowding rolls the note. Only for the single-note rules: a
@@ -774,6 +827,7 @@ struct life_panel : panel_t {
                         rat_gap_us[v] = step_us[v] / (uint32_t)reps;
                         rat_next_us[v] = time_us() + rat_gap_us[v];
                         rat_note[v] = (uint8_t)note;
+                        rat_row[v] = (uint8_t)y;
                         rat_vel[v] = (uint8_t)velocity;
                     }
                 }
@@ -840,8 +894,10 @@ struct life_panel : panel_t {
             if (!voice_is_audible(v)) { rat_left[v] = 0; continue; }
             if ((int32_t)(now - rat_next_us[v]) < 0) continue;
             int ticks = voice_length_ticks((int)rat_gap_us[v], (int)v_length[v]);
-            if (voice_arm(&notes[v], rat_note[v], rat_vel[v], ticks) >= 0)
+            if (voice_arm(&notes[v], rat_note[v], rat_vel[v], ticks) >= 0) {
                 synth_note_on(v, rat_note[v], rat_vel[v]);
+                add_spark(traversal_position(&trav[v], LIFE_W), rat_row[v], v);
+            }
             rat_next_us[v] += rat_gap_us[v];
             --rat_left[v];
         }
@@ -927,24 +983,61 @@ struct life_panel : panel_t {
         return m;
     }
 
+    /* How much flash lands on this cell: the strike itself, plus any ring from a
+       flash on one of its four neighbours. Wraps like the world does, so a burst
+       at the edge spills round the other side rather than being clipped. */
+    int spark_level_at(int x, int y, int *voice_out) const {
+        unsigned int len = life_spark_length_us(pref_flash);
+        if (!len) return 0;
+
+        uint32_t now = time_us();
+        int best = 0;
+        for (int i = 0; i < LIFE_MAX_SPARKS; ++i) {
+            const spark_t *sp = &sparks[i];
+            if (!sp->used) continue;
+            unsigned int age = now - sp->t0;
+            if (!life_spark_alive(age, len)) continue;
+
+            int level = 0;
+            if (sp->x == x && sp->y == y) {
+                level = life_spark_centre(age, len);
+            } else {
+                int dx = (sp->x - x) & 15, dy = (sp->y - y) & 15;
+                if (dx > 8) dx -= 16;
+                if (dy > 8) dy -= 16;
+                if (dx * dx + dy * dy == 1) level = life_spark_ring(age, len);
+            }
+            if (level > best) { best = level; if (voice_out) *voice_out = sp->v; }
+        }
+        return best;
+    }
+
     uint32_t cell_colour(int x, int y, bool dim) const {
         bool alive = world.cell[y * LIFE_W + x] != 0;
         uint8_t on_col = voices_on_column(x);
 
+        uint32_t base = 0;
         if (on_col) {
-            for (int v = 0; v < LIFE_NUM_VOICES; ++v) {
-                if (!(on_col & (1u << v))) continue;
-                /* the cell this voice actually chose flashes at full brightness */
-                if (last_played_mask[v] & (1u << y)) return life_voice_bright[v];
+            if (alive) {
+                base = dim ? LIFE_COL_ALIVE_DIM : LIFE_COL_ALIVE;
+            } else {
+                /* the playhead column, tinted by its lowest-numbered voice */
+                for (int v = 0; v < LIFE_NUM_VOICES; ++v)
+                    if (on_col & (1u << v)) { base = life_voice_dim[v]; break; }
             }
-            if (alive) return dim ? LIFE_COL_ALIVE_DIM : LIFE_COL_ALIVE;
-            /* the playhead column itself, tinted by its lowest-numbered voice */
-            for (int v = 0; v < LIFE_NUM_VOICES; ++v)
-                if (on_col & (1u << v)) return life_voice_dim[v];
+        } else if (alive) {
+            base = dim ? LIFE_COL_ALIVE_DIM : LIFE_COL_ALIVE;
         }
 
-        if (alive) return dim ? LIFE_COL_ALIVE_DIM : LIFE_COL_ALIVE;
-        return 0;
+        /* The flash goes ON TOP. The steady lamp that used to mark the chosen
+           cell has gone: it stayed lit until the voice moved on, so it read as
+           part of the playhead rather than as a hit. */
+        int spark_voice = 0;
+        int level = spark_level_at(x, y, &spark_voice);
+        if (level > 0)
+            base = life_add_col(base, life_voice_bright[spark_voice],
+                                dim ? level / 3 : level);
+        return base;
     }
 
     /* --- the action layer -------------------------------------------------
@@ -1522,7 +1615,7 @@ struct life_panel : panel_t {
 
     /* Global only. Per-voice config moved onto the grid, where it is one tap
        deep and visible all at once instead of fourteen side-button clicks. */
-    int settings_page_count(void) { return 17; }
+    int settings_page_count(void) { return 18; }
 
     /* Page 1 is the scene save/load picker. on_serialise() has always described
        the world and every voice setting, but without this there was no way to
@@ -1671,6 +1764,21 @@ struct life_panel : panel_t {
             break;
         }
         case 10: {
+            if (pref_flash) snprintf(buf, sizeof(buf), "%d", pref_flash);
+            else snprintf(buf, sizeof(buf), "OFF");
+            int d = draw_system_style_settings_page("FLSH", buf, pref_flash);
+            if (d) { settings_dirty = true;
+                     pref_flash = (uint8_t)clamp_int(pref_flash + d, 0, 100); }
+            if (pref_flash)
+                set_help_text("#fc2#*Flash#. - a triggered cell bursts in its voice's colour "
+                              "for #fc2#*%dms#.. Turn it down if a busy world gets noisy.",
+                              life_spark_length_us(pref_flash) / 1000);
+            else
+                set_help_text("#fc2#*Flash#. - #fc2#*off#.. Turn it up to see which cell each "
+                              "voice just played.");
+            break;
+        }
+        case 11: {
             int d = draw_system_style_enum_settings_page("OUT ", pref_sink, life_sink_names, 3);
             if (d) settings_dirty = true;
             if (d) {
@@ -1683,7 +1791,7 @@ struct life_panel : panel_t {
                                                         : "#fc2#*both#. the internal synth and MIDI");
             break;
         }
-        case 11: {
+        case 12: {
             int d = draw_system_style_enum_settings_page("PORT", pref_port, life_port_names, 5);
             if (d) settings_dirty = true;
             if (d) {
@@ -1699,7 +1807,7 @@ struct life_panel : panel_t {
                                            : "#fc2#*every port#., USB and TRS 1 and 2");
             break;
         }
-        case 12: {
+        case 13: {
             bool on = pref_send_cc != 0;
             int d = draw_system_style_bool_settings_page("CC  ", on);
             if (d) settings_dirty = true;
@@ -1714,7 +1822,7 @@ struct life_panel : panel_t {
                               "per-voice movement.");
             break;
         }
-        case 13: {
+        case 14: {
             if (pref_cc_in) snprintf(buf, sizeof(buf), "%d", pref_cc_in);
             else snprintf(buf, sizeof(buf), "OFF");
             int d = draw_system_style_settings_page("CIN ", buf, pref_cc_in * 100 / 92);
@@ -1731,7 +1839,7 @@ struct life_panel : panel_t {
                               "the world and every voice from a controller or a DAW.");
             break;
         }
-        case 14: {
+        case 15: {
             bool on = pref_cc_out != 0;
             int d = draw_system_style_bool_settings_page("COUT", on);
             if (d) { pref_cc_out = on ? 0 : 1; settings_dirty = true; cc_out_primed = false; }
@@ -1744,7 +1852,7 @@ struct life_panel : panel_t {
                               "report its own changes.");
             break;
         }
-        case 15: {
+        case 16: {
             bool on = pref_cv_out != 0;
             int d = draw_system_style_bool_settings_page("CV  ", on);
             if (d) { pref_cv_out = on ? 0 : 1; settings_dirty = true; }
@@ -1752,7 +1860,7 @@ struct life_panel : panel_t {
                           "changing. 0 to 5 volts.", pref_cv_out ? "#fc2#*on#." : "#fc2#*off#.");
             break;
         }
-        case 16: {
+        case 17: {
             bool on = pref_note_in != 0;
             int d = draw_system_style_bool_settings_page("NIN ", on);
             if (d) { pref_note_in = on ? 0 : 1; settings_dirty = true; }
@@ -2197,6 +2305,7 @@ struct life_panel : panel_t {
             pref_cc_out = 1;
             pref_cv_out = 1;
             pref_note_in = 1;
+            pref_flash = 45;
         }
 
         OBJECT_BEGIN(s);
@@ -2210,6 +2319,7 @@ struct life_panel : panel_t {
         FIELD("ccout", pref_cc_out);
         FIELD("cvout", pref_cv_out);
         FIELD("notein", pref_note_in);
+        FIELD("flash", pref_flash);
         OBJECT_END(s);
 
         clamp_settings();
