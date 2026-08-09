@@ -1,26 +1,25 @@
-# Life — manual
+# Life
 
 A Game of Life sequencer for the Plinky 12.
 
-The 16×16 grid is a **living palette**, not a piano roll. **Columns are steps,
-rows are scale degrees.** A Game of Life world rewrites the whole grid
-underneath you on its own clock, and four independent voices walk through it at
-their own speeds, playing whatever they find alive.
+The 16×16 grid holds a Game of Life world that keeps evolving on its own clock.
+Columns are steps and rows are scale degrees. Four voices walk through the world
+at their own speeds and play whatever cells they find alive.
 
-**An empty column is a rest.** That single rule is what turns the shape of the
-world into rhythm rather than a wall of notes.
+If a voice arrives at a column with nothing alive in it, it rests. That is what
+gives the music its rhythm.
 
 ---
 
 ## Quick start
 
-1. **Press `(15,15)`** — the green ▶ in the bottom-right corner. That's play.
+1. Press `(15,15)`, the green play pad in the bottom right corner.
 2. Listen. A newly loaded panel seeds itself, so it makes sound straight away.
-3. **Tap pads** to bring cells to life and disturb it.
-4. **Tap `(13,15)`** — the magenta `×` — for mutes, solos, and the voice editors.
+3. Tap pads to bring cells to life and disturb it.
+4. Tap `(13,15)`, the magenta `×`, for mutes, solos and the voice editors.
 
-Nothing moves while transport is stopped: no generations, no notes. The one
-exception is the step pad `(3,15)`, so you can walk the world forward by hand.
+Nothing moves while transport is stopped. No generations, no notes. The
+exception is the step pad at `(3,15)`, which walks the world forward by hand.
 
 ---
 
@@ -28,35 +27,35 @@ exception is the step pad `(3,15)`, so you can walk the world forward by hand.
 
 ![World view](img/world.svg)
 
-Every pad is a cell. Tap to toggle it alive or dead.
+Every pad is a cell. Tap one to toggle it alive or dead.
 
-Live cells breed and die by Conway's rules — a cell with two or three live
-neighbours survives, an empty space with exactly three neighbours comes to life.
-**The grid wraps at the edges**, so patterns that drift off one side reappear on
-the other and keep going.
+Cells breed and die by Conway's rules. A cell with two or three live neighbours
+survives, and an empty space with exactly three neighbours comes to life. The
+grid wraps at the edges, so a pattern that drifts off one side reappears on the
+other.
 
 ### Row 15
 
-The bottom-right corner follows the same layout as Chords, so the pads are where
-you already expect them:
+The bottom right corner follows the same layout as Chords, so the pads are where
+you would expect:
 
 | Pad | |
 |---|---|
-| `(12,15)` | unused — still part of the world |
-| `(13,15)` | `×` — actions. Hold or tap. |
+| `(12,15)` | unused, still part of the world |
+| `(13,15)` | `×`, actions. Hold or tap. |
 | `(14,15)` | ■ stop |
 | `(15,15)` | ▶ play |
 
-**Transport works the same in every mode.** It's never hidden behind a modifier
+Transport works the same way in every mode. It is never hidden behind a modifier
 and never changes meaning.
 
-Three cells are given up to those pads. They still live and die with the rest of
-the world — you just can't see or paint them.
+Three cells are given over to those pads. They still live and die with the rest
+of the world, you just cannot see or paint them.
 
-**On the Chords and Drums overlays** the world still uses all 16 rows, so the top
-and bottom rows sit outside the printed pad circles. That's intentional: rows are
-pitch, and cropping them would cost you two scale degrees at each end. The sound
-page does line up with the printed labels.
+On the Chords and Drums overlays the world still uses all 16 rows, so the top and
+bottom rows sit outside the printed pad circles. That is deliberate. Rows are
+pitch, and cropping them would cost two scale degrees at each end. The sound page
+does line up with the printed labels.
 
 ### Reading the playheads
 
@@ -69,8 +68,8 @@ Each voice tints the column it is standing on, in its own colour:
 | 🔵 | 3 |
 | 🟡 | 4 |
 
-The dim tint shows where a voice **is**. A cell flashing bright is what it just
-**played**.
+The dim tint shows where a voice is. A cell flashing bright is what it just
+played.
 
 ---
 
@@ -78,50 +77,49 @@ The dim tint shows where a voice **is**. A cell flashing bright is what it just
 
 ![Action layer](img/action.svg)
 
-Tap `×`, or hold it — either works, and it stays open until you tap `×` again.
-The world dims underneath so you don't lose your place.
+Tap `×` or hold it, either works. It stays open until you tap `×` again, so you
+can audition rules, set up a mix or nudge swing without reopening it each time.
+The world dims underneath so you do not lose your place.
 
-The grid can't show text, so these are coloured pads rather than labels. Position
-and colour are what you learn: each voice's own colour on rows 13–14, red for
-destructive, cyan for the world controls.
+The grid cannot show text, so these are coloured pads rather than labels.
+Position and colour are what you learn. Each voice keeps its own colour on rows
+13 and 14, red means destructive, cyan is for the world controls.
 
 | Pads | | |
 |---|---|---|
-| `(0,10)`–`(10,10)` | swing | 0–100%, off at the left |
+| `(0,10)`–`(10,10)` | swing | 0 to 100%, off at the left |
 | `(0,11)`–`(11,11)` | generation rate | how often the world evolves |
-| `(0,12)`–`(5,12)` | rule | which law the world lives by — see below |
+| `(0,12)`–`(5,12)` | rule | which law the world lives by, listed below |
 | `(0,13)`–`(3,13)` | edit | open that voice's editor |
-| `(0,14)`–`(3,14)` | mute | lit means you'll hear that voice |
+| `(0,14)`–`(3,14)` | mute | lit means you will hear that voice |
 | `(4,14)`–`(7,14)` | solo | silences the other three |
-| `(0,15)` | clear | every cell dies — the red one |
+| `(0,15)` | clear | every cell dies, the red one |
 | `(1,15)` | seed | sprinkle new cells in right now |
-| `(2,15)` | freeze | stop the world changing; glows red while frozen |
+| `(2,15)` | freeze | stop the world changing, glows red while frozen |
 | `(3,15)` | step | advance exactly one generation |
 
-**The layer stays open until you press `×` again**, so you can audition rules,
-set up a mix, or nudge swing and generation rate without reopening it each time.
-The four edit pads are the exception — they take you into the voice editor.
+The four edit pads are the one thing that takes you elsewhere.
 
-**The top three rows are the world's own controls** — its feel, its tempo and its
-law. Nothing there belongs to a voice, which is why they sit together and not in
-a voice editor.
+The top three rows are the world's own controls: its feel, its tempo and its law.
+None of them belongs to a particular voice, which is why they sit together here
+rather than in a voice editor.
 
 Row 12, left to right:
 
 | Pad | | |
 |---|---|---|
-| `(0,12)` | `LIFE` | Conway — gliders drifting through a sparse world |
-| `(1,12)` | `HIGH` | HighLife — shapes replicate, so it keeps regenerating |
-| `(2,12)` | `MAZE` | dense slow-churning corridors, good for drones |
-| `(3,12)` | `CORL` | Coral — grows slowly outward into thick shapes |
-| `(4,12)` | `34` | restless, never settles for long |
-| `(5,12)` | `SEED` | everything dies every step and explodes outward |
+| `(0,12)` | `LIFE` | Conway. Gliders drifting through a sparse world |
+| `(1,12)` | `HIGH` | HighLife. Shapes replicate, so it keeps regenerating |
+| `(2,12)` | `MAZE` | Dense slow-churning corridors, good for drones |
+| `(3,12)` | `CORL` | Coral. Grows slowly outward into thick shapes |
+| `(4,12)` | `34` | Restless, never settles for long |
+| `(5,12)` | `SEED` | Everything dies every step and explodes outward |
 
-The lit pad is the current one. Each explains itself on the second screen.
+The lit pad is the current one, and each explains itself on the second screen.
 
-**Freeze and step are the composing tools.** Freeze holds the palette still so
-you can write against a fixed set of cells; step nudges it forward one generation
-at a time so you can hunt for a shape you like. Step works even while stopped.
+Freeze and step are the composing tools. Freeze holds the world still so you can
+write against a fixed set of cells, and step nudges it forward one generation at
+a time so you can hunt for a shape you like. Step works even while stopped.
 
 ---
 
@@ -129,29 +127,29 @@ at a time so you can hunt for a shape you like. Step works even while stopped.
 
 ![Voice editor](img/voice.svg)
 
-`×` → one of the four edit pads.
+`×` then one of the four edit pads.
 
 One setting per row, with blank rows between them so it stays readable at arm's
-length. **The bright pad is the current value**; the dim ones show how far the
+length. The bright pad is the current value and the dim ones show how far the
 range goes.
 
 | Row | | |
 |---|---|---|
-| 1 | **voice** | which voice you're editing — tap to switch |
-| 3 | **rate** | `32nd · 16T · 16th · 8T · 8th · 4T · 1/4 · 1/2 · 1BAR · 2BAR · 4BAR · 8BAR` |
-| 5 | **pick** | which live cell it takes — [the eleven picks](#5-picking-a-cell) |
-| 7 | **order** | forward · reverse · ping-pong · random |
-| 9 | **pitch** | −7 … +7 scale degrees; the dim centre pad is 0 |
-| 11 | **length** | 10% … 100% of the step |
-| 13 | **accent** | how much a crowded cell hits harder than a lone one |
+| 1 | voice | which voice you are editing, tap to switch |
+| 3 | rate | `32nd · 16T · 16th · 8T · 8th · 4T · 1/4 · 1/2 · 1BAR · 2BAR · 4BAR · 8BAR` |
+| 5 | pick | which live cell it takes, see [picking a cell](#5-picking-a-cell) |
+| 7 | order | forward · reverse · ping-pong · random |
+| 9 | pitch | −7 to +7 scale degrees, the dim centre pad is 0 |
+| 11 | length | 10% to 100% of the step |
+| 13 | accent | how much a crowded cell hits harder than a lone one |
 
 And on row 15:
 
 | Pad | |
 |---|---|
-| `(0,15)` | **load** a preset into this voice |
-| `(1,15)` | **edit** this voice's sound |
-| `(2,15)` | flip to the **behaviour** page |
+| `(0,15)` | load a preset into this voice |
+| `(1,15)` | edit this voice's sound |
+| `(2,15)` | flip to the behaviour page |
 
 Press `×` to go back to the world.
 
@@ -160,80 +158,80 @@ does before committing to it.
 
 ### Rate is where the groove comes from
 
-All four voices cross all 16 columns, so **they only sound polyrhythmic if their
-speeds differ.** The defaults are 8th, quarter-triplet, quarter and half for
-exactly that reason. Set all four the same and you get four voices marching in
-step, which is rarely what you want.
+All four voices cross all 16 columns, so they only sound polyrhythmic if their
+speeds differ. The defaults are 8th, quarter triplet, quarter and half for that
+reason. Set all four the same and you get four voices marching in step, which is
+rarely what you want.
 
 ### Voice 1 plays preset 1
 
-Four voices, four sounds, straight across. To use a different patch, **load** it
-into that voice's slot.
+Four voices, four sounds, straight across. To use a different patch, load it into
+that voice's slot.
 
-### The chance page
+### The behaviour page
 
-![Chance page](img/chance.svg)
+![Behaviour page](img/chance.svg)
 
-`(2,15)` flips between the two voice pages, in both directions. Row 15 is the
-same on either one — load, sound, the page flip, and accent. Four behaviours, each **off at the left-hand pad** and
-turning up from there — one control both switches a behaviour on and says how
-hard it bites.
+`(2,15)` flips between the two voice pages in both directions. Row 15 is the same
+on either one.
+
+Four controls, each off at the left-hand pad and turning up from there. One
+control both switches a behaviour on and sets how hard it bites.
 
 | Row | | |
 |---|---|---|
-| 3 | **chance** | how much lone cells get skipped |
-| 5 | **ratchet** | how much a crowded cell repeats inside its step |
-| 7 | **tie** | how often a cell that survived holds instead of striking again |
-| 9 | **every** | play only every 2nd, 3rd or 4th crossing of the world |
+| 3 | chance | how much lone cells get skipped |
+| 5 | ratchet | how much a crowded cell repeats inside its step |
+| 7 | tie | how often a cell that survived holds instead of striking again |
+| 9 | every | play only every 2nd, 3rd or 4th crossing of the world |
+| 11 | channel | MIDI channel 1 to 16 |
+
+These read the cell the voice actually landed on rather than being drawn onto
+steps. A cell with eight neighbours always fires and rolls, a lone cell gets
+skipped. A cell that was already alive last generation can hold the previous note
+instead of striking a new one, while a cell born this generation always strikes.
+
+So a glider drifting through a voice's path changes its rhythm as it goes, and
+what you see on the grid is what you hear. Turn ratchet up on a voice and watch
+where the world is dense. That is where it will roll.
+
+`every` is the one that is not about cells. It gives a voice a phrase longer than
+a single crossing, which nothing else here does. Set two voices to different
+values and they drift in and out of each other.
 
 ### Reading a value
 
-These rows are pads with no numbers on them, so **hold one and the value is
-spelled out**. It appears in the zone *furthest from your hand* — hold something
-in the top half and it shows at the bottom, and the other way round — so you are
-never reading through your own fingers. That zone blanks while you hold, so the
-text is never fighting the pads underneath it.
+These rows are pads with no numbers on them, so hold one and the value is spelled
+out. It appears in the zone furthest from your hand, so holding something in the
+top half shows it at the bottom and the other way round. That zone blanks while
+you hold, which keeps the text clear of the pads underneath.
 
-Numbers are tagged, because `30` on its own says nothing — `AC 60`, `SK 30`:
+Numbers are tagged, because `30` on its own says nothing. You get `AC 60` or
+`SK 30`:
 
 | | |
 |---|---|
-| `SK` `RT` `TI` `EV` `AC` | skip · ratchet · tie · every · accent |
-| `CH` `PT` `LN` | channel · pitch · length |
+| `SK` `RT` `TI` `EV` `CH` | chance · ratchet · tie · every · channel |
+| `PT` `LN` `AC` | pitch · length · accent |
 
-Values that already name themselves aren't tagged — rate reads `8th`, pick reads
-`WALK`, order reads `FWD`.
-
-**These are read off the cell the voice actually landed on**, not drawn onto
-steps. A cell with eight neighbours always fires and rolls; a lone cell gets
-skipped. A cell that was already alive last generation can hold the previous
-note; one born this generation always strikes.
-
-So a glider drifting through a voice's path audibly changes its rhythm, and what
-you see on the grid is what you hear. Turn `ratchet` up on a voice and watch
-where the world is dense — that's where it'll roll.
-
-`every` is the one that isn't about cells: it gives a voice a phrase longer than
-a single crossing, which nothing else here does. Set two voices to different
-values and they'll drift in and out of each other.
+Values that already name themselves are left alone, so rate reads `8th`, pick
+reads `WALK` and order reads `FWD`.
 
 ---
 
 ## 4. Sound
 
-Voice editor → `(1,15)`.
+Voice editor, then `(1,15)`.
 
-The familiar Plinky synth editor, pointed at the selected voice.
-
-**It rearranges itself to match your faceplate.** You don't have to tell it which
-overlay you have — it knows, and the second screen names the layout you're
-looking at.
+This is the Plinky synth editor you already know, pointed at the selected voice.
+It rearranges itself to match your faceplate, so you do not have to tell it which
+overlay you have. The second screen names the layout you are looking at.
 
 ### On Chords and Drums
 
 ![Sound page on Chords and Drums](img/sound_printed.svg)
 
-Both overlays print the same synth page, and the sliders move onto it — so every
+Both overlays print the same synth page and the sliders move onto it, so every
 pad sits under the label that names what it does.
 
 | Area | |
@@ -242,7 +240,7 @@ pad sits under the label that names what it does.
 | rows 7–13, `x0–7` | GLIDE · PITCH · OCT · CHORUS · FOLD · START · END · SPEED |
 | `x8`, rows 7–13 | the MOD and XY buttons |
 | `x9–15`, rows 7–13 | the XY pad |
-| `(0,0)`–`(3,0)` | switch voice — the editor follows |
+| `(0,0)`–`(3,0)` | switch voice, the editor follows |
 | `(0,14)` | back to the voice editor |
 
 ### On Blocks and Toadstep
@@ -254,7 +252,7 @@ pad sits under the label that names what it does.
 | rows 0–4 | 16 sliders: effects sends and the mix |
 | rows 5–9 | 16 sliders: the main synth parameters |
 | `x8–15`, rows 10–14 | the XY pad, with LFO and envelope buttons down its right edge |
-| `(0,10)`–`(3,10)` | switch voice — the editor follows |
+| `(0,10)`–`(3,10)` | switch voice, the editor follows |
 | `(0,12)`–`(5,12)` | simple · tune · chop · loop · sync · lowpass gate |
 | `(0,14)` | back to the voice editor |
 
@@ -263,152 +261,147 @@ labels at all.
 
 ### Loading a preset
 
-Voice editor → `(0,15)` opens the preset picker: folders on the left, slots on
-the right, with cancel and OK at the bottom right.
+Voice editor, then `(0,15)`, opens the preset picker. Folders on the left, slots
+on the right, cancel and OK at the bottom right.
 
-**This is the one place transport isn't available** — the picker needs those two
-pads for its own buttons. `×` still gets you out.
+This is the one place transport is not available, because the picker needs those
+two pads for its own buttons. `×` still gets you out.
 
 ---
 
 ## 5. Picking a cell
 
-Two separate things, and it's worth keeping them apart:
+Two separate things, worth keeping apart:
 
-- **order** — *which column* a voice moves to next.
-- **pick** — *which live cell in that column* actually sounds.
+- **order** is which column a voice moves to next.
+- **pick** is which live cell in that column actually sounds.
 
-(Not to be confused with the world's **rule**, which is the law every cell lives
-by. `Pick` is per voice; `rule` is the whole world.)
+Neither is the world's **rule**, which is the law every cell lives by. Pick is per
+voice, rule is the whole world.
 
 Given the live cells in the column a voice has arrived at:
 
 | Pick | Plays |
 |---|---|
-| `FRST` | the topmost live cell — the highest note |
-| `LAST` | the bottommost — the lowest note |
+| `FRST` | the topmost live cell, the highest note |
+| `LAST` | the bottommost, the lowest note |
 | `UP` | climbs through the live cells, one per step |
 | `DOWN` | descends through them |
 | `UPDN` | climbs then falls back, without repeating the ends |
 | `DNUP` | falls then climbs back |
 | `RAND` | any live cell, evenly |
-| `WALK` | the one closest in pitch to the last note — smooth lines |
+| `WALK` | the one closest in pitch to the last note, which gives smooth lines |
 | `RISE` | the next one above the last note, wrapping to the bottom |
 | `FALL` | the next one below, wrapping to the top |
-| `ALL` | every live cell at once — **the only one that makes chords** |
+| `ALL` | every live cell at once, the only one that makes chords |
 
-`WALK` gives you melodies. `RAND` gives you sparkle. `ALL` gives you pads. Mixing
-them across the four voices is most of the instrument.
+`WALK` gives you melodies, `RAND` gives you sparkle and `ALL` gives you pads.
+Mixing them across the four voices is most of the instrument.
 
 ### How many notes at once
 
-Every pick but `ALL` plays **one note per step**, so four voices give you up to
+Every pick except `ALL` plays one note per step, so four voices give you up to
 four notes. `ALL` plays the whole column.
 
 The synth has eight notes to share. Each voice you can hear is guaranteed one of
-them, so a chord can never cut off a melody — and whatever is spare goes to the
+them, so a chord can never cut off a melody, and whatever is spare goes to the
 voices playing `ALL`. Mute the other three and a single `ALL` voice gets all
 eight to itself.
 
-Sending to MIDI only? Then there's no ceiling and chords go out whole.
+Sending to MIDI only lifts the ceiling, and chords go out whole.
 
-**Loud cells:** a cell surrounded by neighbours hits harder than a lone one, so
-dense clusters accent themselves. How much is each voice's **accent**.
+A cell surrounded by neighbours hits harder than a lone one, so dense clusters
+accent themselves. How much is each voice's accent setting.
 
 ---
 
 ## 6. Settings
 
-Right side buttons page through them, left side buttons change the value. The
-second screen explains each page as you land on it.
+The right side buttons page through them and the left side buttons change the
+value. The second screen explains each page as you land on it.
 
 | | | |
 |---|---|---|
-| | | |
-|---|---|---|
-| `KEY ` `SCAL` `OCT ` | **musical** | key, scale, base octave |
-| `GEN ` `RULE` `FLOR` `SEED` `STAB` | **the world** | tempo, law, and keeping it alive |
-| `SWNG` `SWPT` | **feel** | swing amount and shuffle pattern |
-| `OUT ` `PORT` | **output** | synth/MIDI/both, and which ports |
-| `CC  ` `CIN ` `COUT` `CV  ` `NIN ` | **control** | CCs out and in, CV out, note input |
+| `KEY ` `SCAL` `OCT ` | musical | key, scale, base octave |
+| `GEN ` `RULE` `FLOR` `SEED` `STAB` | the world | tempo, law, and keeping it alive |
+| `SWNG` `SWPT` | feel | swing amount and shuffle pattern |
+| `OUT ` `PORT` | output | synth, MIDI or both, and which ports |
+| `CC  ` `CIN ` `COUT` `CV  ` `NIN ` | control | CCs out and in, CV out, note input |
 
-They're in that order, so the things you set once are at the end and never in
+They run in that order, so the pages you set once are at the end and stay out of
 your way.
 
-Key and scale set the **whole instrument's** harmony, not just this panel's, so
-the rest of the Plinky follows along.
-
-
+Key and scale set the whole instrument's harmony rather than just this panel's,
+so the rest of the Plinky follows along.
 
 ---
 
 ## 7. Saving
 
-Press the right side button **down** from the world to reach the scene page:
-folders on the left, slots on the right, cancel and OK bottom right.
+Press the right side button down from the world to reach the scene page. Folders
+on the left, slots on the right, cancel and OK bottom right.
 
-A scene holds **the world itself** — every live cell — plus every voice's rate,
-pick, order, channel, pitch, length and mute, and the generation rate and
-respawn settings. Load one back and you get the same world and the same four
-voices.
+A scene holds the world itself, every live cell, plus every voice's rate, pick,
+order, channel, pitch, length and mute, and the generation rate and respawn
+settings. Load one back and you get the same world and the same four voices.
 
-The settings pages are separate: key, scale, octave, output, ports and CCs are
+The settings pages are separate. Key, scale, octave, output, ports and CCs are
 preferences, saved automatically as you change them and shared by every scene.
 
 ---
 
-## 8. The world's rule, swing, and drawing from a keyboard
+## 8. Rules, swing and drawing from a keyboard
 
-**The rule** is the law the world lives by, and changing it changes what the
-panel is. Row 12 of the action layer, or the `RULE` settings page:
+The rule is the law the world lives by, and changing it changes what the panel
+does. It is on row 12 of the action layer, and on the `RULE` settings page:
 
 | | |
 |---|---|
-| `LIFE` | Conway — gliders drifting through a sparse world |
-| `HIGH` | HighLife — shapes replicate, so it keeps regenerating |
-| `MAZE` | dense slow-churning corridors, good for drones |
-| `CORL` | Coral — grows slowly outward into thick shapes |
-| `34` | restless, never settles for long |
-| `SEED` | everything dies every step and explodes outward |
+| `LIFE` | Conway. Gliders drifting through a sparse world |
+| `HIGH` | HighLife. Shapes replicate, so it keeps regenerating |
+| `MAZE` | Dense slow-churning corridors, good for drones |
+| `CORL` | Coral. Grows slowly outward into thick shapes |
+| `34` | Restless, never settles for long |
+| `SEED` | Everything dies every step and explodes outward |
 
-**`SWNG`** shuffles every voice together while the world keeps its own straight
-time — also on the action layer. `SWPT` picks plain 16th swing or one of seven
+`SWNG` shuffles every voice together while the world keeps its own straight time.
+It is on the action layer too. `SWPT` picks plain 16th swing or one of seven
 shuffle patterns.
 
-**`NIN`** lets you draw with a keyboard: played notes become cells, one column
-per note, left to right. Off-scale notes snap to the nearest degree, so it always
+`NIN` lets you draw with a keyboard. Played notes become cells, one column per
+note, left to right. Off-scale notes snap to the nearest degree, so it always
 draws something.
 
-**`CV`** sends the world out as voltage — A follows how full it is, B how much is
-changing.
+`CV` sends the world out as voltage. A follows how full it is and B follows how
+much is changing.
 
 ---
 
 ## 9. Keeping it alive
 
 Left alone, a Game of Life world eventually settles into shapes that never
-change — and a frozen palette means four playheads walking a loop that never
-varies. So Life watches for that and sprinkles new cells in.
+change, and a frozen world means four playheads walking a loop that never varies.
+So Life watches for that and sprinkles new cells in.
 
-- `FLOR` — top the world up when the population drops below this
-- `SEED` — how many cells to add
-- `STAB` — how many generations of *nothing at all changing* count as stuck
+- `FLOR` tops the world up when the population drops below this
+- `SEED` is how many cells to add
+- `STAB` is how many generations of nothing at all changing count as stuck
 
-Blinking patterns still count as alive, so a world that's oscillating is left
-alone. It's still making music.
+Blinking patterns still count as alive, so a world that is oscillating gets left
+alone. It is still making music.
 
-Set `FLOR` and `STAB` to 0 if you'd rather it be allowed to die.
+Set `FLOR` and `STAB` to 0 if you would rather let it die.
 
 ---
 
 ## 10. Output
 
-Each voice has its own **sound** and its own **MIDI channel**, defaulting to
-channels 1–4. `OUT` chooses the internal synth, MIDI, or both.
+Each voice has its own sound and its own MIDI channel, defaulting to channels 1
+to 4. `OUT` chooses the internal synth, MIDI, or both.
 
 ### Controlling Life from a DAW
 
-With `CIN` set — 30 by default — a block of 35 controllers on the system MIDI
+With `CIN` set, 30 by default, a block of 35 controllers on the system MIDI
 channel drives the panel. Counting up from the base:
 
 | Offset | |
@@ -431,22 +424,22 @@ channel drives the panel. Counting up from the base:
 | +27 … +30 | pitch, voices 1–4 |
 | +31 … +34 | length, voices 1–4 |
 
-The per-voice controls are grouped **by parameter**, so a row of four knobs sets
-the same thing on all four voices.
+The per-voice controls are grouped by parameter, so a row of four knobs sets the
+same thing on all four voices.
 
-Clear, seed and step are momentary — they fire once when the value crosses
-halfway going up, so a button that sends 127 then 0 fires once.
+Clear, seed and step are momentary. They fire once when the value crosses halfway
+going up, so a button that sends 127 then 0 fires once.
 
-With `COUT` on it works both ways: change something on the grid and the same
-controller goes back out, so a DAW or a controller with motorised faders stays
-in step. You can leave both on with everything on one channel — an echo of what
-Life sent decodes to the value it already has, so it changes nothing and sends
+With `COUT` on it works both ways. Change something on the grid and the same
+controller goes back out, so a DAW or a controller with motorised faders stays in
+step. You can leave both on with everything on one channel, because an echo of
+what Life sent decodes to the value it already holds, changes nothing and sends
 nothing back.
 
 ### Simulation CCs out
 
 With `CC` on, Life sends eight controllers describing the world itself, once per
-generation — modulation taken from the world's own behaviour:
+generation:
 
 | CC | |
 |---|---|
@@ -456,28 +449,28 @@ generation — modulation taken from the world's own behaviour:
 | 23 | how still it is |
 | 24–27 | how far each voice's last note moved |
 
-They're only sent when a value actually changes, so a settled world goes quiet
+They are only sent when a value actually changes, so a settled world goes quiet
 rather than flooding the bus.
 
 ---
 
 ## 11. If something seems wrong
 
-**Nothing plays.** Check transport is running — `(15,15)` glows bright green.
-Nothing moves while stopped.
+**Nothing plays.** Check transport is running. `(15,15)` glows bright green when
+it is. Nothing moves while stopped.
 
-**Still nothing.** Check `OUT` and `PORT`. `OUT` on synth sends no MIDI; `PORT`
-off sends none either.
+**Still nothing.** Check `OUT` and `PORT`. `OUT` set to synth sends no MIDI, and
+`PORT` off sends none either.
 
 **One voice is silent.** Check its mute on row 14, and check whether another
-voice is soloed — a solo anywhere silences the rest.
+voice is soloed. A solo anywhere silences the rest.
 
-**It went static.** Either freeze `(2,15)` is on — it glows red — or the world
-got stuck and `FLOR`/`STAB` are too low to rescue it. Seed `(1,15)` adds cells
-immediately.
+**It went static.** Either freeze at `(2,15)` is on, which glows red, or the
+world got stuck and `FLOR` and `STAB` are too low to rescue it. Seed at `(1,15)`
+adds cells immediately.
 
-**It's too busy.** Lower `SEED`, slow `GEN` down, or mute a voice. Voices set to
-`ALL` play chords, and four of those at once is a lot.
+**It is too busy.** Lower `SEED`, slow `GEN` down, or mute a voice. Voices set to
+`ALL` play chords and four of those at once is a lot.
 
-**It sounds like one voice.** Give the four different **rates**. Same rate means
-same rhythm.
+**It sounds like one voice.** Give the four different rates. Same rate means same
+rhythm.
