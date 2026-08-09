@@ -89,7 +89,7 @@ destructive, cyan for the world controls.
 |---|---|---|
 | `(0,10)`–`(10,10)` | swing | 0–100%, off at the left |
 | `(0,11)`–`(11,11)` | generation rate | how often the world evolves |
-| `(0,12)`–`(5,12)` | rule | which law the world lives by |
+| `(0,12)`–`(5,12)` | rule | which law the world lives by — see below |
 | `(0,13)`–`(3,13)` | edit | open that voice's editor |
 | `(0,14)`–`(3,14)` | mute | lit means you'll hear that voice |
 | `(4,14)`–`(7,14)` | solo | silences the other three |
@@ -105,6 +105,19 @@ The four edit pads are the exception — they take you into the voice editor.
 **The top three rows are the world's own controls** — its feel, its tempo and its
 law. Nothing there belongs to a voice, which is why they sit together and not in
 a voice editor.
+
+Row 12, left to right:
+
+| Pad | | |
+|---|---|---|
+| `(0,12)` | `LIFE` | Conway — gliders drifting through a sparse world |
+| `(1,12)` | `HIGH` | HighLife — shapes replicate, so it keeps regenerating |
+| `(2,12)` | `MAZE` | dense slow-churning corridors, good for drones |
+| `(3,12)` | `CORL` | Coral — grows slowly outward into thick shapes |
+| `(4,12)` | `34` | restless, never settles for long |
+| `(5,12)` | `SEED` | everything dies every step and explodes outward |
+
+The lit pad is the current one. Each explains itself on the second screen.
 
 **Freeze and step are the composing tools.** Freeze holds the palette still so
 you can write against a fixed set of cells; step nudges it forward one generation
@@ -126,7 +139,7 @@ range goes.
 |---|---|---|
 | 1 | **voice** | which voice you're editing — tap to switch |
 | 3 | **rate** | `32nd · 16T · 16th · 8T · 8th · 4T · 1/4 · 1/2 · 1BAR · 2BAR · 4BAR · 8BAR` |
-| 5 | **pick** | which cell it takes — the 11 rules below |
+| 5 | **pick** | which live cell it takes — [the eleven picks](#5-picking-a-cell) |
 | 7 | **order** | forward · reverse · ping-pong · random |
 | 9 | **pitch** | −7 … +7 scale degrees; the dim centre pad is 0 |
 | 11 | **length** | 10% … 100% of the step |
@@ -142,7 +155,7 @@ And on row 15:
 
 Press `×` to go back to the world.
 
-Touching any pad describes it on the second screen, so you can read what a rule
+Touching any pad describes it on the second screen, so you can read what a pick
 does before committing to it.
 
 ### Rate is where the groove comes from
@@ -188,7 +201,7 @@ Numbers are tagged, because `30` on its own says nothing — `AC 60`, `SK 30`:
 | `SK` `RT` `TI` `EV` `AC` | skip · ratchet · tie · every · accent |
 | `CH` `PT` `LN` | channel · pitch · length |
 
-Values that already name themselves aren't tagged — rate reads `8th`, rule reads
+Values that already name themselves aren't tagged — rate reads `8th`, pick reads
 `WALK`, order reads `FWD`.
 
 **These are read off the cell the voice actually landed on**, not drawn onto
@@ -270,7 +283,7 @@ by. `Pick` is per voice; `rule` is the whole world.)
 
 Given the live cells in the column a voice has arrived at:
 
-| Rule | Plays |
+| Pick | Plays |
 |---|---|
 | `FRST` | the topmost live cell — the highest note |
 | `LAST` | the bottommost — the lowest note |
@@ -282,14 +295,14 @@ Given the live cells in the column a voice has arrived at:
 | `WALK` | the one closest in pitch to the last note — smooth lines |
 | `RISE` | the next one above the last note, wrapping to the bottom |
 | `FALL` | the next one below, wrapping to the top |
-| `ALL` | every live cell at once — **the only rule that makes chords** |
+| `ALL` | every live cell at once — **the only one that makes chords** |
 
 `WALK` gives you melodies. `RAND` gives you sparkle. `ALL` gives you pads. Mixing
 them across the four voices is most of the instrument.
 
 ### How many notes at once
 
-Every rule but `ALL` plays **one note per step**, so four voices give you up to
+Every pick but `ALL` plays **one note per step**, so four voices give you up to
 four notes. `ALL` plays the whole column.
 
 The synth has eight notes to share. Each voice you can hear is guaranteed one of
@@ -335,7 +348,7 @@ Press the right side button **down** from the world to reach the scene page:
 folders on the left, slots on the right, cancel and OK bottom right.
 
 A scene holds **the world itself** — every live cell — plus every voice's rate,
-rule, order, channel, pitch, length and mute, and the generation rate and
+pick, order, channel, pitch, length and mute, and the generation rate and
 respawn settings. Load one back and you get the same world and the same four
 voices.
 
@@ -344,11 +357,10 @@ preferences, saved automatically as you change them and shared by every scene.
 
 ---
 
-## 8. Rules, swing and drawing from a keyboard
+## 8. The world's rule, swing, and drawing from a keyboard
 
-**The rule** changes the law the world lives by, and it changes what the panel
-is. It is the top row of the action layer — one tap from playing — and also on
-the `RULE` settings page:
+**The rule** is the law the world lives by, and changing it changes what the
+panel is. Row 12 of the action layer, or the `RULE` settings page:
 
 | | |
 |---|---|
@@ -414,7 +426,7 @@ channel drives the panel. Counting up from the base:
 | +10 | step one generation |
 | +11 … +14 | mute, voices 1–4 |
 | +15 … +18 | rate, voices 1–4 |
-| +19 … +22 | rule, voices 1–4 |
+| +19 … +22 | pick, voices 1–4 |
 | +23 … +26 | order, voices 1–4 |
 | +27 … +30 | pitch, voices 1–4 |
 | +31 … +34 | length, voices 1–4 |
