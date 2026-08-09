@@ -274,6 +274,15 @@ struct life_panel : panel_t {
     play_surface_t play_surface;   /* play the selected voice over the running world */
     uint8_t string_roots[16];
 
+    /* do_play_surface is LEVEL-TRIGGERED: it calls back only for fingers that
+       are currently down and simply stops mentioning one that lifts. There is
+       no release callback, so anything sounding that it did not name this frame
+       is ours to stop. */
+    uint16_t play_down;            /* surface voices currently sounding */
+    uint16_t play_seen;            /* named by the callback this frame */
+    uint8_t play_note[16];         /* so a slide to a new note retriggers */
+    bool play_active;              /* were we on the surface last frame */
+
     uint32_t last_edge_us[LIFE_NUM_VOICES];
     uint32_t step_us[LIFE_NUM_VOICES];
     uint16_t last_played_mask[LIFE_NUM_VOICES];   /* for the UI flash */
@@ -391,6 +400,10 @@ struct life_panel : panel_t {
         cc_in_pending = 0;
         cc_out_primed = false;
         musical_state_seen = 0;
+        play_down = 0;
+        play_seen = 0;
+        play_active = false;
+        for (int i = 0; i < 16; ++i) play_note[i] = 0;
         note_in_count = 0;
         note_write_x = 0;
     }
@@ -1388,7 +1401,23 @@ struct life_panel : panel_t {
                                   finger_t finger) {
         (void)finger;
         life_panel *self = (life_panel *)user;
-        play_synth(voice, self->preset_for(self->edit_voice), velocity, note << 8, velocity != 0);
+        if (voice < 0 || voice >= 16) return;
+
+        self->play_seen |= (uint16_t)(1u << voice);
+        /* Strike on a new finger, or when a slide lands on a different note.
+           Otherwise this is the same note being re-reported with fresh
+           pressure, which should bend and swell rather than restrike. */
+        bool retrigger = !(self->play_down & (1u << voice)) || self->play_note[voice] != note;
+        self->play_note[voice] = (uint8_t)note;
+        play_synth(voice, self->preset_for(self->edit_voice), velocity, note << 8, retrigger);
+    }
+
+    /* Stop any surface voice that is no longer being played. */
+    void release_play_voices(uint16_t keep) {
+        uint16_t gone = (uint16_t)(play_down & ~keep);
+        for (int v = 0; v < 16; ++v)
+            if (gone & (1u << v)) synth_note_up(v);
+        play_down = keep;
     }
 
     void draw_play_surface(void) {
@@ -1398,11 +1427,13 @@ struct life_panel : panel_t {
             string_roots[row] = (uint8_t)life_degree_to_note((14 - row) * 2, root_note(),
                                                              scale_mask());
 
+        play_seen = 0;
         play_surface.do_play_surface(0, 0, LIFE_W, 15, LIFE_PLAY_VOICES,
                                      LED_RGB(0, 2, 4), life_voice_bright[edit_voice],
                                      string_roots, play_surface_note, this,
                                      HORIZONTAL | SHOW_BACKGROUND | STRINGOPHONIC_MONO,
                                      scale_mask(), current_key);
+        release_play_voices(play_seen);
 
         if (button(0, 15, LIFE_COL_ACTION, NOT_ISOLATED, "back to the voice editor"))
             ui_mode = LIFE_UI_VOICE;
@@ -1816,6 +1847,15 @@ struct life_panel : panel_t {
         apply_note_input();
 
         int page = get_scroll_page();
+
+        /* Leaving the surface with a finger down would strand that note: the
+           callback that would have released it only fires while the surface is
+           being drawn. Checked before the page dispatch so it also covers
+           paging away to the settings or scene pages. */
+        bool on_surface = (page == 0 && ui_mode == LIFE_UI_PLAY);
+        if (play_active && !on_surface) release_play_voices(0);
+        play_active = on_surface;
+
         if (page < 0) {
             draw_settings(page);
             flush_settings();
