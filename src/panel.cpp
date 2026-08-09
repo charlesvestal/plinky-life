@@ -308,6 +308,7 @@ struct life_panel : panel_t {
     uint8_t cc_in_last[CC_PARAM_COUNT];
     uint64_t cc_in_pending;
     uint32_t musical_state_seen;   /* so we notice key or scale changed elsewhere */
+    int plate_code;                /* the mounted overlay, read once at load */
 
     /* Note input. on_midi records; on_ui paints, because touching the world is
        exactly what the sequence lock exists to protect. */
@@ -371,6 +372,7 @@ struct life_panel : panel_t {
            apart between the two entry points. */
         setup_default_panel_state_fields_only();
         set_pref_defaults();
+        plate_code = get_frontpanel_code();
 
         reset_everything();
         rebuild_runtime();
@@ -397,6 +399,14 @@ struct life_panel : panel_t {
 
     void on_load_finished(void) override {
         panel_t::on_load_finished();
+
+        /* Read the overlay once rather than every frame, and say what it was.
+           The values in the API dump are NONE/BLOCKS 0x0, TOADSTEP 0x2,
+           DRUMS 0x10, CHORDS 0x20; if a unit reports something else this line
+           is how we find out instead of guessing. */
+        plate_code = get_frontpanel_code();
+        printf("life: frontpanel code 0x%x, orientation %d -> %s layout\n",
+               (unsigned)plate_code, get_frontpanel_orientation(), plate_layout_name());
 
         /* SYSTEM_NOTES.md section 6b: setup_default_panel_state() does NOT run on
            a staged load, which is how the IDE loads a panel. The arena is zeroed,
@@ -1380,13 +1390,19 @@ struct life_panel : panel_t {
     }
 
     /* What the second screen calls the sound page's layout. */
-    static const char *plate_layout_name(void) {
-        switch (get_frontpanel_code()) {
-        case FRONT_PANEL_CODE_CHORDS: return "Chords";
-        case FRONT_PANEL_CODE_DRUMS: return "Drums";
-        case FRONT_PANEL_CODE_TOADSTEP: return "Toadstep";
-        default: return "standard";
-        }
+    /* Chords and Drums print the same synth page. Tested with a mask rather
+       than equality: the codes are distinct bits (TOADSTEP 0x2, DRUMS 0x10,
+       CHORDS 0x20), so a unit that reports extra bits alongside the plate still
+       matches. */
+    bool plate_is_printed(void) const {
+        return (plate_code & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
+    }
+
+    const char *plate_layout_name(void) const {
+        if (plate_code & FRONT_PANEL_CODE_CHORDS) return "Chords";
+        if (plate_code & FRONT_PANEL_CODE_DRUMS) return "Drums";
+        if (plate_code & FRONT_PANEL_CODE_TOADSTEP) return "Toadstep";
+        return "standard";
     }
 
     void draw_preset_editor(void) {
@@ -1400,8 +1416,7 @@ struct life_panel : panel_t {
            fallback: its column order IS Toadstep's printed fader order, top
            bank and bottom bank both, just at 5 rows high instead of 8. Blocks
            prints no labels at all, so nothing can be wrong there. */
-        int plate = get_frontpanel_code();
-        if (plate == FRONT_PANEL_CODE_CHORDS || plate == FRONT_PANEL_CODE_DRUMS) {
+        if (plate_is_printed()) {
             draw_printed_sound_page(preset);
             return;
         }
