@@ -7,8 +7,8 @@
      traversal  = which column a voice is on   -> handled by playhead_t
      selection  = which live cell in that column actually sounds -> this file
 
-   ZOA's feature list conflates the two. Keeping them apart is what makes the
-   behaviour describable, and testable without any hardware.
+   They are easy to run together, and keeping them apart is what makes the
+   behaviour describable and testable without any hardware.
 
    Rows are scale degrees: row 15 is degree 0 (lowest pitch), row 0 is degree 15
    (highest pitch). Rules are named in terms of PITCH, not row index, because

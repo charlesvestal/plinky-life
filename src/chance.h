@@ -2,12 +2,12 @@
 
    Pure C. No Plinky API. Compiled directly by the desktop test harness.
 
-   ZOA draws these onto steps by hand. Here they are read off the cell the voice
-   actually landed on, because the world is the thing that moves: a value drawn
-   onto step 7 would be the only part of the panel that does not respond to what
-   you are watching. A glider passing through a voice's path should audibly
-   change its rhythm, and that only happens if the rhythm is a function of the
-   cells.
+   The obvious way to do this is a per-step overlay you draw by hand. Here they
+   are read off the cell the voice actually landed on instead, because the world
+   is the thing that moves: a value drawn onto step 7 would be the only part of
+   the panel that does not respond to what you are watching. A glider passing
+   through a voice's path should audibly change its rhythm, and that only happens
+   if the rhythm is a function of the cells.
 
    Each behaviour has a DEPTH of 0..100, and depth 0 is off. So one control both
    enables a behaviour and says how strongly it responds - there is no separate

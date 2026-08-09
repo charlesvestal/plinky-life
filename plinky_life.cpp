@@ -229,8 +229,8 @@ static inline void life_respawn_apply(life_world_t *w, life_respawn_t *r, int co
      traversal  = which column a voice is on   -> handled by playhead_t
      selection  = which live cell in that column actually sounds -> this file
 
-   ZOA's feature list conflates the two. Keeping them apart is what makes the
-   behaviour describable, and testable without any hardware.
+   They are easy to run together, and keeping them apart is what makes the
+   behaviour describable and testable without any hardware.
 
    Rows are scale degrees: row 15 is degree 0 (lowest pitch), row 0 is degree 15
    (highest pitch). Rules are named in terms of PITCH, not row index, because
@@ -959,12 +959,12 @@ static inline int cc_group_for_param(int param) {
 
    Pure C. No Plinky API. Compiled directly by the desktop test harness.
 
-   ZOA draws these onto steps by hand. Here they are read off the cell the voice
-   actually landed on, because the world is the thing that moves: a value drawn
-   onto step 7 would be the only part of the panel that does not respond to what
-   you are watching. A glider passing through a voice's path should audibly
-   change its rhythm, and that only happens if the rhythm is a function of the
-   cells.
+   The obvious way to do this is a per-step overlay you draw by hand. Here they
+   are read off the cell the voice actually landed on instead, because the world
+   is the thing that moves: a value drawn onto step 7 would be the only part of
+   the panel that does not respond to what you are watching. A glider passing
+   through a voice's path should audibly change its rhythm, and that only happens
+   if the rhythm is a function of the cells.
 
    Each behaviour has a DEPTH of 0..100, and depth 0 is off. So one control both
    enables a behaviour and says how strongly it responds - there is no separate
