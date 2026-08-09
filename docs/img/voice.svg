@@ -292,12 +292,14 @@
 <text class="p" x="81.0" y="616.5" text-anchor="middle" fill="#000">SND</text>
 <rect x="102" y="596" width="34" height="34" rx="7" fill="#5a3000"/>
 <text class="p" x="119.0" y="616.5" text-anchor="middle" fill="#000">P2</text>
+<rect x="140" y="596" width="34" height="34" rx="7" fill="#3fd45a"/>
+<text class="p" x="157.0" y="616.5" text-anchor="middle" fill="#000">PLY</text>
 <rect x="520" y="596" width="34" height="34" rx="7" fill="#c81ea0"/>
 <text class="p" x="537.0" y="616.5" text-anchor="middle" fill="#fff">×</text>
 <rect x="558" y="596" width="34" height="34" rx="7" fill="#d4341a"/>
-<rect x="596" y="596" width="34" height="34" rx="7" fill="#1fd455"/>
+<rect x="140" y="596" width="34" height="34" rx="7" fill="#1fd455"/>
 <rect x="569" y="607" width="12" height="12" rx="2" fill="#fff"/>
-<path d="M608 606 L620 613 L608 620 Z" fill="#04240f"/>
+<path d="M152 606 L164 613 L152 620 Z" fill="#04240f"/>
 <text class="h" x="654" y="40">VOICE EDITOR</text>
 <text class="t" x="654" y="60">(13,15) then E1..E4</text>
 <text class="h" x="654" y="83.0">VOICE</text>
@@ -314,5 +316,5 @@
 <text class="k" x="654" y="477.0">10% .. 100% of the step</text>
 <text class="h" x="654" y="539.0">ACCENT</text>
 <text class="k" x="654" y="553.0">crowded cells hit harder</text>
-<text class="t" x="26" y="652">Selected pad bright; the rest of the row dim. Row 15: LD loads a preset, SND edits the sound, P2 flips to the behaviour page.</text>
+<text class="t" x="26" y="652">Selected pad bright; the rest of the row dim. Row 15: LD loads a preset, SND edits the sound, P2 flips to the behaviour page, PLY plays this voice by hand.</text>
 </svg>

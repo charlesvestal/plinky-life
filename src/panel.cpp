@@ -155,10 +155,19 @@ static const uint8_t life_port_values[5] = {
    divider edges have been seen and the real interval is known. */
 #define LIFE_DEFAULT_STEP_US 250000
 
-/* How many of Plinky's synth voices this panel will claim. llm.txt: there are
-   12 physical voices, but 8 "is the current practical default for user panels;
-   using all 12 can exceed the DSP budget with heavier presets or effects". */
-#define LIFE_SYNTH_VOICES 8
+/* Plinky has 12 physical synth voices. The sequencer and the play surface both
+   want some, and they allocate independently, so they are given separate ranges
+   rather than left to steal from each other: the surface takes 0..3, the
+   sequencer 4..11.
+
+   llm.txt notes that 8 "is the current practical default for user panels; using
+   all 12 can exceed the DSP budget with heavier presets or effects" - so the
+   sequencer keeps its eight and the surface's four are the ones on top. Worth
+   watching on hardware with a heavy preset. */
+#define LIFE_PLAY_VOICES     4
+#define LIFE_SEQ_VOICE_FIRST 4
+#define LIFE_SEQ_VOICE_END   12
+#define LIFE_SYNTH_VOICES    (LIFE_SEQ_VOICE_END - LIFE_SEQ_VOICE_FIRST)
 
 /* Every playhead claims at the same priority. An earlier version passed
    `1 + v`, which quietly made voice 4 outrank voice 1 and let the bass steal
@@ -168,7 +177,8 @@ static const uint8_t life_port_values[5] = {
 
 /* The three things the grid can be showing. The grid is the entire screen, so
    these are modes rather than panes. */
-enum { LIFE_UI_WORLD = 0, LIFE_UI_ACTION, LIFE_UI_VOICE, LIFE_UI_PRESET, LIFE_UI_LOAD };
+enum { LIFE_UI_WORLD = 0, LIFE_UI_ACTION, LIFE_UI_VOICE, LIFE_UI_PRESET, LIFE_UI_LOAD,
+       LIFE_UI_PLAY };
 
 /* The on-grid voice editor. One parameter per row, on odd rows only: the blank
    even rows between them are what makes seven stacked rows readable at arm's
@@ -215,6 +225,7 @@ static const life_param_row_t life_chance_rows[] = {
    editor's own save/load picker. */
 #define LIFE_LOAD_X  0
 #define LIFE_SOUND_X 1
+#define LIFE_PLAY_X_PAD 3      /* opens the play surface for the selected voice */
 #define LIFE_SOUND_Y 15
 
 struct life_panel : panel_t {
@@ -241,6 +252,8 @@ struct life_panel : panel_t {
     voice_allocator_t allocator;
     preset_pages_t preset_pages;   /* the stock synth editor, hosted per voice */
     panel_page_t panel_page;       /* the stock scene save/load picker, on page 1 */
+    play_surface_t play_surface;   /* play the selected voice over the running world */
+    uint8_t string_roots[16];
 
     uint32_t last_edge_us[LIFE_NUM_VOICES];
     uint32_t step_us[LIFE_NUM_VOICES];
@@ -616,8 +629,9 @@ struct life_panel : panel_t {
     void synth_note_on(int v, int note, int velocity) {
         if (!synth_enabled()) return;
         uint32_t sid = source_id_for(v, note);
-        int old_voice = allocator.find_voice(sid);
-        int new_voice = allocator.voice_allocate(sid, LIFE_VOICE_PRIO, 0, LIFE_SYNTH_VOICES);
+        int old_voice = allocator.find_voice(sid, LIFE_SEQ_VOICE_FIRST, LIFE_SEQ_VOICE_END);
+        int new_voice = allocator.voice_allocate(sid, LIFE_VOICE_PRIO,
+                                                 LIFE_SEQ_VOICE_FIRST, LIFE_SEQ_VOICE_END);
         if (new_voice < 0) return;
         if (new_voice != old_voice && old_voice >= 0) synth_note_up(old_voice);
         play_synth(new_voice, preset_for(v), velocity, note << 8, true);
@@ -625,10 +639,10 @@ struct life_panel : panel_t {
 
     void synth_note_off(int v, int note) {
         uint32_t sid = source_id_for(v, note);
-        int voice = allocator.find_voice(sid);
+        int voice = allocator.find_voice(sid, LIFE_SEQ_VOICE_FIRST, LIFE_SEQ_VOICE_END);
         if (voice >= 0) {
             synth_note_up(voice);
-            allocator.voice_deallocate(sid);
+            allocator.voice_deallocate(sid, LIFE_SEQ_VOICE_FIRST, LIFE_SEQ_VOICE_END);
         }
     }
 
@@ -1129,6 +1143,7 @@ struct life_panel : panel_t {
     uint32_t voice_colour(int x, int y) const {
         if (y == LIFE_SOUND_Y && x == LIFE_LOAD_X) return LED_RGB(6, 4, 14);
         if (y == LIFE_SOUND_Y && x == LIFE_SOUND_X) return LIFE_COL_ACTION;
+        if (y == LIFE_SOUND_Y && x == LIFE_PLAY_X_PAD) return life_voice_bright[edit_voice];
         if (y == LIFE_SOUND_Y && x == LIFE_VPAGE_X)
             return voice_page ? LED_RGB(20, 10, 0) : LED_RGB(5, 3, 0);
 
@@ -1157,6 +1172,8 @@ struct life_panel : panel_t {
     const char *voice_help(int x, int y) const {
         if (y == LIFE_SOUND_Y && x == LIFE_LOAD_X) return "load a preset into this voice";
         if (y == LIFE_SOUND_Y && x == LIFE_SOUND_X) return "edit this voice's sound";
+        if (y == LIFE_SOUND_Y && x == LIFE_PLAY_X_PAD)
+            return "play this voice by hand, over the running world";
 
         if (y == LIFE_SOUND_Y && x == LIFE_VPAGE_X)
             return "flip between the voice's timing and its chance controls";
@@ -1193,6 +1210,10 @@ struct life_panel : panel_t {
         }
         if (y == LIFE_SOUND_Y && x == LIFE_SOUND_X) {
             ui_mode = LIFE_UI_PRESET;
+            return;
+        }
+        if (y == LIFE_SOUND_Y && x == LIFE_PLAY_X_PAD) {
+            ui_mode = LIFE_UI_PLAY;
             return;
         }
         if (y == LIFE_SOUND_Y && x == LIFE_VPAGE_X) { voice_page = voice_page ? 0 : 1; return; }
@@ -1310,6 +1331,43 @@ struct life_panel : panel_t {
                       life_trav_names[v_order[v]], (int)v_pitch[v], (int)v_length[v],
                       (int)v_accent[v]);
         (void)0;
+    }
+
+    /* --- the play surface -------------------------------------------------
+
+       An instrument laid over the sequencer, not another way to edit it. Notes
+       played here sound and nothing else: they do not draw cells, because the
+       point is to perform over the world rather than to disturb it.
+
+       Rows are strings and row 0 is the highest, the same way the world reads,
+       so a row here is the degree it would be over there. Moving right along a
+       row climbs the scale from that row's root, which is the layout a Plinky
+       player already knows.
+
+       It is always in key: the scale and root come from the instrument's
+       globals, so it follows KEY and SCAL like everything else. */
+    static void play_surface_note(void *user, int voice, int note, uint8_t velocity,
+                                  finger_t finger) {
+        (void)finger;
+        life_panel *self = (life_panel *)user;
+        play_synth(voice, self->preset_for(self->edit_voice), velocity, note << 8, velocity != 0);
+    }
+
+    void draw_play_surface(void) {
+        /* Row 0 is the top and must be the highest note, so the roots descend.
+           Two degrees between rows spans about four octaves over the fifteen. */
+        for (int row = 0; row < 15; ++row)
+            string_roots[row] = (uint8_t)life_degree_to_note((14 - row) * 2, root_note(),
+                                                             scale_mask());
+
+        play_surface.do_play_surface(0, 0, LIFE_W, 15, LIFE_PLAY_VOICES,
+                                     LED_RGB(0, 2, 4), life_voice_bright[edit_voice],
+                                     string_roots, play_surface_note, this,
+                                     HORIZONTAL | SHOW_BACKGROUND | STRINGOPHONIC_MONO,
+                                     scale_mask(), current_key);
+
+        if (button(0, 15, LIFE_COL_ACTION, NOT_ISOLATED, "back to the voice editor"))
+            ui_mode = LIFE_UI_VOICE;
     }
 
     /* --- the hosted synth editor ------------------------------------------
@@ -1773,6 +1831,14 @@ struct life_panel : panel_t {
             if (button(tx, LIFE_TRANSPORT_Y, transport_colour(tx), NOT_ISOLATED,
                        tx == LIFE_PLAY_X ? "play" : "stop"))
                 do_transport(tx);
+        }
+
+        /* The play surface owns the grid the same way the synth editor does. */
+        if (mode == LIFE_UI_PLAY) {
+            draw_play_surface();
+            set_help_text("#fc2#*Voice %d#. - play over the world. Notes sound, cells are "
+                          "untouched.", edit_voice + 1);
+            return;
         }
 
         /* The hosted synth editor owns the grid: it emits sliders and an XY pad

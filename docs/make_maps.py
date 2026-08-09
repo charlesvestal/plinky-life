@@ -42,6 +42,7 @@ PARAM_ROWS = [
 ]
 
 LOAD_X, SOUND_X, SOUND_Y = 0, 1, 15   # load a preset / edit this voice's sound
+PLAY_X = 3                            # play this voice by hand
 VPAGE_X = 2                           # flip to the chance page
 
 CHANCE_ROWS = [
@@ -279,6 +280,7 @@ def voice():
     pad(out, LOAD_X, SOUND_Y, "#4a3c8f", "LD", "#fff")
     pad(out, SOUND_X, SOUND_Y, ACTION, "SND", "#000")
     pad(out, VPAGE_X, SOUND_Y, "#5a3000", "P2", "#000")
+    pad(out, PLAY_X, SOUND_Y, V[1], "PLY", "#000")
     transport(out)
     lx = PAD + 16 * (CELL + GAP) + 20
     ly = PAD
@@ -291,7 +293,7 @@ def voice():
     out.append(
         f'<text class="t" x="{PAD}" y="{PAD + 16*(CELL+GAP) + 18}">'
         'Selected pad bright; the rest of the row dim. Row 15: LD loads a preset, SND edits '
-        'the sound, P2 flips to the behaviour page.</text>'
+        'the sound, P2 flips to the behaviour page, PLY plays this voice by hand.</text>'
     )
     out.append("</svg>")
     return "\n".join(out)
@@ -407,6 +409,7 @@ def chance():
     pad(out, LOAD_X, SOUND_Y, "#4a3c8f", "LD", "#fff")
     pad(out, SOUND_X, SOUND_Y, ACTION, "SND", "#000")
     pad(out, VPAGE_X, SOUND_Y, "#c86400", "P2", "#000")
+    pad(out, PLAY_X, SOUND_Y, V[1], "PLY", "#000")
     transport(out)
     lx = PAD + 16 * (CELL + GAP) + 20
     ly = PAD
@@ -420,7 +423,8 @@ def chance():
         ("h", "row 15 - both pages"),
         ("t", "LD   load a preset"),
         ("t", "SND  the sound editor"),
-        ("t", "P2   flip play / chance"),
+        ("t", "P2   flip the two pages"),
+        ("t", "PLY  play this voice"),
     ])
     # the readout zone, drawn opposite the finger
     zy = PAD + 0 * (CELL + GAP)

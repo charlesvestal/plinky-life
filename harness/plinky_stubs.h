@@ -84,6 +84,41 @@ struct clock_divider_t {
                bool freerunning = false, bool unwrap_clock = DONT_UNWRAP_CLOCK);
 };
 
+/* --- play surface -------------------------------------------------------- */
+#define HORIZONTAL 1
+#define VERTICAL 2
+#define SHOW_BACKGROUND 1024
+#define POLYPHONIC 0
+#define MONOPHONIC 4
+#define STRINGOPHONIC_MONO 8
+#define STRINGOPHONIC_POLY 12
+
+struct finger_t {
+    uint8_t string_idx, pressure;
+    int16_t string_pos_q8;
+};
+
+int scale_play_surface_note(int string_root_note, int string_pos, int scale_root_note,
+                            uint16_t scale);
+
+typedef void (*play_surface_note_fn)(void *user, int voice, int note, uint8_t velocity,
+                                     finger_t finger);
+typedef uint8_t (*scale_play_surface_brightness_fn)(void *user, int string_idx, int string_pos,
+                                                    int x, int y, int note);
+
+struct play_surface_t {
+    finger_t fingers[16];
+    uint32_t finger_seq[16];
+    uint32_t next_finger_seq;
+    void do_play_surface(int x, int y, int w, int h, int max_voices, uint32_t bg_col,
+                         uint32_t root_col, const uint8_t *string_roots,
+                         play_surface_note_fn note_fn, void *note_user = nullptr,
+                         int flags = VERTICAL | SHOW_BACKGROUND | STRINGOPHONIC_MONO,
+                         int scale = 0, int scale_root = -1,
+                         scale_play_surface_brightness_fn brightness = nullptr,
+                         void *brightness_user = nullptr, int highlight_pitch_class = -1);
+};
+
 /* --- synth voices -------------------------------------------------------- */
 #define MAX_VOICES 12
 #define DEFAULT_VOICE_ALLOCATOR_VOICES 8

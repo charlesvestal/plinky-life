@@ -150,11 +150,27 @@ And on row 15:
 | `(0,15)` | load a preset into this voice |
 | `(1,15)` | edit this voice's sound |
 | `(2,15)` | flip to the behaviour page |
+| `(3,15)` | play this voice by hand |
 
 Press `×` to go back to the world.
 
 Touching any pad describes it on the second screen, so you can read what a pick
 does before committing to it.
+
+### Playing a voice by hand
+
+`(3,15)` turns the grid into a keyboard for the selected voice, so you can play
+over the sequence while it runs. Notes sound and nothing else happens: the world
+is left alone, because the point is to perform over it rather than disturb it.
+
+Rows are strings and row 0 is the highest, the same way the world reads, so a row
+here is the note that row would play over there. Moving right along a row climbs
+the scale from that row's root.
+
+It is always in key. The scale and root come from the same place as everything
+else, so it follows `KEY` and `SCAL` without being told.
+
+`(0,15)` goes back to the voice editor, `×` goes back to the world.
 
 ### Rate is where the groove comes from
 
