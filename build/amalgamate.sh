@@ -10,7 +10,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 OUT=plinky_life.cpp
-HEADERS="src/life.h src/selection.h src/traversal.h src/scales.h src/voice.h src/ccmap.h src/chance.h src/spark.h"
+HEADERS="src/life.h src/selection.h src/traversal.h src/scales.h src/voice.h src/ccmap.h src/chance.h"
 
 # 1. the metadata block comment, which must lead the file
 awk 'NR==1 && $0!="/*" { print "amalgamate: panel.cpp must start with the metadata comment" > "/dev/stderr"; exit 1 }

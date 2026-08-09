@@ -17,7 +17,6 @@
 #include "../src/voice.h"
 #include "../src/ccmap.h"
 #include "../src/chance.h"
-#include "../src/spark.h"
 
 static int failures = 0;
 static int checks = 0;
@@ -934,73 +933,6 @@ static void test_pass_divisor_range_and_gating(void) {
     CHECK(played == 40 / n, "every-Nth played %d of 40 with divisor %d", played, n);
 }
 
-/* --------------------------------------------------------------- spark.h -- */
-
-static void test_spark_off_when_length_is_zero(void) {
-    for (unsigned age = 0; age < 500000u; age += 1000)
-        CHECK(!life_spark_alive(age, 0) && life_spark_centre(age, 0) == 0
-                  && life_spark_ring(age, 0) == 0,
-              "a zero-length flash must never light");
-    CHECK(life_spark_length_us(0) == 0, "setting 0 must be off");
-}
-
-static void test_spark_centre_decays_to_nothing(void) {
-    unsigned len = life_spark_length_us(50);
-    CHECK(life_spark_centre(0, len) == LIFE_SPARK_LEVEL_MAX, "the strike should be full");
-    CHECK(life_spark_centre(len, len) == 0, "it must be out at the end");
-    CHECK(life_spark_centre(len * 4, len) == 0, "and stay out afterwards");
-
-    int last = LIFE_SPARK_LEVEL_MAX + 1;
-    for (unsigned age = 0; age < len; age += len / 64) {
-        int v = life_spark_centre(age, len);
-        CHECK(v <= last, "centre brightened again at %u", age);
-        CHECK(v >= 0 && v <= LIFE_SPARK_LEVEL_MAX, "centre out of range: %d", v);
-        if (v > last) return;
-        last = v;
-    }
-}
-
-static void test_spark_ring_starts_dark_peaks_then_goes_out(void) {
-    unsigned len = life_spark_length_us(60);
-    CHECK(life_spark_ring(0, len) == 0, "the ring must start dark so it reads as spreading");
-    CHECK(life_spark_ring(len, len) == 0, "the ring must be out at the end");
-
-    int peak = 0;
-    unsigned peak_at = 0;
-    for (unsigned age = 0; age < len; age += len / 128) {
-        int v = life_spark_ring(age, len);
-        CHECK(v >= 0 && v <= LIFE_SPARK_LEVEL_MAX / 2 + 1, "ring out of range: %d", v);
-        if (v > peak) { peak = v; peak_at = age; }
-    }
-    CHECK(peak > 0, "the ring never lit");
-    CHECK(peak_at > 0 && peak_at < len, "the ring peaked at an end, not in the middle");
-    CHECK(peak <= LIFE_SPARK_LEVEL_MAX / 2 + 1, "the ring should stay dimmer than the cell");
-}
-
-static void test_spark_survives_the_timer_wrapping(void) {
-    /* time_us() wraps every ~71 minutes. An unsigned difference is still the
-       real age across that wrap, so a flash must not freeze or blink. */
-    unsigned len = life_spark_length_us(40);
-    unsigned t0 = 0xFFFFFF00u;                 /* just before the wrap */
-    for (unsigned step = 0; step < len; step += len / 32) {
-        unsigned now = t0 + step;              /* wraps mid-way through */
-        unsigned age = now - t0;
-        CHECK(age == step, "age wrong across the wrap: %u vs %u", age, step);
-        CHECK(life_spark_alive(age, len), "flash died across the wrap at %u", step);
-    }
-}
-
-static void test_spark_length_range_is_sane(void) {
-    unsigned prev = 0;
-    for (int set = 1; set <= 100; ++set) {
-        unsigned len = life_spark_length_us(set);
-        CHECK(len > prev, "length must grow with the setting");
-        CHECK(len >= 60000u && len <= 300000u, "length %u out of range at %d", len, set);
-        if (len <= prev) return;
-        prev = len;
-    }
-}
-
 /* ------------------------------------------------------------------------- */
 
 int main(void) {
@@ -1081,12 +1013,6 @@ int main(void) {
     test_ratchets_are_deterministic();
     test_only_survivors_tie();
     test_pass_divisor_range_and_gating();
-
-    test_spark_off_when_length_is_zero();
-    test_spark_centre_decays_to_nothing();
-    test_spark_ring_starts_dark_peaks_then_goes_out();
-    test_spark_survives_the_timer_wrapping();
-    test_spark_length_range_is_sane();
 
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

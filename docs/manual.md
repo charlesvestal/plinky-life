@@ -68,12 +68,8 @@ Each voice tints the column it is standing on, in its own colour:
 | 🔵 | 3 |
 | 🟡 | 4 |
 
-The dim tint shows where a voice is. When a voice triggers a cell, that cell
-bursts in the voice's colour and fades, with a faint ring spreading to its
-neighbours, so you can see which note each voice actually took.
-
-`FLSH` on the settings pages sets how long a burst lasts, or turns it off if a
-busy world gets too noisy.
+The dim tint shows where a voice is. A cell flashing bright is what it just
+played.
 
 ---
 
@@ -345,7 +341,6 @@ value. The second screen explains each page as you land on it.
 | `KEY ` `SCAL` `OCT ` | musical | key, scale, base octave |
 | `GEN ` `RULE` `FLOR` `SEED` `STAB` | the world | tempo, law, and keeping it alive |
 | `SWNG` `SWPT` | feel | swing amount and shuffle pattern |
-| `FLSH` | display | how long a triggered cell flashes |
 | `OUT ` `PORT` | output | synth, MIDI or both, and which ports |
 | `CC  ` `CIN ` `COUT` `CV  ` `NIN ` | control | CCs out and in, CV out, note input |
 
