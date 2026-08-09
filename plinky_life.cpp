@@ -2762,7 +2762,7 @@ struct life_panel : panel_t {
            gesture. Read its edge immediately - is_last_widget_*() refers to the
            most recently emitted widget, so nothing may come between. */
         modifier_held = shift_button(LIFE_MODIFIER_X, LIFE_MODIFIER_Y, LIFE_COL_MODIFIER,
-                                     NOT_ISOLATED, "hold or tap for actions");
+                                     NOT_ISOLATED, "actions - tap again to leave");
         bool modifier_pressed = is_last_widget_pressed();
 
         /* Tap toggles, hold peeks. Anything that is not the world goes back to
@@ -2833,12 +2833,12 @@ struct life_panel : panel_t {
                 if (mode == LIFE_UI_VOICE) {
                     do_voice_edit(x, y);
                 } else if (mode == LIFE_UI_ACTION) {
-                    if (is_action_pad(x, y)) {
-                        do_action(x, y);
-                        /* one-shot: an action drops back to the world unless it
-                           opened another mode */
-                        if (ui_mode == LIFE_UI_ACTION) ui_mode = LIFE_UI_WORLD;
-                    }
+                    /* The layer STAYS until you press x again. It used to close
+                       after every action, which made auditioning rules or
+                       setting up a mix a rhythm of x-tap-x-tap. Only the edit
+                       pads move you elsewhere, and that is a mode change rather
+                       than a dismissal. */
+                    if (is_action_pad(x, y)) do_action(x, y);
                 } else {
                     /* on_ui and on_sequence share the world, and on_sequence can
                        interrupt this at any instruction. */

@@ -78,8 +78,8 @@ The dim tint shows where a voice **is**. A cell flashing bright is what it just
 
 ![Action layer](img/action.svg)
 
-Tap `×`, or hold it — either works. The world dims underneath so you don't lose
-your place.
+Tap `×`, or hold it — either works, and it stays open until you tap `×` again.
+The world dims underneath so you don't lose your place.
 
 The grid can't show text, so these are coloured pads rather than labels. Position
 and colour are what you learn: each voice's own colour on rows 13–14, red for
@@ -98,8 +98,9 @@ destructive, cyan for the world controls.
 | `(2,15)` | freeze | stop the world changing; glows red while frozen |
 | `(3,15)` | step | advance exactly one generation |
 
-**Any action drops you back to the world.** The four edit pads open the voice
-editor instead.
+**The layer stays open until you press `×` again**, so you can audition rules,
+set up a mix, or nudge swing and generation rate without reopening it each time.
+The four edit pads are the exception — they take you into the voice editor.
 
 **The top three rows are the world's own controls** — its feel, its tempo and its
 law. Nothing there belongs to a voice, which is why they sit together and not in

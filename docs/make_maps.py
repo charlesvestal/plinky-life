@@ -241,9 +241,9 @@ def action():
         ("t", "FRZ  freeze evolution"),
         ("t", "STP  advance one generation"),
         ("t", ""),
-        ("t", "Any action drops you back to"),
-        ("t", "the world. E1..E4 open the"),
-        ("t", "voice editor instead."),
+        ("t", "Stays open until you tap x"),
+        ("t", "again. E1..E4 take you to the"),
+        ("t", "voice editor."),
         ("t", ""),
         ("t", "STP works while stopped."),
     ])

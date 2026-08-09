@@ -339,9 +339,9 @@
 <text class="t" x="658" y="414">FRZ  freeze evolution</text>
 <text class="t" x="658" y="431">STP  advance one generation</text>
 <text class="t" x="658" y="448"></text>
-<text class="t" x="658" y="465">Any action drops you back to</text>
-<text class="t" x="658" y="482">the world. E1..E4 open the</text>
-<text class="t" x="658" y="499">voice editor instead.</text>
+<text class="t" x="658" y="465">Stays open until you tap x</text>
+<text class="t" x="658" y="482">again. E1..E4 take you to the</text>
+<text class="t" x="658" y="499">voice editor.</text>
 <text class="t" x="658" y="516"></text>
 <text class="t" x="658" y="533">STP works while stopped.</text>
 </svg>
