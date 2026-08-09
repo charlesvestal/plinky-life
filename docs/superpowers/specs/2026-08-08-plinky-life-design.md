@@ -79,8 +79,10 @@ Given the set of live cells in a voice's current column, ordered top (row 0) to 
 | `FALL` | nearest live cell strictly below the previous row, wrapping to the top |
 | `ALL` | every live cell in the column, simultaneously |
 
-`ALL` is the only rule that produces harmony rather than a monophonic line per voice, and it
-costs roughly six lines.
+`ALL` is an **addition to the original ten**, proposed during design and approved. It is the
+only rule that produces harmony rather than a monophonic line per voice: without it, four voices
+are four independent melodies and the panel cannot make a chord at all. It costs roughly six
+lines, which is why it was worth arguing for.
 
 Rules that retain state (`UP`, `DOWN`, `UPDOWN`, `DOWNUP`, `WALK`, `RISE`, `FALL`) hold that
 state per voice and must degrade gracefully when the column's live-cell set changes size between
