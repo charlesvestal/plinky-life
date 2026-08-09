@@ -32,7 +32,7 @@ layer, and it is where the generative character comes from.
 **An empty column is a rest.** This is load-bearing: it is what makes the automaton's density
 read as rhythm rather than as a wall of notes.
 
-The two layers are deliberately separate. ZOA's feature list conflates them; keeping them apart
+The two layers are deliberately separate. They are easy to run together, and keeping them apart
 is what makes the behaviour describable and testable.
 
 ---
@@ -79,9 +79,8 @@ Given the set of live cells in a voice's current column, ordered top (row 0) to 
 | `FALL` | nearest live cell strictly below the previous row, wrapping to the top |
 | `ALL` | every live cell in the column, simultaneously |
 
-`ALL` is **not from ZOA**. It is added because it is the only rule that produces harmony rather
-than a monophonic line per voice, and it costs roughly six lines. It is the one place this design
-knowingly departs from the reference.
+`ALL` is the only rule that produces harmony rather than a monophonic line per voice, and it
+costs roughly six lines.
 
 Rules that retain state (`UP`, `DOWN`, `UPDOWN`, `DOWNUP`, `WALK`, `RISE`, `FALL`) hold that
 state per voice and must degrade gracefully when the column's live-cell set changes size between
