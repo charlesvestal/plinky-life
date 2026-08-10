@@ -349,7 +349,7 @@ struct life_panel : panel_t {
     uint8_t cc_in_last[CC_PARAM_COUNT];
     uint64_t cc_in_pending;
     uint32_t musical_state_seen;   /* so we notice key or scale changed elsewhere */
-    int plate_code;                /* the mounted overlay, read once at load */
+    int plate_seen;                /* last front-panel code we reported in the log */
 
     /* Note input. on_midi records; on_ui paints, because touching the world is
        exactly what the sequence lock exists to protect. */
@@ -417,7 +417,6 @@ struct life_panel : panel_t {
            apart between the two entry points. */
         setup_default_panel_state_fields_only();
         set_pref_defaults();
-        plate_code = get_frontpanel_code();
 
         reset_everything();
         rebuild_runtime();
@@ -445,13 +444,7 @@ struct life_panel : panel_t {
     void on_load_finished(void) override {
         panel_t::on_load_finished();
 
-        /* Read the overlay once rather than every frame, and say what it was.
-           The values in the API dump are NONE/BLOCKS 0x0, TOADSTEP 0x2,
-           DRUMS 0x10, CHORDS 0x20; if a unit reports something else this line
-           is how we find out instead of guessing. */
-        plate_code = get_frontpanel_code();
-        printf("life: frontpanel code 0x%x, orientation %d -> %s layout\n",
-               (unsigned)plate_code, get_frontpanel_orientation(), plate_layout_name());
+        plate_seen = -1;   /* so the code gets logged once after the load */
 
         /* SYSTEM_NOTES.md section 6b: setup_default_panel_state() does NOT run on
            a staged load, which is how the IDE loads a panel. The arena is zeroed,
@@ -1521,15 +1514,32 @@ struct life_panel : panel_t {
        than equality: the codes are distinct bits (TOADSTEP 0x2, DRUMS 0x10,
        CHORDS 0x20), so a unit that reports extra bits alongside the plate still
        matches. */
+    /* Read every frame, NOT cached at load.
+
+       Caching it was a mistake: if the straps are not readable yet when the
+       panel loads, or the value settles late, a wrong answer sticks forever and
+       the printed layout simply never appears. Reading it live costs nothing
+       and cannot go stale. */
     bool plate_is_printed(void) const {
-        return (plate_code & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
+        return (get_frontpanel_code() & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
     }
 
-    const char *plate_layout_name(void) const {
-        if (plate_code & FRONT_PANEL_CODE_CHORDS) return "Chords";
-        if (plate_code & FRONT_PANEL_CODE_DRUMS) return "Drums";
-        if (plate_code & FRONT_PANEL_CODE_TOADSTEP) return "Toadstep";
+    static const char *plate_layout_name(void) {
+        int code = get_frontpanel_code();
+        if (code & FRONT_PANEL_CODE_CHORDS) return "Chords";
+        if (code & FRONT_PANEL_CODE_DRUMS) return "Drums";
+        if (code & FRONT_PANEL_CODE_TOADSTEP) return "Toadstep";
         return "standard";
+    }
+
+    /* Log the code whenever it changes, so a late-settling strap read shows up
+       as a second line rather than as a layout that mysteriously never arrives. */
+    void log_plate_if_changed(void) {
+        int code = get_frontpanel_code();
+        if (code == plate_seen) return;
+        plate_seen = code;
+        printf("life: frontpanel code 0x%x, orientation %d -> %s layout\n",
+               (unsigned)code, get_frontpanel_orientation(), plate_layout_name());
     }
 
     void draw_preset_editor(void) {
@@ -1842,6 +1852,7 @@ struct life_panel : panel_t {
     void on_ui(int delta_time_us) override {
         (void)delta_time_us;
 
+        log_plate_if_changed();
         follow_musical_state();
         apply_pending_cc();
         apply_note_input();
@@ -1924,8 +1935,9 @@ struct life_panel : panel_t {
            the top of it. */
         if (mode == LIFE_UI_PRESET) {
             draw_preset_editor();
-            set_help_text("V%d #fc2#*sound#. - %s layout - x to leave", edit_voice + 1,
-                          plate_layout_name());
+            set_help_text("V%d #fc2#*sound#. - %s layout, panel 0x%x - x to leave",
+                          edit_voice + 1, plate_layout_name(),
+                          (unsigned)get_frontpanel_code());
             return;
         }
 
