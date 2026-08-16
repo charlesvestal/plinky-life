@@ -154,6 +154,9 @@ struct voice_allocator_t {
 
 void play_synth(int voice, int preset_idx, int velocity, int note_q8, bool retrigger);
 void synth_note_up(int voice);
+int get_synth_retrigger(int voice);
+void set_synth_velocity(int voice, int velocity);
+int get_synth_note(int voice);
 
 /* --- MIDI ---------------------------------------------------------------- */
 #define MIDI_PORT_NONE 0
