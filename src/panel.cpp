@@ -1513,17 +1513,18 @@ struct life_panel : panel_t {
         int root = current_key % 12;
         for (int r = 0; r < sh; ++r) {
             int band = nbands - 1 - (r / LIFE_BAND_ROWS);   /* band 0 at the bottom */
-            bool band_edge = (r % LIFE_BAND_ROWS) == 0 && r != 0;
             for (int x = 0; x < LIFE_W; ++x) {
                 int block = x / LIFE_BLOCK_W;
                 int note = surface_note(band, block);
-                /* Roots bright, so the scale is readable across the grid. */
+
+                /* Checkerboard rather than unlit seams. Seams cost a row and a
+                   column out of every block, which on a three-by-four pad is a
+                   third of it, and the blocks ended up smaller than the notes
+                   they stand for. Alternating brightness separates neighbours
+                   while leaving every pad lit and pressable. */
                 uint32_t col = ((note % 12) == root) ? life_voice_bright[edit_voice]
                                                      : life_voice_dim[edit_voice];
-                /* Dark seams, or sixteen blocks read as one wash of colour and
-                   you cannot see where one note ends and the next begins. */
-                bool block_edge = (x % LIFE_BLOCK_W) == 0 && x != 0;
-                if (band_edge || block_edge) col = 0;
+                if ((band + block) & 1) col = life_scale_col(col, 150);
                 set_led(x, sy + r, col);
             }
         }

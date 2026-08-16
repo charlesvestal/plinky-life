@@ -184,9 +184,11 @@ twelve. One note per row cannot do it at any spacing, because twelve rows hold
 twelve notes. On a plain faceplate there are five bands and twenty notes, so you
 get the world plus four above it.
 
-Every root is a brighter block, and the seams between blocks are unlit so you can
-see where one note ends and the next begins. The seams are only paint: pressing
-one still plays the block it belongs to.
+Every root is a brighter block, and neighbouring blocks alternate in brightness
+so you can see where one ends and the next begins without losing any pads to a
+gap. Sliding within a block bends the note rather than restriking it, and moving
+across a band bends through the notes between, staying in the scale. Moving up or
+down to another band strikes a new note.
 
 The surface follows the selected voice's `PTCH` offset, so it plays in that
 voice's register. That also moves the whole grid: a voice pitched up four degrees
