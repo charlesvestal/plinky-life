@@ -117,6 +117,11 @@ typedef uint8_t (*scale_play_surface_brightness_fn)(void *user, int string_idx, 
                                                     int x, int y, int note);
 
 int touch_pressure_curve_q7(int pressure);
+#define PLAY_SURFACE_PRESSURE_NOTE_ON 24
+#define PLAY_SURFACE_PRESSURE_HOLD 16
+int get_touch_pressure_xy(int x, int y);
+int get_touch_origin_x(int x, int y);
+int get_touch_origin_y(int x, int y);
 
 struct play_surface_t {
     finger_t fingers[16];

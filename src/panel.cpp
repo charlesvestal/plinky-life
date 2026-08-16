@@ -173,7 +173,7 @@ static const uint8_t life_port_values[5] = {
    across the 16 columns. 4 bands x 4 notes = the world's 16 degrees exactly. */
 /* 0..127, the same units as a preset corner param. Enough travel to hear between
    adjacent pads without smearing a fast run into one slur. */
-#define LIFE_SURFACE_GLIDE 36
+#define LIFE_SURFACE_GLIDE 127
 
 /* Three ways of driving a surface voice, switchable on the device, because four
    flashes have gone on hypotheses that were each wrong. Mode 0 is what this
@@ -314,7 +314,10 @@ struct life_panel : panel_t {
        no release callback, so anything sounding that it did not name this frame
        is ours to stop. */
     uint16_t play_down;            /* surface voices currently sounding */
-    uint8_t surf_mode;             /* 0 = curved velocity, 1 = raw pressure, 2 = stock-style */
+    uint8_t surf_mode;             /* 0 = unified touch, 1 = the old play_surface path */
+    uint8_t voice_origin[LIFE_PLAY_VOICES];  /* origin pad of the finger owning each voice, 255 = free */
+    uint8_t voice_band[LIFE_PLAY_VOICES];    /* for lighting the pad being held */
+    uint8_t voice_block[LIFE_PLAY_VOICES];
     uint8_t play_miss[16];         /* consecutive frames a sounding voice went unreported */
     uint16_t play_seen;            /* named by the callback this frame */
     uint8_t play_note[16];         /* so a slide to a new note retriggers */
@@ -452,6 +455,9 @@ struct life_panel : panel_t {
         scene_commit_wait = 0;
         play_down = 0;
         surf_mode = 0;
+        for (int i = 0; i < LIFE_PLAY_VOICES; ++i) {
+            voice_origin[i] = 255; voice_band[i] = 0; voice_block[i] = 0;
+        }
         for (int i = 0; i < 16; ++i) play_miss[i] = 0;
         play_seen = 0;
         play_active = false;
@@ -1478,6 +1484,20 @@ struct life_panel : panel_t {
         play_seen |= (uint16_t)(1u << voice);
         bool strike = finger_is_new || !(play_down & (1u << voice));
 
+        /* Mode 1 sends no parameter override at all, so the preset's own GLIDE
+           governs. Comparing it against mode 0, which forces GLIDE to maximum,
+           says whether the override reaches the engine and whether glide is the
+           thing that was missing all along. */
+        if (surf_mode == 1) {
+            if (strike)
+                printf("life: strike v=%d note=%d isnew=%d mode=1\n", voice, note, finger_is_new);
+            else if (play_note[voice] != (uint8_t)note)
+                printf("life: move   v=%d note=%d->%d mode=1\n", voice, (int)play_note[voice], note);
+            play_note[voice] = (uint8_t)note;
+            play_synth(voice, preset_for(edit_voice), velocity, note_q8, strike);
+            return;
+        }
+
         /* Mode 2 uses the plain five-argument call the stock panel uses, with no
            parameter override of any kind. */
         if (surf_mode == 2) {
@@ -1544,6 +1564,90 @@ struct life_panel : panel_t {
        voice from the UI hook restruck the note whenever a finger moved, and no
        amount of care about pitch, velocity or retrigger flags fixed it, because
        none of those was the fault. */
+    /* One finger, one note, however many pads it covers.
+
+       play_surface_t reads the region as sixteen independent strings, and
+       STRINGOPHONIC_POLY finds local peaks along each one. Running a finger
+       along a row, pressure peaks over each pad centre and dips between them,
+       so the peak hops from pad to pad and its pressure hops with it - a
+       retrigger per physical pad, inside a single one of our four-wide pads.
+       That is why every driver mode retriggered: they all read the same
+       hopping peak.
+
+       Every touched pad reports the pad where its touch BEGAN, so pads can be
+       grouped by origin into one logical finger with an identity that lasts the
+       whole gesture. Summing pressure across the group also removes the dip: a
+       finger between two pads reads half on each, and half plus half is whole.
+
+       Polyphonic by construction - each finger has its own origin, so two
+       fingers on the same row stay two notes, which one-note-per-string would
+       have merged. */
+    struct surface_touch_t {
+        int psum, xsum, ysum;
+        uint8_t origin;
+    };
+
+    void surface_sequence_unified(int sy, int sh, int nbands) {
+        surface_touch_t t[LIFE_PLAY_VOICES];
+        int nt = 0;
+
+        for (int y = sy; y < sy + sh; ++y)
+            for (int x = 0; x < LIFE_W; ++x) {
+                int p = get_touch_pressure_xy(x, y);
+                if (p <= 0) continue;
+                int ox = get_touch_origin_x(x, y), oy = get_touch_origin_y(x, y);
+                if (ox < 0 || oy < sy || oy >= sy + sh) continue;   /* began elsewhere */
+                uint8_t key = (uint8_t)(oy * LIFE_W + ox);
+
+                int i = 0;
+                for (; i < nt; ++i) if (t[i].origin == key) break;
+                if (i == nt) {
+                    if (nt >= LIFE_PLAY_VOICES) continue;
+                    t[nt].origin = key; t[nt].psum = 0; t[nt].xsum = 0; t[nt].ysum = 0;
+                    i = nt++;
+                }
+                t[i].psum += p;
+                t[i].xsum += p * x;
+                t[i].ysum += p * y;
+            }
+
+        play_seen = 0;
+        bool claimed[LIFE_PLAY_VOICES] = { false, false, false, false };
+
+        for (int i = 0; i < nt; ++i) {
+            if (t[i].psum < PLAY_SURFACE_PRESSURE_NOTE_ON) continue;
+
+            int cx = t[i].xsum / t[i].psum, cy = t[i].ysum / t[i].psum;
+            int block = clamp_int(cx / LIFE_BLOCK_W, 0, LIFE_BLOCKS - 1);
+            int band = nbands - 1 - clamp_int((cy - sy) / LIFE_BAND_ROWS, 0, nbands - 1);
+
+            /* Same finger keeps its voice, so the note glides rather than
+               striking. A finger the surface has not seen takes a free one. */
+            int v = -1;
+            for (int j = 0; j < LIFE_PLAY_VOICES; ++j)
+                if (voice_origin[j] == t[i].origin && !claimed[j]) { v = j; break; }
+            bool fresh = false;
+            if (v < 0) {
+                for (int j = 0; j < LIFE_PLAY_VOICES; ++j)
+                    if (!claimed[j] && !(play_down & (1u << j))) { v = j; fresh = true; break; }
+            }
+            if (v < 0) continue;
+
+            claimed[v] = true;
+            voice_origin[v] = t[i].origin;
+            voice_band[v] = (uint8_t)band;
+            voice_block[v] = (uint8_t)block;
+
+            int note = surface_note(band, block);
+            int velocity = clamp_int(touch_pressure_curve_q7(clamp_int(t[i].psum, 0, 255)), 1, 127);
+            play_surface_voice(v, note, note << 8, velocity, fresh);
+        }
+
+        release_play_voices(play_seen);
+        for (int j = 0; j < LIFE_PLAY_VOICES; ++j)
+            if (!(play_down & (1u << j))) voice_origin[j] = 255;
+    }
+
     void surface_sequence(void) {
         if (ui_mode != LIFE_UI_PLAY) {
             if (play_down) release_play_voices(0, true);
@@ -1552,6 +1656,8 @@ struct life_panel : panel_t {
         int sy = plate_is_printed() ? 2 : 0;
         int sh = surface_rows();
         int nbands = surface_bands();
+
+        if (surf_mode == 0) { surface_sequence_unified(sy, sh, nbands); return; }
 
         play_surface.update_from_touch(0, sy, LIFE_W, sh,
                                        HORIZONTAL | STRINGOPHONIC_POLY | TRACK_FINGERS_ACROSS_STRINGS,
@@ -1568,8 +1674,8 @@ struct life_panel : panel_t {
             int band = nbands - 1 - (f.string_idx / LIFE_BAND_ROWS);
 
             int note = surface_note(band, block);
-            int velocity = (surf_mode == 0) ? clamp_int(touch_pressure_curve_q7(f.pressure), 1, 127)
-                                            : (int)f.pressure;
+            int velocity = (surf_mode == 2) ? (int)f.pressure
+                                            : clamp_int(touch_pressure_curve_q7(f.pressure), 1, 127);
             int note_q8 = (surf_mode == 2)
                         ? ((surface_note(band, 0) << 8) + (int)(f.string_pos_q8 / LIFE_BLOCK_W))
                         : (note << 8);
@@ -1580,23 +1686,8 @@ struct life_panel : panel_t {
     }
 
     void draw_play_surface(void) {
-        /* Built from the surface's own pieces rather than do_play_surface,
-           because that helper derives pitch from the string AND the position
-           along it with a fixed per-string interval. Over 12 to 15 rows that
-           multiplies out to seven octaves. Here the geometry is ours: bands of
-           blocks, sized so the world fits exactly.
-
-           STRINGOPHONIC_POLY rather than POLYPHONIC because a block is four
-           pads wide - POLYPHONIC gives every pad its own voice, so one finger
-           spanning two pads would sound the same note twice. Peak finding along
-           the band gives one voice per finger and still allows several fingers
-           in the same band.
-
-           TRACK_FINGERS_ACROSS_STRINGS because every ROW is a string and a
-           block is three rows tall. Without it a finger drifting up or down
-           inside one block crosses a string boundary, gets handed a different
-           voice, and the note restrikes - while looking like it never left the
-           pad it is on. */
+        /* Drawing only. Touch and notes are on the sequence thread, in
+           surface_sequence(). */
         int sy = plate_is_printed() ? 2 : 0;
         int sh = surface_rows();
         int nbands = surface_bands();
@@ -1622,12 +1713,11 @@ struct life_panel : panel_t {
 
         /* Read-only here: which pads to light. The touch reading and the notes
            themselves happen in on_sequence, see surface_sequence(). */
-        for (int v = 0; v < LIFE_PLAY_VOICES && v < 16; ++v) {
-            finger_t f = play_surface.get_finger_for_voice(v);
-            if (!f.pressure || f.string_idx >= sh) continue;
-            int col = clamp_int((int)(f.string_pos_q8 >> 8), 0, LIFE_W - 1);
-            int block = col / LIFE_BLOCK_W;
-            int r0 = (f.string_idx / LIFE_BAND_ROWS) * LIFE_BAND_ROWS;
+        for (int v = 0; v < LIFE_PLAY_VOICES; ++v) {
+            if (!(play_down & (1u << v))) continue;
+            int band = voice_band[v], block = voice_block[v];
+            int r0 = (nbands - 1 - band) * LIFE_BAND_ROWS;
+            if (r0 < 0 || r0 + LIFE_BAND_ROWS > sh) continue;
             for (int rr = 0; rr < LIFE_BAND_ROWS; ++rr)
                 for (int xx = block * LIFE_BLOCK_W; xx < (block + 1) * LIFE_BLOCK_W; ++xx)
                     set_led(xx, sy + r0 + rr, LIFE_COL_TRIGGER);
