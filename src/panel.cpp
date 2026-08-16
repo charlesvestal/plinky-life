@@ -169,6 +169,8 @@ static const uint8_t life_port_values[5] = {
    the modifier on (15,15), which is the pad Plinky users reach for to start
    playback - so the panel answered "how do I play this?" with a menu. Three
    cells are spent; they still simulate, they just cannot be seen or painted. */
+#define LIFE_SHIFT_DN_X 5
+#define LIFE_SHIFT_UP_X 6
 #define LIFE_MODIFIER_X 13
 #define LIFE_MODIFIER_Y 15
 #define LIFE_STOP_X     14
@@ -347,6 +349,7 @@ struct life_panel : panel_t {
     uint8_t pref_cv_out;      /* drive the two CV outputs from the world */
     uint8_t pref_note_in;     /* played notes draw cells into the world */
     uint8_t pref_plate;       /* AUTO, or force the faceplate - see life_plate_names */
+    uint8_t surface_shift;    /* degrees the play surface window is raised, 0..16-rows */
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
@@ -472,6 +475,7 @@ struct life_panel : panel_t {
         pref_cv_out = 1;
         pref_note_in = 1;
         pref_plate = LIFE_PLATE_AUTO;
+        surface_shift = 0;
     }
 
     void on_load_finished(void) override {
@@ -1449,10 +1453,38 @@ struct life_panel : panel_t {
        every faceplate.
 
        The voice's pitch offset still applies, so the surface sits in the
-       register of the voice you have selected rather than beside it. */
+       register of the voice you have selected rather than beside it.
+
+       surface_shift raises the window. The world is 16 degrees tall and a
+       printed faceplate leaves 12 rows, so without this the top four degrees
+       of the world are simply unplayable by hand - the sequencer can reach
+       notes you cannot. Bounded so the window stops at the edges of the world
+       rather than wandering off into the range that caused trouble before. */
     int surface_note(int row_from_bottom) const {
-        int degree = row_from_bottom + (int)v_pitch[edit_voice];
+        int degree = row_from_bottom + (int)surface_shift + (int)v_pitch[edit_voice];
         return life_degree_to_note(degree, root_note(), scale_mask());
+    }
+
+    int surface_rows(void) const { return plate_is_printed() ? 12 : 15; }
+    int surface_shift_max(void) const {
+        int m = LIFE_H - surface_rows();
+        return m < 0 ? 0 : m;
+    }
+
+    /* Slide the window over the world. Lit while there is somewhere to go that
+       way, so the pads say whether you are at the top or the bottom without
+       needing a number. */
+    void draw_surface_shift(void) {
+        int hi = surface_shift_max();
+        bool can_dn = surface_shift > 0, can_up = surface_shift < hi;
+        uint32_t dim = LED_RGB(3, 3, 6), lit = LED_RGB(14, 14, 24);
+
+        if (button(LIFE_SHIFT_DN_X, LIFE_TRANSPORT_Y, can_dn ? lit : dim, NOT_ISOLATED,
+                   "move the playable rows down the world") && can_dn)
+            --surface_shift;
+        if (button(LIFE_SHIFT_UP_X, LIFE_TRANSPORT_Y, can_up ? lit : dim, NOT_ISOLATED,
+                   "move the playable rows up the world") && can_up)
+            ++surface_shift;
     }
 
     void draw_play_surface(void) {
@@ -1466,7 +1498,8 @@ struct life_panel : panel_t {
            octaves and clamped at the top corner, which is a lot of notes the
            panel itself can never play. */
         int sy = plate_is_printed() ? 2 : 0;
-        int sh = plate_is_printed() ? 12 : 15;
+        int sh = surface_rows();
+        if (surface_shift > surface_shift_max()) surface_shift = (uint8_t)surface_shift_max();
 
         /* One note per row, and a finger sliding along a row keeps that note. */
         play_surface.update_from_touch(0, sy, LIFE_W, sh,
@@ -1499,6 +1532,7 @@ struct life_panel : panel_t {
         }
         release_play_voices(play_seen);
 
+        draw_surface_shift();
         draw_voice_selector();
         draw_voice_nav(LIFE_UI_PLAY);
     }
@@ -2540,6 +2574,7 @@ struct life_panel : panel_t {
             pref_cv_out = 1;
             pref_note_in = 1;
             pref_plate = LIFE_PLATE_AUTO;
+            surface_shift = 0;
         }
 
         OBJECT_BEGIN(s);
@@ -2554,6 +2589,7 @@ struct life_panel : panel_t {
         FIELD("cvout", pref_cv_out);
         FIELD("notein", pref_note_in);
         FIELD("plate", pref_plate);
+        FIELD("surfshift", surface_shift);
         OBJECT_END(s);
 
         clamp_settings();

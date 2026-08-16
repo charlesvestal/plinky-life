@@ -180,8 +180,14 @@ nothing; anywhere along a row is that row's note. Every root is a brighter row,
 so you can find your way.
 
 On Chords and Drums the surface sits on rows 2 to 13, so it lands on the printed
-pad circles, which gives twelve degrees rather than the fifteen you get on a
-plain faceplate. Both start from the root.
+pad circles, which gives twelve rows rather than the fifteen you get on a plain
+faceplate. Both start from the root.
+
+The world is sixteen rows tall and the surface is not, so the two pads left of
+centre on the bottom strip slide the playable window up and down it. At the
+bottom the surface starts on the root; at the top it reaches the world's highest
+row. Between them every row the sequencer can play is playable by hand. A pad
+goes dark when there is nowhere further to go that way.
 
 The surface follows the selected voice's `PTCH` offset, so it plays in that
 voice's register. That also moves the window: a voice pitched up four degrees
