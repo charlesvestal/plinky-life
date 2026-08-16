@@ -106,10 +106,16 @@ typedef void (*play_surface_note_fn)(void *user, int voice, int note, uint8_t ve
 typedef uint8_t (*scale_play_surface_brightness_fn)(void *user, int string_idx, int string_pos,
                                                     int x, int y, int note);
 
+int touch_pressure_curve_q7(int pressure);
+
 struct play_surface_t {
     finger_t fingers[16];
     uint32_t finger_seq[16];
     uint32_t next_finger_seq;
+    int update_from_touch(int x1, int y1, int w, int h, int flags, int max_voices,
+                          uint16_t string_mask = 0xffff, int string_pos_offset = 0);
+    void update_voices(void);
+    finger_t get_finger_for_voice(int voice);
     void do_play_surface(int x, int y, int w, int h, int max_voices, uint32_t bg_col,
                          uint32_t root_col, const uint8_t *string_roots,
                          play_surface_note_fn note_fn, void *note_user = nullptr,

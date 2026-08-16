@@ -1429,24 +1429,47 @@ struct life_panel : panel_t {
     }
 
     void draw_play_surface(void) {
-        /* Chords and Drums print pad circles on rows 2..13 only, so the surface
-           sits on them rather than spilling onto the control rows. On a blank
-           plate it takes everything above the transport row. */
+        /* Built from the surface's own pieces rather than do_play_surface,
+           because that helper always derives pitch from BOTH axes: the string
+           you are on and how far along it you are. Here only the row matters.
+
+           A row plays the degree that row plays in the sequencer, so the pitch
+           axis is the same one you have been staring at on the world, and
+           sliding sideways changes nothing. The alternative spanned seven
+           octaves and clamped at the top corner, which is a lot of notes the
+           panel itself can never play. */
         int sy = plate_is_printed() ? 2 : 0;
         int sh = plate_is_printed() ? 12 : 15;
 
-        /* The top row is the highest note, so the roots descend. Two degrees
-           between rows spans about four octaves. */
-        for (int i = 0; i < sh; ++i)
-            string_roots[i] = (uint8_t)life_degree_to_note((sh - 1 - i) * 2, root_note(),
-                                                           scale_mask());
+        /* One note per row, and a finger sliding along a row keeps that note. */
+        play_surface.update_from_touch(0, sy, LIFE_W, sh,
+                                       HORIZONTAL | STRINGOPHONIC_MONO, LIFE_PLAY_VOICES);
+        play_surface.update_voices();
+
+        int root = current_key % 12;
+        for (int r = 0; r < sh; ++r) {
+            int note = life_degree_to_note(15 - (sy + r), root_note(), scale_mask());
+            /* The root of the scale is brighter, so you can find your way. */
+            bool is_root = ((note % 12) == root);
+            uint32_t col = is_root ? life_voice_bright[edit_voice] : life_voice_dim[edit_voice];
+            for (int x = 0; x < LIFE_W; ++x) set_led(x, sy + r, col);
+        }
 
         play_seen = 0;
-        play_surface.do_play_surface(0, sy, LIFE_W, sh, LIFE_PLAY_VOICES,
-                                     LED_RGB(0, 2, 4), life_voice_bright[edit_voice],
-                                     string_roots, play_surface_note, this,
-                                     HORIZONTAL | SHOW_BACKGROUND | STRINGOPHONIC_MONO,
-                                     scale_mask(), current_key);
+        for (int v = 0; v < LIFE_PLAY_VOICES && v < 16; ++v) {
+            finger_t f = play_surface.get_finger_for_voice(v);
+            if (!f.pressure || f.string_idx >= sh) continue;
+
+            int note = life_degree_to_note(15 - (sy + f.string_idx), root_note(), scale_mask());
+            int velocity = touch_pressure_curve_q7(f.pressure);
+            if (velocity < 1) velocity = 1;
+            if (velocity > 127) velocity = 127;
+
+            /* Light the row being played, across its width. */
+            for (int x = 0; x < LIFE_W; ++x) set_led(x, sy + f.string_idx, LIFE_COL_TRIGGER);
+
+            play_surface_note(this, v, note, (uint8_t)velocity, f);
+        }
         release_play_voices(play_seen);
 
         draw_voice_selector();
