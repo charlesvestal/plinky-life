@@ -1567,12 +1567,14 @@ struct life_panel : panel_t {
        than equality: the codes are distinct bits (TOADSTEP 0x2, DRUMS 0x10,
        CHORDS 0x20), so a unit that reports extra bits alongside the plate still
        matches. */
-    /* Read every frame, NOT cached at load.
+    /* Auto by default: the layout comes from the hardware, and pref_plate only
+       overrides it if you have gone into settings and said so.
 
-       Caching it was a mistake: if the straps are not readable yet when the
-       panel loads, or the value settles late, a wrong answer sticks forever and
-       the printed layout simply never appears. Reading it live costs nothing
-       and cannot go stale. */
+       Deliberately reads the value captured at construction rather than calling
+       get_frontpanel_code() here. On a Chords unit that call answers correctly
+       from a member initialiser and returns 0 from on_ui, so "read it live so it
+       cannot go stale" is precisely the change that breaks detection - which is
+       why the override exists at all. See the note at the top of this file. */
     bool plate_is_printed(void) const {
         if (pref_plate == LIFE_PLATE_CHORDS || pref_plate == LIFE_PLATE_DRUMS) return true;
         if (pref_plate == LIFE_PLATE_BLANK) return false;
@@ -1600,7 +1602,8 @@ struct life_panel : panel_t {
        member never counts as a change. A heartbeat can be read whenever you get
        round to connecting. Every thirty seconds once the question is settled -
        often enough to catch a strap read that starts working, quiet enough to
-       leave in.
+       leave in. It also documents the on_ui-returns-0 behaviour in the field,
+       for anyone who hits this on another panel.
 
        Printed in decimal as well as hex because it is not established that the
        firmware's printf handles %x - and if it does not, a hex-only readout is
