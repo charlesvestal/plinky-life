@@ -239,6 +239,7 @@ struct file_picker_t {
     bool panel_save_button(int x, int y);
     bool panel_load_button(int x, int y);
     bool request_panel_load_finalise(void);
+    void on_done(void);   /* "call this when you close the file picker" */
 };
 bool is_panel_load_staged(void);
 

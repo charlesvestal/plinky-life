@@ -1330,6 +1330,8 @@ struct life_panel : panel_t {
     uint16_t play_seen;            /* named by the callback this frame */
     uint8_t play_note[16];         /* so a slide to a new note retriggers */
     bool play_active;              /* were we on the surface last frame */
+    bool preset_picker_open;       /* so the picker can be told when we leave it */
+    bool scene_picker_open;
 
     uint32_t last_edge_us[LIFE_NUM_VOICES];
     uint32_t step_us[LIFE_NUM_VOICES];
@@ -1462,6 +1464,8 @@ struct life_panel : panel_t {
         play_down = 0;
         play_seen = 0;
         play_active = false;
+        preset_picker_open = false;
+        scene_picker_open = false;
         for (int i = 0; i < 16; ++i) play_note[i] = 0;
         note_in_count = 0;
         note_write_x = 0;
@@ -3054,6 +3058,20 @@ struct life_panel : panel_t {
         bool on_surface = (page == 0 && ui_mode == LIFE_UI_PLAY);
         if (play_active && !on_surface) release_play_voices(0);
         play_active = on_surface;
+
+        /* "call this when you close the file picker" - and we can leave one by
+           routes it never sees: the nav strip, x, or a page change. The picker
+           PREVIEWS by loading into the live preset slot, so without this the
+           preview state outlives the visit and quietly overwrites an edit made
+           afterwards. The stock wrappers get away with it because their own
+           cancel and OK are the only ways out. */
+        bool on_preset_picker = (page == 0 && ui_mode == LIFE_UI_LOAD);
+        if (preset_picker_open && !on_preset_picker) preset_pages.picker.on_done();
+        preset_picker_open = on_preset_picker;
+
+        bool on_scene_picker = (page == 1);
+        if (scene_picker_open && !on_scene_picker) scene_picker.on_done();
+        scene_picker_open = on_scene_picker;
 
         if (page < 0) {
             draw_settings(page);
