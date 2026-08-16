@@ -93,9 +93,18 @@ struct clock_divider_t {
 #define STRINGOPHONIC_MONO 8
 #define STRINGOPHONIC_POLY 12
 
+/* Transcribed from the IDE API docs, field for field - the widths matter:
+   string_pos_q8 is 0..15*256, i.e. pad units with 8 fractional bits. */
 struct finger_t {
-    uint8_t string_idx, pressure;
-    int16_t string_pos_q8;
+    uint16_t string_pos_q8 : 12;   /* 0-15*256 */
+    uint16_t string_idx : 4;       /* 0-15 */
+    uint8_t pressure;              /* 0-255 */
+    uint8_t voice_idx : 6;         /* 63 means no voice */
+    uint8_t is_new : 1;            /* 1 = freshly allocated, i.e. retrigger */
+    uint8_t is_touch : 1;          /* 1 = a real touch, 0 = poked virtual finger */
+    inline int16_t fretted() const { return (string_pos_q8 + 128) >> 8; }
+    inline int16_t fretted_q8() const { return (string_pos_q8 + 128) & (~255); }
+    inline int16_t fretless_q8() const { return string_pos_q8; }
 };
 
 int scale_play_surface_note(int string_root_note, int string_pos, int scale_root_note,

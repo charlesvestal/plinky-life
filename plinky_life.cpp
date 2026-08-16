@@ -1200,8 +1200,12 @@ static const uint8_t life_port_values[5] = {
    the modifier on (15,15), which is the pad Plinky users reach for to start
    playback - so the panel answered "how do I play this?" with a menu. Three
    cells are spent; they still simulate, they just cannot be seen or painted. */
-#define LIFE_SHIFT_DN_X 5
-#define LIFE_SHIFT_UP_X 6
+/* Play surface: bands of LIFE_BAND_ROWS rows, each holding LIFE_BLOCKS notes
+   across the 16 columns. 4 bands x 4 notes = the world's 16 degrees exactly. */
+#define LIFE_BAND_ROWS 3
+#define LIFE_BLOCKS    4
+#define LIFE_BLOCK_W   (LIFE_W / LIFE_BLOCKS)
+
 #define LIFE_MODIFIER_X 13
 #define LIFE_MODIFIER_Y 15
 #define LIFE_STOP_X     14
@@ -1380,7 +1384,6 @@ struct life_panel : panel_t {
     uint8_t pref_cv_out;      /* drive the two CV outputs from the world */
     uint8_t pref_note_in;     /* played notes draw cells into the world */
     uint8_t pref_plate;       /* AUTO, or force the faceplate - see life_plate_names */
-    uint8_t surface_shift;    /* degrees the play surface window is raised, 0..16-rows */
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
@@ -1506,7 +1509,6 @@ struct life_panel : panel_t {
         pref_cv_out = 1;
         pref_note_in = 1;
         pref_plate = LIFE_PLATE_AUTO;
-        surface_shift = 0;
     }
 
     void on_load_finished(void) override {
@@ -2469,81 +2471,67 @@ struct life_panel : panel_t {
         play_down = keep;
     }
 
-    /* The note a surface row plays.
+    /* The note a block plays.
 
-       The surface is NOT a mirror of the world. Mirroring it looked principled -
-       row 5 plays what row 5 plays - but the world is 16 rows and the surface is
-       whatever is left after the printed strips, so the window landed wherever
-       the arithmetic dropped it: degrees 2..13 on Chords, 1..15 on a blank
-       plate. Neither includes degree 0, so on both plates the one note you most
-       want to play, the tonic, was the one note missing. The alignment was also
-       invisible, since the world is not on screen while you are playing it.
+       The surface is a grid of note blocks, not a mirror of the world. Each
+       band is LIFE_BAND_ROWS rows tall and holds LIFE_BLOCKS notes side by
+       side; the next band up carries on where the last one ended. So the whole
+       16-degree world fits on the 12 rows a printed faceplate leaves, which one
+       note per row cannot do at any offset - twelve rows hold twelve notes.
 
-       So the bottom row is degree 0 and it counts up. Same span as before - the
-       row count decides that - but anchored somewhere musical, and identical on
-       every faceplate.
+       The offset between bands is therefore LIFE_BLOCKS degrees, which is a
+       fifth in a seven-note scale and a minor seventh in a pentatonic. It is
+       not chosen for its name: it is what makes the bands join up without gaps
+       or repeats. Larger, more guitar-like offsets were what sent the original
+       surface to seven octaves, because twelve bands multiply anything.
 
-       The voice's pitch offset still applies, so the surface sits in the
-       register of the voice you have selected rather than beside it.
-
-       surface_shift raises the window. The world is 16 degrees tall and a
-       printed faceplate leaves 12 rows, so without this the top four degrees
-       of the world are simply unplayable by hand - the sequencer can reach
-       notes you cannot. Bounded so the window stops at the edges of the world
-       rather than wandering off into the range that caused trouble before. */
-    int surface_note(int row_from_bottom) const {
-        int degree = row_from_bottom + (int)surface_shift + (int)v_pitch[edit_voice];
+       The voice's pitch offset still applies, so the surface plays in the
+       register of the voice you have selected. */
+    int surface_note(int band, int block) const {
+        int degree = band * LIFE_BLOCKS + block + (int)v_pitch[edit_voice];
         return life_degree_to_note(degree, root_note(), scale_mask());
     }
 
     int surface_rows(void) const { return plate_is_printed() ? 12 : 15; }
-    int surface_shift_max(void) const {
-        int m = LIFE_H - surface_rows();
-        return m < 0 ? 0 : m;
-    }
+    int surface_bands(void) const { return surface_rows() / LIFE_BAND_ROWS; }
 
-    /* Slide the window over the world. Lit while there is somewhere to go that
-       way, so the pads say whether you are at the top or the bottom without
-       needing a number. */
-    void draw_surface_shift(void) {
-        int hi = surface_shift_max();
-        bool can_dn = surface_shift > 0, can_up = surface_shift < hi;
-        uint32_t dim = LED_RGB(3, 3, 6), lit = LED_RGB(14, 14, 24);
-
-        if (button(LIFE_SHIFT_DN_X, LIFE_TRANSPORT_Y, can_dn ? lit : dim, NOT_ISOLATED,
-                   "move the playable rows down the world") && can_dn)
-            --surface_shift;
-        if (button(LIFE_SHIFT_UP_X, LIFE_TRANSPORT_Y, can_up ? lit : dim, NOT_ISOLATED,
-                   "move the playable rows up the world") && can_up)
-            ++surface_shift;
-    }
 
     void draw_play_surface(void) {
         /* Built from the surface's own pieces rather than do_play_surface,
-           because that helper always derives pitch from BOTH axes: the string
-           you are on and how far along it you are. Here only the row matters.
+           because that helper derives pitch from the string AND the position
+           along it with a fixed per-string interval. Over 12 to 15 rows that
+           multiplies out to seven octaves. Here the geometry is ours: bands of
+           blocks, sized so the world fits exactly.
 
-           A row plays the degree that row plays in the sequencer, so the pitch
-           axis is the same one you have been staring at on the world, and
-           sliding sideways changes nothing. The alternative spanned seven
-           octaves and clamped at the top corner, which is a lot of notes the
-           panel itself can never play. */
+           STRINGOPHONIC_POLY rather than POLYPHONIC because a block is four
+           pads wide - POLYPHONIC gives every pad its own voice, so one finger
+           spanning two pads would sound the same note twice. Peak finding along
+           the band gives one voice per finger and still allows several fingers
+           in the same band. */
         int sy = plate_is_printed() ? 2 : 0;
         int sh = surface_rows();
-        if (surface_shift > surface_shift_max()) surface_shift = (uint8_t)surface_shift_max();
+        int nbands = surface_bands();
 
-        /* One note per row, and a finger sliding along a row keeps that note. */
         play_surface.update_from_touch(0, sy, LIFE_W, sh,
-                                       HORIZONTAL | STRINGOPHONIC_MONO, LIFE_PLAY_VOICES);
+                                       HORIZONTAL | STRINGOPHONIC_POLY, LIFE_PLAY_VOICES);
         play_surface.update_voices();
 
         int root = current_key % 12;
         for (int r = 0; r < sh; ++r) {
-            int note = surface_note(sh - 1 - r);
-            /* The root of the scale is brighter, so you can find your way. */
-            bool is_root = ((note % 12) == root);
-            uint32_t col = is_root ? life_voice_bright[edit_voice] : life_voice_dim[edit_voice];
-            for (int x = 0; x < LIFE_W; ++x) set_led(x, sy + r, col);
+            int band = nbands - 1 - (r / LIFE_BAND_ROWS);   /* band 0 at the bottom */
+            bool band_edge = (r % LIFE_BAND_ROWS) == 0 && r != 0;
+            for (int x = 0; x < LIFE_W; ++x) {
+                int block = x / LIFE_BLOCK_W;
+                int note = surface_note(band, block);
+                /* Roots bright, so the scale is readable across the grid. */
+                uint32_t col = ((note % 12) == root) ? life_voice_bright[edit_voice]
+                                                     : life_voice_dim[edit_voice];
+                /* Dark seams, or sixteen blocks read as one wash of colour and
+                   you cannot see where one note ends and the next begins. */
+                bool block_edge = (x % LIFE_BLOCK_W) == 0 && x != 0;
+                if (band_edge || block_edge) col = 0;
+                set_led(x, sy + r, col);
+            }
         }
 
         play_seen = 0;
@@ -2551,19 +2539,30 @@ struct life_panel : panel_t {
             finger_t f = play_surface.get_finger_for_voice(v);
             if (!f.pressure || f.string_idx >= sh) continue;
 
-            int note = surface_note(sh - 1 - f.string_idx);
-            int velocity = touch_pressure_curve_q7(f.pressure);
-            if (velocity < 1) velocity = 1;
-            if (velocity > 127) velocity = 127;
+            /* string_pos_q8 is documented as 0..15*256 - pad units, 8 fractional
+               bits - so a plain shift gives the column. Not fretted(), which
+               rounds to the nearest pad and would put the block boundaries half
+               a pad off. */
+            int col = (int)(f.string_pos_q8 >> 8);
+            col = clamp_int(col, 0, LIFE_W - 1);
+            int block = col / LIFE_BLOCK_W;
+            int band = nbands - 1 - (f.string_idx / LIFE_BAND_ROWS);
 
-            /* Light the row being played, across its width. */
-            for (int x = 0; x < LIFE_W; ++x) set_led(x, sy + f.string_idx, LIFE_COL_TRIGGER);
+            int note = surface_note(band, block);
+            int velocity = touch_pressure_curve_q7(f.pressure);
+            velocity = clamp_int(velocity, 1, 127);
+
+            /* Light the whole block, seams included, so a held note is a solid
+               shape rather than a gapped one. */
+            int r0 = (nbands - 1 - band) * LIFE_BAND_ROWS;
+            for (int rr = 0; rr < LIFE_BAND_ROWS; ++rr)
+                for (int xx = block * LIFE_BLOCK_W; xx < (block + 1) * LIFE_BLOCK_W; ++xx)
+                    set_led(xx, sy + r0 + rr, LIFE_COL_TRIGGER);
 
             play_surface_note(this, v, note, (uint8_t)velocity, f);
         }
         release_play_voices(play_seen);
 
-        draw_surface_shift();
         draw_voice_selector();
         draw_voice_nav(LIFE_UI_PLAY);
     }
@@ -3605,8 +3604,7 @@ struct life_panel : panel_t {
             pref_cv_out = 1;
             pref_note_in = 1;
             pref_plate = LIFE_PLATE_AUTO;
-            surface_shift = 0;
-        }
+            }
 
         OBJECT_BEGIN(s);
         FIELD("root", pref_root);
@@ -3620,7 +3618,6 @@ struct life_panel : panel_t {
         FIELD("cvout", pref_cv_out);
         FIELD("notein", pref_note_in);
         FIELD("plate", pref_plate);
-        FIELD("surfshift", surface_shift);
         OBJECT_END(s);
 
         clamp_settings();

@@ -174,24 +174,23 @@ does before committing to it.
 over the sequence while it runs. Notes sound and nothing else happens: the world
 is left alone, because the point is to perform over it rather than disturb it.
 
-The bottom row is the root of the scale and each row up is the next degree, so
-it reads like an instrument rather than like the world. Sliding sideways changes
-nothing; anywhere along a row is that row's note. Every root is a brighter row,
-so you can find your way.
+The surface is a grid of note blocks. Each block is four columns wide and three
+rows tall, four of them side by side in a band, and the band above carries on
+where the one below ended. Bottom left is the root of the scale and it counts up
+and to the right, like reading a page from the bottom.
 
-On Chords and Drums the surface sits on rows 2 to 13, so it lands on the printed
-pad circles, which gives twelve rows rather than the fifteen you get on a plain
-faceplate. Both start from the root.
+That is how all sixteen of the world's rows fit on a faceplate that only leaves
+twelve. One note per row cannot do it at any spacing, because twelve rows hold
+twelve notes. On a plain faceplate there are five bands and twenty notes, so you
+get the world plus four above it.
 
-The world is sixteen rows tall and the surface is not, so the two pads left of
-centre on the bottom strip slide the playable window up and down it. At the
-bottom the surface starts on the root; at the top it reaches the world's highest
-row. Between them every row the sequencer can play is playable by hand. A pad
-goes dark when there is nowhere further to go that way.
+Every root is a brighter block, and the seams between blocks are unlit so you can
+see where one note ends and the next begins. The seams are only paint: pressing
+one still plays the block it belongs to.
 
 The surface follows the selected voice's `PTCH` offset, so it plays in that
-voice's register. That also moves the window: a voice pitched up four degrees
-has a surface that starts four degrees above the root.
+voice's register. That also moves the whole grid: a voice pitched up four degrees
+starts a band higher.
 
 It is always in key. The scale and root come from the same place as everything
 else, so it follows `KEY` and `SCAL` without being told.
