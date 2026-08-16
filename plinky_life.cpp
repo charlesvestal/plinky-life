@@ -2459,6 +2459,15 @@ struct life_panel : panel_t {
         play_down = keep;
     }
 
+    /* The note a surface row plays. Must agree with fire_voice(), including the
+       voice's pitch offset - without it a voice tuned down three degrees plays
+       something other than the row you pressed, and the surface stops being the
+       same instrument as the sequencer. */
+    int surface_note(int row_abs) const {
+        int degree = (15 - row_abs) + (int)v_pitch[edit_voice];
+        return life_degree_to_note(degree, root_note(), scale_mask());
+    }
+
     void draw_play_surface(void) {
         /* Built from the surface's own pieces rather than do_play_surface,
            because that helper always derives pitch from BOTH axes: the string
@@ -2479,7 +2488,7 @@ struct life_panel : panel_t {
 
         int root = current_key % 12;
         for (int r = 0; r < sh; ++r) {
-            int note = life_degree_to_note(15 - (sy + r), root_note(), scale_mask());
+            int note = surface_note(sy + r);
             /* The root of the scale is brighter, so you can find your way. */
             bool is_root = ((note % 12) == root);
             uint32_t col = is_root ? life_voice_bright[edit_voice] : life_voice_dim[edit_voice];
@@ -2491,7 +2500,7 @@ struct life_panel : panel_t {
             finger_t f = play_surface.get_finger_for_voice(v);
             if (!f.pressure || f.string_idx >= sh) continue;
 
-            int note = life_degree_to_note(15 - (sy + f.string_idx), root_note(), scale_mask());
+            int note = surface_note(sy + f.string_idx);
             int velocity = touch_pressure_curve_q7(f.pressure);
             if (velocity < 1) velocity = 1;
             if (velocity > 127) velocity = 127;
