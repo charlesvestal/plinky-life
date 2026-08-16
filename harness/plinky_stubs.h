@@ -227,23 +227,23 @@ enum {
 struct slider_t { int _pad[8]; };
 struct xy_pad_t { int _pad[12]; };
 struct synth_preset_t;
+#define FLAG_PICKER_ENABLE_DELETE 1
 struct file_picker_t {
     int _pad[32];
     /* The pieces the wrappers are built from. These take their own coordinates,
        which is how a picker gets placed on a printed faceplate. */
-    void preset_picker(int preset_idx, int y1, int y2, int flags = 0);
+    int preset_picker(int channel, int main_y, int hue_y, int flags = FLAG_PICKER_ENABLE_DELETE);
+    void reset_which_slot_is_selected(void);
     bool preset_save_button(int channel, int x, int y);
     bool preset_load_button(int channel, int x, int y, int preset_idx_write_copies_mask = 0,
                             const synth_preset_t **loaded_preset_out = nullptr);
-    void panel_picker(int y1, int y2, int flags = 0);
+    int panel_picker(int main_y, int hue_y, int flags = FLAG_PICKER_ENABLE_DELETE);
     bool panel_save_button(int x, int y);
     bool panel_load_button(int x, int y);
     bool request_panel_load_finalise(void);
     void on_done(void);   /* "call this when you close the file picker" */
 };
 bool is_panel_load_staged(void);
-
-#define FLAG_PICKER_ENABLE_DELETE 1
 
 int synth_param_sliders_block(slider_t *synth_sliders, int x, int y, int width, int length,
                               int preset_idx, const int *synth_params,

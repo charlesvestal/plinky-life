@@ -2676,9 +2676,6 @@ struct life_panel : panel_t {
        and finalise once it reports complete. */
     void draw_scene_page(void) {
         int grid_y = plate_is_printed() ? 2 : 0;
-        /* The stock wrappers default to FLAG_PICKER_ENABLE_DELETE. Calling the
-           pieces directly means passing it explicitly, or deleting a slot
-           quietly stops working. */
         scene_picker.panel_picker(grid_y, grid_y + 8, FLAG_PICKER_ENABLE_DELETE);
         draw_voice_selector();
 
@@ -3064,12 +3061,21 @@ struct life_panel : panel_t {
            PREVIEWS by loading into the live preset slot, so without this the
            preview state outlives the visit and quietly overwrites an edit made
            afterwards. The stock wrappers get away with it because their own
-           cancel and OK are the only ways out. */
+           cancel and OK are the only ways out.
+
+           reset_which_slot_is_selected() is the matching call on the way in:
+           "it snaps the current slection to the caller's state". Without it the
+           picker opens still holding the LAST voice's selection, and since it
+           previews by loading, opening it for one voice could overwrite
+           another. */
         bool on_preset_picker = (page == 0 && ui_mode == LIFE_UI_LOAD);
+        if (on_preset_picker && !preset_picker_open)
+            preset_pages.picker.reset_which_slot_is_selected();
         if (preset_picker_open && !on_preset_picker) preset_pages.picker.on_done();
         preset_picker_open = on_preset_picker;
 
         bool on_scene_picker = (page == 1);
+        if (on_scene_picker && !scene_picker_open) scene_picker.reset_which_slot_is_selected();
         if (scene_picker_open && !on_scene_picker) scene_picker.on_done();
         scene_picker_open = on_scene_picker;
 
