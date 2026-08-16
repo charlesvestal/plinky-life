@@ -1353,6 +1353,7 @@ struct life_panel : panel_t {
     uint8_t voice_band[LIFE_PLAY_VOICES];    /* for lighting the pad being held */
     uint8_t voice_block[LIFE_PLAY_VOICES];
     int16_t surf_p[LIFE_MAX_BANDS][LIFE_BLOCKS];   /* per large pad, sampled in on_ui */
+    uint8_t surf_touches;                          /* distinct fingers on the surface */
     uint8_t play_miss[16];         /* consecutive frames a sounding voice went unreported */
     uint16_t play_seen;            /* named by the callback this frame */
     uint8_t play_note[16];         /* so a slide to a new note retriggers */
@@ -1493,6 +1494,7 @@ struct life_panel : panel_t {
         for (int i = 0; i < LIFE_PLAY_VOICES; ++i) {
             voice_band[i] = 0; voice_block[i] = 0;
         }
+        surf_touches = 0;
         for (int rg = 0; rg < LIFE_MAX_BANDS; ++rg) {
             for (int b = 0; b < LIFE_BLOCKS; ++b) surf_p[rg][b] = 0;
         }
@@ -2649,25 +2651,26 @@ struct life_panel : panel_t {
             surface_play_pad(v, rg, b, p[rg][b], nbands, false);
         }
 
-        /* Anything else firmly pressed is a new finger - unless it touches a pad
-           a voice already holds, which is a straddled seam, not a second note. */
+        /* Anything else pressed hard enough is a new finger - as long as there
+           IS another finger. A straddled seam puts pressure on two pads but is
+           one touch, so it cannot claim a second voice; two fingers on
+           neighbouring pads are two touches, and both play. Counting fingers is
+           the test, not adjacency, which forbade neighbouring notes outright. */
+        int held = 0;
+        for (int rg = 0; rg < LIFE_MAX_BANDS; ++rg)
+            for (int b = 0; b < LIFE_BLOCKS; ++b) if (taken[rg][b]) ++held;
+
         for (int rg = 0; rg < nbands; ++rg)
             for (int b = 0; b < LIFE_BLOCKS; ++b) {
                 if (taken[rg][b] || p[rg][b] < PLAY_SURFACE_PRESSURE_NOTE_ON) continue;
-                bool beside_held = false;
-                for (int dy = -1; dy <= 1 && !beside_held; ++dy)
-                    for (int dx = -1; dx <= 1; ++dx) {
-                        int ny = rg + dy, nx = b + dx;
-                        if (ny < 0 || ny >= nbands || nx < 0 || nx >= LIFE_BLOCKS) continue;
-                        if (taken[ny][nx]) { beside_held = true; break; }
-                    }
-                if (beside_held) continue;
+                if (held >= (int)surf_touches) continue;   /* no unaccounted finger */
 
                 int v = -1;
                 for (int j = 0; j < LIFE_PLAY_VOICES; ++j)
                     if (!(play_down & (1u << j)) && !(play_seen & (1u << j))) { v = j; break; }
                 if (v < 0) continue;
                 taken[rg][b] = true;
+                ++held;
                 surface_play_pad(v, rg, b, p[rg][b], nbands, true);
             }
 
@@ -2775,6 +2778,13 @@ struct life_panel : panel_t {
                 int cur = surf_p[rg][b];
                 surf_p[rg][b] = (int16_t)((pp >= cur) ? pp : (cur + ((pp - cur) >> 2)));
             }
+
+        /* How many fingers are actually on the surface. This is what separates
+           one finger straddling a seam from two fingers on neighbouring pads -
+           adjacency cannot, and vetoing adjacent pads outright made chords on
+           neighbouring pads unplayable. */
+        surf_touches = (uint8_t)clamp_int(count_touches_in_area(0, sy, LIFE_W - 1, sy + sh - 1),
+                                          0, LIFE_PLAY_VOICES);
 
         /* Read-only here: which pads to light. The touch reading and the notes
            themselves happen in on_sequence, see surface_sequence(). */

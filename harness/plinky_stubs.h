@@ -123,6 +123,7 @@ int touch_pressure_curve_q7(int pressure);
    with 8 fractional bits; p is the TOTAL pressure over the rect. Returns false
    when nothing in the rectangle is firmly touched. (x1,y1) is top-left, or
    bottom-left when from_bottom is set. */
+int count_touches_in_area(int x1, int y1, int x2, int y2, bool previous = false);
 bool get_pressure_and_pos_in_rect(int x1, int y1, int w, int h, bool from_bottom, int *p, int *x, int *y,
                                   int *minx = NULL, int *miny = NULL, int *maxx = NULL, int *maxy = NULL,
                                   int ignore_pads_below = 0, int ignore_pads_above = 16,
