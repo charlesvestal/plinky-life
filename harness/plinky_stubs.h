@@ -83,6 +83,23 @@ struct clock_divider_t {
     uint16_t phase;
     void reset(int64_t clock_phase = 0, uint32_t grid_q16 = CLOCK_DIVIDER_QUARTER_NOTE_Q16,
                int requested_numerator = -1, int requested_denominator = -1);
+    void set_clock_base(int64_t clock_phase, uint32_t grid_q16 = CLOCK_DIVIDER_QUARTER_NOTE_Q16);
+    uint16_t phase_q16(void) const { return phase; }
+    uint8_t phase_q7(void) const { return (uint8_t)(phase >> 9); }
+    int64_t last_clock_phase(void) const { return _last_clock_phase; }
+    /* Body transcribed from llm.txt, not approximated: the panel derives a
+       playhead position from it after a seek, so the arithmetic matters. */
+    uint32_t step_index(void) const {
+        int n = numerator < 1 ? 1 : numerator;
+        int d = denominator < 1 ? 1 : denominator;
+        int64_t scaled = (_last_clock_phase - clock_base) * (int64_t)n;
+        scaled = scaled >= 0 ? scaled / d : -(((-scaled) + d - 1) / d);
+        int64_t step = scaled >= 0 ? scaled / CLOCK_DIVIDER_QUARTER_NOTE_Q16
+                                   : -(((-scaled) + CLOCK_DIVIDER_QUARTER_NOTE_Q16 - 1)
+                                       / CLOCK_DIVIDER_QUARTER_NOTE_Q16);
+        return (uint32_t)step;
+    }
+    int64_t _last_clock_phase;
     int update(int64_t clock_phase = -1, int requested_numerator = -1, int requested_denominator = -1,
                divider_update_policy_t update_when = UPDATE_DIV_ON_HALF_NOTE,
                bool freerunning = false, bool unwrap_clock = DONT_UNWRAP_CLOCK);

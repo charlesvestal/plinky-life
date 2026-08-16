@@ -526,6 +526,36 @@ static inline int traversal_advance(traversal_state_t *t, traversal_order_t orde
     return p;
 }
 
+/* Jump straight to a column, for re-deriving position from an absolute step
+   index after a transport seek. Deterministic orders can be placed exactly;
+   PINGPONG also needs a direction, which is recovered from the sweep the index
+   falls in, and RANDOM has no meaningful absolute position so it just lands. */
+static inline void traversal_seek(traversal_state_t *t, traversal_order_t order, int n,
+                                  unsigned int step) {
+    if (n < 1) n = 1;
+    switch (order) {
+    case TRAV_REVERSE:
+        t->pos = (short)((n - 1) - (int)(step % (unsigned int)n));
+        t->dir = -1;
+        break;
+    case TRAV_PINGPONG: {
+        unsigned int period = (n <= 1) ? 1u : (unsigned int)(2 * n - 2);
+        unsigned int k = step % period;
+        if (k < (unsigned int)n) { t->pos = (short)k; t->dir = 1; }
+        else { t->pos = (short)(period - k); t->dir = -1; }
+        break;
+    }
+    case TRAV_RANDOM:
+        t->pos = (short)(traversal_rand(t) % (unsigned int)n);
+        break;
+    case TRAV_FORWARD:
+    default:
+        t->pos = (short)(step % (unsigned int)n);
+        t->dir = 1;
+        break;
+    }
+}
+
 static inline int traversal_position(const traversal_state_t *t, int n) {
     if (n < 1) n = 1;
     int p = t->pos;
@@ -1230,6 +1260,10 @@ static const uint8_t life_port_values[5] = {
 #define LIFE_SURF_HOLD    (PLAY_SURFACE_PRESSURE_HOLD * LIFE_TOUCH_PADS_PER_FINGER)
 
 /* page 0 is at logical y 0, page 1 at y 16 */
+/* How many missed divider edges one frame may catch up on. Bounded so a seek or
+   a stall cannot burn hundreds of steps inside an interrupt. */
+#define LIFE_MAX_CATCHUP 4
+
 #define LIFE_PAGE1_Y 16
 
 #define LIFE_MAX_BANDS 5
@@ -1355,7 +1389,9 @@ struct life_panel : panel_t {
     voice_allocator_t allocator;
     preset_pages_t preset_pages;   /* the stock synth editor, hosted per voice */
     file_picker_t scene_picker;    /* scenes, placed by us - see draw_scene_page */
-    int scene_commit_wait;         /* frames left to wait for a staged load to finish */
+    int scene_commit_wait;         /* sequence frames left to wait for a staged load */
+    bool scene_commit_failed;      /* set on the sequence thread, logged from on_ui */
+    bool gen_div_edge_this_frame;  /* a generation edge landed - a musical boundary */
     play_surface_t play_surface;   /* play the selected voice over the running world */
     uint8_t string_roots[16];
 
@@ -1504,6 +1540,8 @@ struct life_panel : panel_t {
         cc_out_primed = false;
         musical_state_seen = 0;
         scene_commit_wait = 0;
+        scene_commit_failed = false;
+        gen_div_edge_this_frame = false;
         play_down = 0;
         surf_mode = 0;
         for (int i = 0; i < LIFE_PLAY_VOICES; ++i) {
@@ -1607,11 +1645,14 @@ struct life_panel : panel_t {
            dividers with denominator 0. update() latches the requested values,
            but seed them anyway so no code path can divide by zero first. */
         for (int v = 0; v < LIFE_NUM_VOICES; ++v) {
-            voice_div[v].numerator = life_rates[v_rate[v]].num;
-            voice_div[v].denominator = life_rates[v_rate[v]].den;
+            /* reset() rather than writing the fields: clock_base, phase and
+               the divider's stored last-phase all have to be re-based too, and
+               a scene load lands in an arena whose contents are not ours. */
+            voice_div[v].reset(get_clock_phase(), CLOCK_DIVIDER_QUARTER_NOTE_Q16,
+                               life_rates[v_rate[v]].num, life_rates[v_rate[v]].den);
         }
-        gen_div.numerator = life_rates[gen_rate].num;
-        gen_div.denominator = life_rates[gen_rate].den;
+        gen_div.reset(get_clock_phase(), CLOCK_DIVIDER_QUARTER_NOTE_Q16,
+                      life_rates[gen_rate].num, life_rates[gen_rate].den);
 
         life_respawn_init(&respawn, 0x5eed1234u);
         cc_primed = false;
@@ -1774,8 +1815,12 @@ struct life_panel : panel_t {
         if (!synth_enabled()) return;
         uint32_t sid = source_id_for(v, note);
         int old_voice = allocator.find_voice(sid, LIFE_SEQ_VOICE_FIRST, LIFE_SEQ_VOICE_END);
+        /* preferred_preset_idx: this panel maps voice to preset one to one, so
+           the preset is always known. Matching voices are preferred, which keeps
+           filter and envelope state instead of discarding it on every steal. */
         int new_voice = allocator.voice_allocate(sid, LIFE_VOICE_PRIO,
-                                                 LIFE_SEQ_VOICE_FIRST, LIFE_SEQ_VOICE_END);
+                                                 LIFE_SEQ_VOICE_FIRST, LIFE_SEQ_VOICE_END,
+                                                 (int8_t)preset_for(v));
         if (new_voice < 0) return;
         if (new_voice != old_voice && old_voice >= 0) synth_note_up(old_voice);
         play_synth(new_voice, preset_for(v), velocity, note << 8, true);
@@ -1794,7 +1839,25 @@ struct life_panel : panel_t {
        solo change and panel unload all come through here - stuck MIDI notes are
        the classic failure mode for a sequencer with an external sink, and one
        release function is what makes them impossible. */
+    /* release_voice / release_all_voices take the guard, because almost every
+       caller is on the UI thread and on_sequence walks notes[] and the voice
+       allocator continuously. An interrupt landing midway through
+       voice_release_all() clears held[i].active without the note-off having
+       been sent, which is the stuck note this code exists to prevent.
+
+       The _locked variants are for callers already inside on_sequence, which
+       must not take the guard again. */
     void release_voice(int v) {
+        on_sequence_lock_guard_t guard;
+        release_voice_locked(v);
+    }
+
+    void release_all_voices(void) {
+        on_sequence_lock_guard_t guard;
+        for (int v = 0; v < LIFE_NUM_VOICES; ++v) release_voice_locked(v);
+    }
+
+    void release_voice_locked(int v) {
         uint8_t released[LIFE_MAX_HELD];
         rat_left[v] = 0;
         int n = voice_release_all(&notes[v], released);
@@ -1802,9 +1865,7 @@ struct life_panel : panel_t {
         last_played_mask[v] = 0;   /* MIDI needs nothing: it is level-triggered */
     }
 
-    void release_all_voices(void) {
-        for (int v = 0; v < LIFE_NUM_VOICES; ++v) release_voice(v);
-    }
+
 
     bool voice_is_audible(int v) const {
         if (!v_enabled[v] || v_muted[v]) return false;
@@ -1941,6 +2002,7 @@ struct life_panel : panel_t {
         int64_t phase = swung_phase(raw_phase);
         bool playing = is_transport_playing();
 
+        gen_div_edge_this_frame = false;
         surface_sequence();
 
         /* Expire held notes first, so a note that ends exactly as the next one
@@ -1955,7 +2017,7 @@ struct life_panel : panel_t {
             /* Transport stopped: silence everything and hold position. The
                world only advances via the action layer's single-step pad. */
             for (int v = 0; v < LIFE_NUM_VOICES; ++v)
-                if (voice_num_held(&notes[v])) release_voice(v);
+                if (voice_num_held(&notes[v])) release_voice_locked(v);
             if (step_once_request) {
                 step_once_request = false;
                 step_generation();
@@ -1974,11 +2036,15 @@ struct life_panel : panel_t {
         if (!freeze_life && gen_edges > 0 && sequencer_should_advance_playhead()) {
             /* A long stall can report many crossed edges at once. Cap the catch
                up so a seek cannot burn hundreds of generations inside an IRQ. */
-            if (gen_edges > 4) gen_edges = 4;
+            if (gen_edges > LIFE_MAX_CATCHUP) gen_edges = LIFE_MAX_CATCHUP;
             for (int i = 0; i < gen_edges; ++i) step_generation();
+            gen_div_edge_this_frame = true;
         }
 
+        poll_staged_scene_seq();
+
         uint32_t now = time_us();
+        bool seeked = has_transport_just_seeked();
 
         /* Ratchets land between divider edges, so they are their own pass. */
         for (int v = 0; v < LIFE_NUM_VOICES; ++v) {
@@ -2009,15 +2075,30 @@ struct life_panel : panel_t {
             }
             last_edge_us[v] = now;
 
-            if (sequencer_should_advance_playhead()) {
-                int before = traversal_position(&trav[v], LIFE_W);
-                int after = traversal_advance(&trav[v], (traversal_order_t)v_order[v], LIFE_W);
-                /* Wrapping counts as one crossing of the world. */
-                if (after <= before) ++chance[v].pass;
+            if (seeked) {
+                /* A seek rebases the divider and reports zero edges, so the
+                   playhead has to be re-derived rather than advanced: step_index
+                   is the divider's absolute step count, which is what the
+                   transport just jumped to. Without this a locate left every
+                   voice wherever it happened to be. */
+                traversal_seek(&trav[v], (traversal_order_t)v_order[v], LIFE_W,
+                               voice_div[v].step_index());
+            } else if (sequencer_should_advance_playhead()) {
+                /* update() returns how many edges were CROSSED, which is more
+                   than one whenever a frame is late. Advancing once per frame
+                   regardless left a voice permanently behind the transport and
+                   out of step with the other three. */
+                int steps = edges > LIFE_MAX_CATCHUP ? LIFE_MAX_CATCHUP : edges;
+                for (int i = 0; i < steps; ++i) {
+                    int before = traversal_position(&trav[v], LIFE_W);
+                    int after = traversal_advance(&trav[v], (traversal_order_t)v_order[v], LIFE_W);
+                    /* Wrapping counts as one crossing of the world. */
+                    if (after <= before) ++chance[v].pass;
+                }
             }
 
             if (!voice_is_audible(v)) {
-                if (voice_num_held(&notes[v])) release_voice(v);
+                if (voice_num_held(&notes[v])) release_voice_locked(v);
                 rat_left[v] = 0;
                 last_played_mask[v] = 0;   /* nothing sounding, so nothing marked */
                 continue;
@@ -2294,14 +2375,16 @@ struct life_panel : panel_t {
         }
 
         switch (row) {
-        case 1:
+        case 1: {
             /* the step length just changed, so the held note's countdown is
                measured against the wrong interval */
-            release_voice(v);
+            on_sequence_lock_guard_t guard;
+            release_voice_locked(v);
             v_rate[v] = (uint8_t)i;
             last_edge_us[v] = 0;
             step_us[v] = LIFE_DEFAULT_STEP_US;
             return;
+        }
         case 2: v_rule[v] = (uint8_t)i; return;
         case 3: v_order[v] = (uint8_t)i; return;
         case 4: v_pitch[v] = (int8_t)(i - LIFE_PITCH_CENTRE); return;
@@ -3034,24 +3117,36 @@ struct life_panel : panel_t {
         if (scene_picker.panel_save_button(LIFE_SAVE_X, LIFE_PAGE1_Y + LIFE_FILE_BTN_Y))
             scroll_to_page(0);
         if (scene_picker.panel_load_button(LIFE_LOAD_BTN_X, LIFE_PAGE1_Y + LIFE_FILE_BTN_Y))
-            scene_commit_wait = 250;      /* about a second of frames */
+            scene_commit_wait = 2000;     /* sequence frames: a couple of seconds */
     }
 
     /* Returns true if the panel is about to be replaced, in which case the
        caller must stop touching anything: an accepted request queues a swap of
        this whole object. */
-    bool poll_staged_scene(void) {
-        if (scene_commit_wait <= 0) return false;
-        if (is_panel_load_staged()) {
-            scene_commit_wait = 0;
-            if (scene_picker.request_panel_load_finalise()) {
-                release_all_voices();
-                return true;
-            }
-        } else if (--scene_commit_wait == 0) {
-            printf("life: scene load never staged, commit abandoned\n");
+    /* Polled from on_sequence, not on_ui: the documented shape is to stage the
+       load from the UI and then "poll this from on_sequence(...) and call
+       request_panel_load_finalise() at a barline, stop point, or other safe
+       musical moment". Committing on an arbitrary UI frame swapped the whole
+       panel mid-step.
+
+       The wait is also counted in sequence frames now, so the timeout is a real
+       duration rather than one that depended on the UI frame rate. */
+    void poll_staged_scene_seq(void) {
+        if (scene_commit_wait <= 0) return;
+        if (!is_panel_load_staged()) {
+            if (--scene_commit_wait == 0)
+                scene_commit_failed = true;   /* reported from on_ui */
+            return;
         }
-        return false;
+
+        /* Wait for a musical boundary. Stopped counts: there is no step to
+           land on, so there is nothing to interrupt. */
+        if (is_transport_playing() && !gen_div_edge_this_frame) return;
+
+        scene_commit_wait = 0;
+        if (scene_picker.request_panel_load_finalise()) {
+            for (int v = 0; v < LIFE_NUM_VOICES; ++v) release_voice_locked(v);
+        }
     }
 
     /* Four voice selectors at the top left, on printed plates only.
@@ -3395,7 +3490,10 @@ struct life_panel : panel_t {
     void on_ui(int delta_time_us) override {
         (void)delta_time_us;
 
-        if (poll_staged_scene()) return;
+        if (scene_commit_failed) {
+            scene_commit_failed = false;
+            printf("life: scene load never staged, commit abandoned\n");
+        }
 
         log_plate_periodically();
         follow_musical_state();
@@ -3653,7 +3751,8 @@ struct life_panel : panel_t {
             case 1: {                                   /* rate */
                 uint8_t r = (uint8_t)cc_to_index(v, LIFE_NUM_RATES);
                 if (v_rate[voice] != r) {
-                    release_voice(voice);               /* the step length changed */
+                    on_sequence_lock_guard_t guard;
+                    release_voice_locked(voice);        /* the step length changed */
                     v_rate[voice] = r;
                     last_edge_us[voice] = 0;
                     step_us[voice] = LIFE_DEFAULT_STEP_US;

@@ -402,6 +402,10 @@ A scene holds the world itself, every live cell, plus every voice's rate, pick,
 order, channel, pitch, length and mute, and the generation rate and respawn
 settings. Load one back and you get the same world and the same four voices.
 
+Loading waits for the next generation step before it swaps, so a scene change
+lands on the beat rather than halfway through one. With the transport stopped it
+happens straight away.
+
 The settings pages are separate. Key, scale, octave, output, ports and CCs are
 preferences, saved automatically as you change them and shared by every scene.
 

@@ -94,6 +94,36 @@ static inline int traversal_advance(traversal_state_t *t, traversal_order_t orde
     return p;
 }
 
+/* Jump straight to a column, for re-deriving position from an absolute step
+   index after a transport seek. Deterministic orders can be placed exactly;
+   PINGPONG also needs a direction, which is recovered from the sweep the index
+   falls in, and RANDOM has no meaningful absolute position so it just lands. */
+static inline void traversal_seek(traversal_state_t *t, traversal_order_t order, int n,
+                                  unsigned int step) {
+    if (n < 1) n = 1;
+    switch (order) {
+    case TRAV_REVERSE:
+        t->pos = (short)((n - 1) - (int)(step % (unsigned int)n));
+        t->dir = -1;
+        break;
+    case TRAV_PINGPONG: {
+        unsigned int period = (n <= 1) ? 1u : (unsigned int)(2 * n - 2);
+        unsigned int k = step % period;
+        if (k < (unsigned int)n) { t->pos = (short)k; t->dir = 1; }
+        else { t->pos = (short)(period - k); t->dir = -1; }
+        break;
+    }
+    case TRAV_RANDOM:
+        t->pos = (short)(traversal_rand(t) % (unsigned int)n);
+        break;
+    case TRAV_FORWARD:
+    default:
+        t->pos = (short)(step % (unsigned int)n);
+        t->dir = 1;
+        break;
+    }
+}
+
 static inline int traversal_position(const traversal_state_t *t, int n) {
     if (n < 1) n = 1;
     int p = t->pos;
