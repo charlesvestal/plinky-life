@@ -186,6 +186,16 @@ static const uint8_t life_port_values[5] = {
    also retriggers the fault is in the pad geometry or the flags. */
 #define LIFE_SURF_MODES 3
 
+/* A fingertip covers roughly this many pads. Used to turn a rect TOTAL back
+   into a per-pad figure, because both touch_pressure_curve_q7 and the
+   PLAY_SURFACE_PRESSURE_* constants are defined per pad, not per region. */
+#define LIFE_TOUCH_PADS_PER_FINGER 3
+#define LIFE_SURF_NOTE_ON (PLAY_SURFACE_PRESSURE_NOTE_ON * LIFE_TOUCH_PADS_PER_FINGER)
+#define LIFE_SURF_HOLD    (PLAY_SURFACE_PRESSURE_HOLD * LIFE_TOUCH_PADS_PER_FINGER)
+
+/* page 0 is at logical y 0, page 1 at y 16 */
+#define LIFE_PAGE1_Y 16
+
 #define LIFE_MAX_BANDS 5
 #define LIFE_BAND_ROWS 3
 #define LIFE_BLOCKS    4
@@ -617,7 +627,7 @@ struct life_panel : panel_t {
        choosing a scale here drives the whole instrument rather than keeping a
        private harmonic state. */
     void apply_scale_to_system(void) {
-        set_current_key_and_scale((uint8_t)(pref_root & 11), life_scale_masks[pref_scale]);
+        set_current_key_and_scale((uint8_t)(pref_root % 12), life_scale_masks[pref_scale]);
     }
 
     /* Read the INSTRUMENT's key and scale, not a private copy. Life sets those
@@ -719,7 +729,9 @@ struct life_panel : panel_t {
                 }
             }
         }
-        send_declared_midi_notes();
+        /* -1 = aftertouch on the same ports as the notes. The default is
+           MIDI_PORT_ALL, which would ignore the panel's own PORT setting. */
+        send_declared_midi_notes(-1);
     }
 
     void synth_note_on(int v, int note, int velocity) {
@@ -1468,8 +1480,6 @@ struct life_panel : panel_t {
             if (!(play_down & bit)) continue;
             if (keep & bit) { play_miss[v] = 0; continue; }
             if (!force && play_miss[v] < 3) { ++play_miss[v]; keep |= bit; continue; }
-            printf("life: up     v=%d force=%d seen=%04x\n",
-                   v, force ? 1 : 0, (unsigned)keep);
             synth_note_up(v);
             play_miss[v] = 0;
         }
@@ -1515,9 +1525,6 @@ struct life_panel : panel_t {
             n.y_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
             n.param_override_idx = (int8_t)VOICE_PARAM_GLIDE;
 
-            printf("life: %s v=%d note=%d->%d vel=%d band=%d blk=%d\n",
-                   strike ? "STRIKE" : "move  ", voice, (int)play_note[voice], note,
-                   velocity, (int)voice_band[voice], (int)voice_block[voice]);
             play_note[voice] = (uint8_t)note;
             play_synth(voice, n, strike);
             return;
@@ -1579,8 +1586,9 @@ struct life_panel : panel_t {
        Sliding inside one pad leaves its total pressure high and every other pad
        near zero, so nothing changes and there is nothing to retrigger.
 
-       Two thresholds, the ones the API itself defines: a pad must reach NOTE_ON
-       to start a note, but only stay above HOLD to keep it. A finger straddling
+       Two thresholds with hysteresis: a pad must reach NOTE_ON to start a note
+       but only stay above HOLD to keep it. The API's constants are per-finger
+       on a 0..255 scale, so they are scaled up to compare against a rect total. A finger straddling
        a seam therefore holds its current pad rather than flickering, and cannot
        start a second note next door while a voice is on an adjacent pad. */
     void surface_sequence_unified(int sy, int sh, int nbands) {
@@ -1603,13 +1611,13 @@ struct life_panel : panel_t {
             if (!(play_down & (1u << v))) continue;
             int rg = clamp_int(voice_band[v], 0, nbands - 1), b = clamp_int(voice_block[v], 0, LIFE_BLOCKS - 1);
 
-            if (p[rg][b] < PLAY_SURFACE_PRESSURE_HOLD) {
+            if (p[rg][b] < LIFE_SURF_HOLD) {
                 int best = 0, brg = -1, bb = -1;
                 for (int dy = -1; dy <= 1; ++dy)
                     for (int dx = -1; dx <= 1; ++dx) {
                         int ny = rg + dy, nx = b + dx;
                         if (ny < 0 || ny >= nbands || nx < 0 || nx >= LIFE_BLOCKS) continue;
-                        if (taken[ny][nx] || p[ny][nx] < PLAY_SURFACE_PRESSURE_HOLD) continue;
+                        if (taken[ny][nx] || p[ny][nx] < LIFE_SURF_HOLD) continue;
                         if (p[ny][nx] > best) { best = p[ny][nx]; brg = ny; bb = nx; }
                     }
                 if (brg < 0) continue;          /* finger gone - released below */
@@ -1631,7 +1639,7 @@ struct life_panel : panel_t {
 
         for (int rg = 0; rg < nbands; ++rg)
             for (int b = 0; b < LIFE_BLOCKS; ++b) {
-                if (taken[rg][b] || p[rg][b] < PLAY_SURFACE_PRESSURE_NOTE_ON) continue;
+                if (taken[rg][b] || p[rg][b] < LIFE_SURF_NOTE_ON) continue;
                 if (held >= (int)surf_touches) continue;   /* no unaccounted finger */
 
                 int v = -1;
@@ -1646,12 +1654,22 @@ struct life_panel : panel_t {
         release_play_voices(play_seen);
     }
 
+    /* touch_pressure_curve_q7 is a response curve for ONE pad: it clamps its
+       input to 0..255 and saturates at 128, so feeding it the total of a 4x3
+       rect pinned every note to velocity 127 and made set_synth_velocity a
+       no-op writing 127 forever. The rect total is the sum over up to twelve
+       pads, so divide by the pads a finger actually covers before curving. */
+    static int surface_velocity(int rect_total) {
+        int per_pad = rect_total / LIFE_TOUCH_PADS_PER_FINGER;
+        return clamp_int(touch_pressure_curve_q7(clamp_int(per_pad, 0, 255)), 1, 127);
+    }
+
     void surface_play_pad(int v, int row_group, int block, int pressure, int nbands, bool fresh) {
         voice_band[v] = (uint8_t)row_group;
         voice_block[v] = (uint8_t)block;
         int band = nbands - 1 - row_group;
         int note = surface_note(band, block);
-        int velocity = clamp_int(touch_pressure_curve_q7(clamp_int(pressure, 0, 255)), 1, 127);
+        int velocity = surface_velocity(pressure);
         play_surface_voice(v, note, note << 8, velocity, fresh);
     }
 
@@ -1735,10 +1753,13 @@ struct life_panel : panel_t {
                    note with velocity climbing 20, 27, 45, 63. The total pressure
                    is filled in either way, so use it and apply our own
                    thresholds. */
+                /* p, x and y are documented outputs; only the bounding-box
+                   pointers carry NULL defaults, so pass real storage. */
+                int px = 0, py = 0;
                 (void)get_pressure_and_pos_in_rect(b * LIFE_BLOCK_W,
                                                    sy + rg * LIFE_BAND_ROWS + LIFE_BAND_ROWS - 1,
                                                    LIFE_BLOCK_W, LIFE_BAND_ROWS, true,
-                                                   &pp, NULL, NULL);
+                                                   &pp, &px, &py);
                 pp = clamp_int(pp, 0, 32767);
 
                 /* Fast attack, slow release. A touch must be able to start a
@@ -1965,14 +1986,18 @@ struct life_panel : panel_t {
        panel_load_button only STAGES a load. Finalising in the same frame races
        the deserialise, so the documented shape is to poll is_panel_load_staged()
        and finalise once it reports complete. */
+    /* Page 1's window is at logical y = 16, so everything on it is drawn there.
+       The grid is one window onto a taller surface and set_led/button take
+       ABSOLUTE logical y, so a page drawn at y 0..15 while the window sits at
+       16..31 is simply off screen - which is what this page was doing, picker,
+       buttons and all. Both stock panels that add a second page pass 16. */
     void draw_scene_page(void) {
-        int grid_y = plate_is_printed() ? 2 : 0;
+        int grid_y = LIFE_PAGE1_Y + (plate_is_printed() ? 2 : 0);
         scene_picker.panel_picker(grid_y, grid_y + 8, FLAG_PICKER_ENABLE_DELETE);
-        draw_voice_selector();
 
-        if (scene_picker.panel_save_button(LIFE_SAVE_X, LIFE_FILE_BTN_Y))
+        if (scene_picker.panel_save_button(LIFE_SAVE_X, LIFE_PAGE1_Y + LIFE_FILE_BTN_Y))
             scroll_to_page(0);
-        if (scene_picker.panel_load_button(LIFE_LOAD_BTN_X, LIFE_FILE_BTN_Y))
+        if (scene_picker.panel_load_button(LIFE_LOAD_BTN_X, LIFE_PAGE1_Y + LIFE_FILE_BTN_Y))
             scene_commit_wait = 250;      /* about a second of frames */
     }
 
@@ -2164,7 +2189,7 @@ struct life_panel : panel_t {
         }
         case 5: {
             snprintf(buf, sizeof(buf), "%d", respawn_floor);
-            int d = draw_system_style_settings_page("FLOR", buf, respawn_floor * 100 / 64);
+            int d = draw_system_style_settings_page("FLOR", buf, clamp_int(respawn_floor, 0, 64) * 100 / 64);
             if (d) settings_dirty = true;
             if (d) respawn_floor = (uint8_t)clamp_int(respawn_floor + d, 0, 64);
             set_help_text("#fc2#*Respawn floor#. - if fewer than #fc2#*%d#. of 256 cells are "
@@ -2278,7 +2303,7 @@ struct life_panel : panel_t {
         case 14: {
             if (pref_cc_in) snprintf(buf, sizeof(buf), "%d", pref_cc_in);
             else snprintf(buf, sizeof(buf), "OFF");
-            int d = draw_system_style_settings_page("CIN ", buf, pref_cc_in * 100 / 92);
+            int d = draw_system_style_settings_page("CIN ", buf, pref_cc_in * 100 / (127 - (CC_PARAM_COUNT - 1)));
             if (d) settings_dirty = true;
             if (d) pref_cc_in = (uint8_t)clamp_int(pref_cc_in + d, 0,
                                                   127 - (CC_PARAM_COUNT - 1));
@@ -2385,8 +2410,10 @@ struct life_panel : panel_t {
         scene_picker_open = on_scene_picker;
 
         if (page < 0) {
+            /* No voice selector here: it draws at absolute y 0, and a settings
+               page's window is at y -16 or lower, so it was landing a whole
+               page away every frame. None of these pages is per-voice anyway. */
             draw_settings(page);
-            draw_voice_selector();   /* the per-voice pages act on this */
             flush_settings();
             send_param_ccs();
             return;
@@ -2423,7 +2450,21 @@ struct life_panel : panel_t {
         if (mode != LIFE_UI_WORLD)
             set_led(LIFE_MODIFIER_X, LIFE_MODIFIER_Y, LED_RGB(31, 0, 24));
 
-        /* The preset picker owns row 15 while it is up - see draw_preset_loader. */
+        /* Transport, once, before anything else and in every other mode. Same
+           pad, same colour, same action - never modal, never hidden. */
+        for (int i = 0; i < 2; ++i) {
+            int tx = i ? LIFE_PLAY_X : LIFE_STOP_X;
+            if (button(tx, LIFE_TRANSPORT_Y, transport_colour(tx), NOT_ISOLATED,
+                       tx == LIFE_PLAY_X ? "play" : "stop"))
+                do_transport(tx);
+        }
+
+        /* The preset loader keeps transport too. It is easy to confuse
+           file_picker_t::preset_picker with preset_pages_t::saveload_action,
+           which hardcodes its buttons at (14, y+15) and (15, y+15) - the
+           transport corner. The picker used here draws only the two 8x8
+           blocks and the hue row, and never touches row 15, so play and
+           stop stay live on every page. */
         if (mode == LIFE_UI_LOAD) {
             draw_preset_loader();
             /* Tapping a slot only PREVIEWS it. Say so, because nothing on the
@@ -2435,14 +2476,6 @@ struct life_panel : panel_t {
             return;
         }
 
-        /* Transport, once, before anything else and in every other mode. Same
-           pad, same colour, same action - never modal, never hidden. */
-        for (int i = 0; i < 2; ++i) {
-            int tx = i ? LIFE_PLAY_X : LIFE_STOP_X;
-            if (button(tx, LIFE_TRANSPORT_Y, transport_colour(tx), NOT_ISOLATED,
-                       tx == LIFE_PLAY_X ? "play" : "stop"))
-                do_transport(tx);
-        }
 
         /* The play surface owns the grid the same way the synth editor does. */
         if (mode == LIFE_UI_PLAY) {
@@ -2727,15 +2760,17 @@ struct life_panel : panel_t {
         (void)version;
         pack_world();
 
-        /* SYSTEM_NOTES.md section 6b: named fields are only written back when
-           PRESENT, so a field a save omits silently keeps the PREVIOUS scene's
-           value. Reset to a known default before OBJECT_BEGIN so an absent
-           field loads as a default rather than as whatever was last on screen.
+        /* A field a save omits must load as a default, not as whatever happened
+           to be in the object, so reset before OBJECT_BEGIN.
 
-           ONLY when loading. The same serialise function runs for both
-           directions, and resetting on the way out would write defaults to disk
-           and throw away the state the user asked to save. */
-        if (is_serialise_in_progress == 1) setup_default_panel_state_fields_only();
+           ONLY when reading: the same function runs both directions, and
+           resetting on the way out would write defaults to disk.
+
+           s.reading is the per-call direction. is_serialise_in_progress is a
+           coarse global ("0 idle, 1 load, 2 save") and is NOT the direction of
+           this call - during a load the system also COPIES live settings into
+           the staged panel in memory, a write with the global still reading 1. */
+        if (s.reading) setup_default_panel_state_fields_only();
 
         OBJECT_BEGIN(s);
         FIELD("world", world_rows);
@@ -2801,7 +2836,7 @@ struct life_panel : panel_t {
 
     bool on_serialise_settings(serialiser_t &s, int version) override {
         (void)version;
-        if (is_serialise_in_progress == 1) {   /* load only - see on_serialise */
+        if (s.reading) {   /* load only - see on_serialise */
             pref_root = 0;
             pref_scale = 9;
             pref_octave = 3;

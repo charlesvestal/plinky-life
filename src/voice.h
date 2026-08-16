@@ -116,6 +116,11 @@ static inline int voice_poly_budget(int synth_voices, int mono_count, int chord_
 static inline int voice_length_ticks(int step_ticks, int length_percent) {
     if (length_percent < 10) length_percent = 10;
     if (length_percent > 100) length_percent = 100;
-    int t = step_ticks * length_percent / 100;
+    /* 64-bit: step_ticks is microseconds and reaches 30,000,000, so
+       step_ticks * 100 overflows a signed 32-bit int above ~21 seconds per
+       step - which the slowest rate reaches below about 89 BPM. The overflow
+       produced a negative length, releasing the note on the very next tick:
+       a click instead of the longest note the panel can play. */
+    int t = (int)(((int64_t)step_ticks * length_percent) / 100);
     return t < 1 ? 1 : t;
 }
