@@ -1275,7 +1275,7 @@ static const life_param_row_t life_chance_rows[] = {
 #define LIFE_NUM_CHANCE_ROWS ((int)(sizeof(life_chance_rows) / sizeof(life_chance_rows[0])))
 
 /* Row 15, x2: flip between the two pages of the voice editor. */
-#define LIFE_VPAGE_X 2
+
 #define LIFE_PITCH_CENTRE 7
 
 /* Voice N always plays preset N. There is no preset-selector row: four
@@ -1283,9 +1283,8 @@ static const life_param_row_t life_chance_rows[] = {
    them only earns you the question "which preset is voice 3 on again?".
    Presets 5-12 are still reachable - load one into slots 1-4 from the preset
    editor's own save/load picker. */
-#define LIFE_LOAD_X  0
-#define LIFE_SOUND_X 1
-#define LIFE_PLAY_X_PAD 3      /* opens the play surface for the selected voice */
+/* Row 15, x0..x3, is the shared nav strip: load, sound, settings, play.
+   See draw_voice_nav. */
 
 /* Chords prints SAVE and LOAD at (12,14) and (13,14), so the file pickers put
    their commit buttons there. Row 14 is a printed control row on Chords and
@@ -1667,7 +1666,7 @@ struct life_panel : panel_t {
         return 0x11FE0000u | ((uint32_t)v << 8) | (uint32_t)(note & 127);
     }
 
-    /* Voice N plays preset N. Deliberately not configurable - see LIFE_SOUND_X. */
+    /* Voice N plays preset N. Deliberately not configurable. */
     int preset_for(int v) const { return v; }
 
     /* -1 means "follow the preset's own channel", which is what
@@ -2187,7 +2186,13 @@ struct life_panel : panel_t {
 
     int param_row_for_y(int y) const {
         for (int i = 0; i < num_rows(); ++i)
-            if (rows()[i].y == y) return i;
+            if (rows()[i].y == y) {
+                /* Row index 0 is the editor's own VOICE row. On a printed plate
+                   the shared selector on row 0 already does that job, and two
+                   sets of voice pads a row apart is just confusing. */
+                if (i == 0 && plate_is_printed()) return -1;
+                return i;
+            }
         return -1;
     }
 
@@ -2247,12 +2252,6 @@ struct life_panel : panel_t {
     }
 
     uint32_t voice_colour(int x, int y) const {
-        if (y == LIFE_SOUND_Y && x == LIFE_LOAD_X) return LED_RGB(6, 4, 14);
-        if (y == LIFE_SOUND_Y && x == LIFE_SOUND_X) return LIFE_COL_ACTION;
-        if (y == LIFE_SOUND_Y && x == LIFE_PLAY_X_PAD) return life_voice_bright[edit_voice];
-        if (y == LIFE_SOUND_Y && x == LIFE_VPAGE_X)
-            return voice_page ? LED_RGB(20, 10, 0) : LED_RGB(5, 3, 0);
-
         int row = param_row_for_y(y);
         if (row < 0) return 0;                       /* the blank separator rows */
         if (x >= rows()[row].n) return 0;
@@ -2276,14 +2275,8 @@ struct life_panel : panel_t {
        would be wrong: this runs for all 256 pads each frame and the widget layer
        keeps the pointer, so a later pad would overwrite the touched one's text. */
     const char *voice_help(int x, int y) const {
-        if (y == LIFE_SOUND_Y && x == LIFE_LOAD_X) return "load a preset into this voice";
-        if (y == LIFE_SOUND_Y && x == LIFE_SOUND_X) return "edit this voice's sound";
-        if (y == LIFE_SOUND_Y && x == LIFE_PLAY_X_PAD)
-            return "play this voice by hand, over the running world";
-
-        if (y == LIFE_SOUND_Y && x == LIFE_VPAGE_X)
-            return "flip between the voice's timing and its chance controls";
-
+        /* Row 15 x0..x3 belongs to the shared nav strip, which supplies its own
+           help - see draw_voice_nav. */
         int row = param_row_for_y(y);
         if (row < 0 || x >= rows()[row].n) return nullptr;
 
@@ -2310,19 +2303,6 @@ struct life_panel : panel_t {
     }
 
     void do_voice_edit(int x, int y) {
-        if (y == LIFE_SOUND_Y && x == LIFE_LOAD_X) {
-            ui_mode = LIFE_UI_LOAD;
-            return;
-        }
-        if (y == LIFE_SOUND_Y && x == LIFE_SOUND_X) {
-            ui_mode = LIFE_UI_PRESET;
-            return;
-        }
-        if (y == LIFE_SOUND_Y && x == LIFE_PLAY_X_PAD) {
-            ui_mode = LIFE_UI_PLAY;
-            return;
-        }
-        if (y == LIFE_SOUND_Y && x == LIFE_VPAGE_X) { voice_page = voice_page ? 0 : 1; return; }
         int row = param_row_for_y(y);
         if (row < 0 || x >= rows()[row].n) return;
         set_param(row, x);
@@ -2497,8 +2477,7 @@ struct life_panel : panel_t {
         release_play_voices(play_seen);
 
         draw_voice_selector();
-        if (button(0, 15, LIFE_COL_ACTION, NOT_ISOLATED, "back to the voice editor"))
-            ui_mode = LIFE_UI_VOICE;
+        draw_voice_nav(LIFE_UI_PLAY);
     }
 
     /* --- the hosted synth editor ------------------------------------------
@@ -2569,8 +2548,7 @@ struct life_panel : panel_t {
                        WHITE, BLUE, false, 0, XY_BUTTONS_ON_LEFT);
 
         draw_voice_selector();
-        if (button(0, 14, LIFE_COL_ACTION, NOT_ISOLATED, "back to the voice editor"))
-            ui_mode = LIFE_UI_VOICE;
+        draw_voice_nav(LIFE_UI_PRESET);
     }
 
     /* What the second screen calls the sound page's layout. */
@@ -2663,8 +2641,7 @@ struct life_panel : panel_t {
         synth_flags_button(5, 12, preset, SYNTH_FLAG_BUTTON_LOWPASS_GATE);
 
         /* back to the voice editor */
-        if (button(0, 14, LIFE_COL_ACTION, NOT_ISOLATED, "back to the voice editor"))
-            ui_mode = LIFE_UI_VOICE;
+        draw_voice_nav(LIFE_UI_PRESET);
     }
 
     /* The preset picker: folders on the left, 64 slots on the right, with its
@@ -2735,6 +2712,36 @@ struct life_panel : panel_t {
         return plate_is_printed() && y == 0 && x < LIFE_NUM_VOICES;
     }
 
+    /* Row 15, x0..x3: where you can go from any per-voice page.
+
+       These used to live only in the voice editor, so reaching the sound page
+       from the preset picker meant going back first. They are the same four
+       pads in the same place on the editor, the picker, the sound page and the
+       play surface, and the one you are on is lit. */
+    bool nav_pad(int x, int y) const { return y == LIFE_SOUND_Y && x < 4; }
+
+    void draw_voice_nav(int mode) {
+        static const uint32_t on[4] = { LED_RGB(12, 9, 26), LIFE_COL_ACTION,
+                                        LED_RGB(26, 13, 0), LED_RGB(0, 26, 10) };
+        static const uint32_t off[4] = { LED_RGB(4, 3, 9), LED_RGB(0, 4, 5),
+                                         LED_RGB(7, 4, 0), LED_RGB(0, 7, 3) };
+        static const char *help[4] = {
+            "load a preset into this voice",
+            "edit this voice's sound",
+            "this voice's settings - tap again to flip the page",
+            "play this voice by hand",
+        };
+        const int here[4] = { LIFE_UI_LOAD, LIFE_UI_PRESET, LIFE_UI_VOICE, LIFE_UI_PLAY };
+
+        for (int i = 0; i < 4; ++i) {
+            bool current = (mode == here[i]);
+            if (!button(i, LIFE_SOUND_Y, current ? on[i] : off[i], NOT_ISOLATED, help[i]))
+                continue;
+            if (i == 2 && mode == LIFE_UI_VOICE) voice_page = voice_page ? 0 : 1;
+            else ui_mode = (uint8_t)here[i];
+        }
+    }
+
     void draw_voice_selector(void) {
         if (!plate_is_printed()) return;
         for (int v = 0; v < LIFE_NUM_VOICES; ++v)
@@ -2755,6 +2762,7 @@ struct life_panel : panel_t {
         if (preset_pages.picker.preset_load_button(preset, LIFE_LOAD_BTN_X, LIFE_FILE_BTN_Y))
             done = true;
         if (done) ui_mode = LIFE_UI_VOICE;
+        draw_voice_nav(LIFE_UI_LOAD);
     }
 
     /* --- settings pages -------------------------------------------------
@@ -3124,14 +3132,15 @@ struct life_panel : panel_t {
            The mode changes only each pad's colour and what a press does, which
            is why the voice editor lives inside this loop rather than drawing
            itself alongside it. */
-        if (mode == LIFE_UI_VOICE) draw_voice_selector();
+        if (mode == LIFE_UI_VOICE) { draw_voice_selector(); draw_voice_nav(LIFE_UI_VOICE); }
 
         int touched_y = -1;
         for (int y = 0; y < LIFE_H; ++y) {
             for (int x = 0; x < LIFE_W; ++x) {
                 if (x == LIFE_MODIFIER_X && y == LIFE_MODIFIER_Y) continue;
                 if (is_transport_pad(x, y)) continue;   /* emitted once, above */
-                if (mode == LIFE_UI_VOICE && voice_selector_pad(x, y)) continue;
+                if (mode == LIFE_UI_VOICE && (voice_selector_pad(x, y) || nav_pad(x, y)))
+                    continue;
 
                 uint32_t col;
                 const char *help;

@@ -144,7 +144,7 @@ range goes.
 
 | Row | | |
 |---|---|---|
-| 1 | voice | which voice you are editing, tap to switch |
+| 1 | voice | which voice you are editing, tap to switch (blank plates only) |
 | 3 | rate | `32nd · 16T · 16th · 8T · 8th · 4T · 1/4 · 1/2 · 1BAR · 2BAR · 4BAR · 8BAR` |
 | 5 | pick | which live cell it takes, see [picking a cell](#5-picking-a-cell) |
 | 7 | order | forward · reverse · ping-pong · random |
@@ -152,13 +152,15 @@ range goes.
 | 11 | length | 10% to 100% of the step |
 | 13 | accent | how much a crowded cell hits harder than a lone one |
 
-And on row 15:
+Row 15 carries the same four pads on every per-voice page, so you can go
+straight from the preset picker to the sound page without backing out first.
+The one you are on is lit:
 
 | Pad | |
 |---|---|
 | `(0,15)` | load a preset into this voice |
 | `(1,15)` | edit this voice's sound |
-| `(2,15)` | flip to the behaviour page |
+| `(2,15)` | these settings, or tap again to flip the page |
 | `(3,15)` | play this voice by hand |
 
 Press `×` to go back to the world.
@@ -201,7 +203,7 @@ that voice's slot.
 ![Behaviour page](img/chance.svg)
 
 `(2,15)` flips between the two voice pages in both directions. Row 15 is the same
-on either one.
+everywhere.
 
 Four controls, each off at the left-hand pad and turning up from there. One
 control both switches a behaviour on and sets how hard it bites.
@@ -268,7 +270,7 @@ pad sits under the label that names what it does.
 | rows 7–13, `x0–7` | GLIDE · PITCH · OCT · CHORUS · FOLD · START · END · SPEED |
 | `x8`, rows 7–13 | the MOD and XY buttons |
 | `x9–15`, rows 7–13 | the XY pad |
-| `(6,1)`–`(9,1)` | switch voice, under the printed TREBLE MID BASS MELODY |
+| `(0,0)`–`(3,0)` | switch voice, under the printed ALL TREBLE BASS MELODY |
 | `(0,14)` | back to the voice editor |
 
 ### On Blocks and Toadstep
@@ -295,6 +297,11 @@ on the right, save and load at `(12,14)` and `(13,14)`.
 On Chords and Drums the file grid sits on the printed pad circles and the two
 buttons land under the printed SAVE and LOAD. Transport stays live here, and `×`
 gets you out.
+
+On those plates the four voice pads at `(0,0)`–`(3,0)` follow you everywhere —
+the settings pages, both pickers, the voice editor, the sound page and the play
+surface — so the voice you are working on is always the same four pads in the
+same place.
 
 ---
 

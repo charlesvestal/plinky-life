@@ -45,7 +45,8 @@ PARAM_ROWS = [
 LOAD_X, SOUND_X, SOUND_Y = 0, 1, 15   # load a preset / edit this voice's sound
 PLY_X = 3                             # play this voice by hand (NOT the transport
                                       # play pad, which is PLAY_X at 15)
-VPAGE_X = 2                           # flip to the chance page
+NAV = [(0, 'LD', '#4a3c8f'), (1, 'SND', '#18a8bf'),
+       (2, 'SET', '#c86400'), (3, 'PLY', '#00a83f')]   # row 15 nav strip
 
 CHANCE_ROWS = [
     (1, 4, "VOICE", "which voice you are editing"),
@@ -314,10 +315,8 @@ def voice():
                 pad(out, x, y, "#33333c")
             else:
                 pad(out, x, y, V_DIM[1])
-    pad(out, LOAD_X, SOUND_Y, "#4a3c8f", "LD", "#fff")
-    pad(out, SOUND_X, SOUND_Y, ACTION, "SND", "#000")
-    pad(out, VPAGE_X, SOUND_Y, "#5a3000", "P2", "#000")
-    pad(out, PLY_X, SOUND_Y, V[1], "PLY", "#000")
+    for nx, label, colour in NAV:
+        pad(out, nx, SOUND_Y, colour, label, "#fff" if label == "LD" else "#000")
     transport(out)
     lx = PAD + 16 * (CELL + GAP) + 20
     ly = PAD
@@ -445,10 +444,8 @@ def chance():
                 pad(out, x, y, "#33333c")
             else:
                 pad(out, x, y, V_DIM[1])
-    pad(out, LOAD_X, SOUND_Y, "#4a3c8f", "LD", "#fff")
-    pad(out, SOUND_X, SOUND_Y, ACTION, "SND", "#000")
-    pad(out, VPAGE_X, SOUND_Y, "#c86400", "P2", "#000")
-    pad(out, PLY_X, SOUND_Y, V[1], "PLY", "#000")
+    for nx, label, colour in NAV:
+        pad(out, nx, SOUND_Y, colour, label, "#fff" if label == "LD" else "#000")
     transport(out)
     lx = PAD + 16 * (CELL + GAP) + 20
     ly = PAD
@@ -462,8 +459,9 @@ def chance():
         ("h", "row 15 - both pages"),
         ("t", "LD   load a preset"),
         ("t", "SND  the sound editor"),
-        ("t", "P2   flip the two pages"),
+        ("t", "SET  these settings"),
         ("t", "PLY  play this voice"),
+        ("t", "same on every voice page"),
     ])
     # the readout zone, drawn opposite the finger
     zy = PAD + 0 * (CELL + GAP)
@@ -562,10 +560,9 @@ def check_constants():
     """Guard against a repeat of PLY_X being spelled PLAY_X and quietly moving
     the transport pad. Generated maps only stay honest if the generator does."""
     assert (MOD_X, STOP_X, PLAY_X, ROW) == (13, 14, 15, 15), "transport moved"
-    assert PLY_X == 3 and VPAGE_X == 2, "voice-editor row 15 moved"
-    assert LOAD_X == 0 and SOUND_X == 1, "voice-editor row 15 moved"
-    assert len({LOAD_X, SOUND_X, VPAGE_X, PLY_X, MOD_X, STOP_X, PLAY_X}) == 7, \
-        "two row-15 pads share a column"
+    navx = [n[0] for n in NAV]
+    assert navx == [0, 1, 2, 3], "the nav strip moved"
+    assert len(set(navx) | {MOD_X, STOP_X, PLAY_X}) == 7, "a nav pad shares a column"
 
 
 def check_captions():

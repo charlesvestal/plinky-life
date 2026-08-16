@@ -291,8 +291,8 @@
 <rect x="64" y="596" width="34" height="34" rx="7" fill="#18a8bf"/>
 <text class="p" x="81.0" y="616.5" text-anchor="middle" fill="#000">SND</text>
 <rect x="102" y="596" width="34" height="34" rx="7" fill="#c86400"/>
-<text class="p" x="119.0" y="616.5" text-anchor="middle" fill="#000">P2</text>
-<rect x="140" y="596" width="34" height="34" rx="7" fill="#3fd45a"/>
+<text class="p" x="119.0" y="616.5" text-anchor="middle" fill="#000">SET</text>
+<rect x="140" y="596" width="34" height="34" rx="7" fill="#00a83f"/>
 <text class="p" x="157.0" y="616.5" text-anchor="middle" fill="#000">PLY</text>
 <rect x="520" y="596" width="34" height="34" rx="7" fill="#c81ea0"/>
 <text class="p" x="537.0" y="616.5" text-anchor="middle" fill="#fff">×</text>
@@ -317,8 +317,9 @@
 <text class="h" x="654" y="526">row 15 - both pages</text>
 <text class="t" x="654" y="543">LD   load a preset</text>
 <text class="t" x="654" y="560">SND  the sound editor</text>
-<text class="t" x="654" y="577">P2   flip the two pages</text>
+<text class="t" x="654" y="577">SET  these settings</text>
 <text class="t" x="654" y="594">PLY  play this voice</text>
+<text class="t" x="654" y="611">same on every voice page</text>
 <rect x="24" y="24" width="608" height="152" fill="#0b0b0e"/>
 <line x1="21" y1="21" x2="635" y2="21" stroke="#e8a72a" stroke-width="1.5"/>
 <line x1="21" y1="179" x2="635" y2="179" stroke="#e8a72a" stroke-width="1.5"/>

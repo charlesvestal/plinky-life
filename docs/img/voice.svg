@@ -290,9 +290,9 @@
 <text class="p" x="43.0" y="616.5" text-anchor="middle" fill="#fff">LD</text>
 <rect x="64" y="596" width="34" height="34" rx="7" fill="#18a8bf"/>
 <text class="p" x="81.0" y="616.5" text-anchor="middle" fill="#000">SND</text>
-<rect x="102" y="596" width="34" height="34" rx="7" fill="#5a3000"/>
-<text class="p" x="119.0" y="616.5" text-anchor="middle" fill="#000">P2</text>
-<rect x="140" y="596" width="34" height="34" rx="7" fill="#3fd45a"/>
+<rect x="102" y="596" width="34" height="34" rx="7" fill="#c86400"/>
+<text class="p" x="119.0" y="616.5" text-anchor="middle" fill="#000">SET</text>
+<rect x="140" y="596" width="34" height="34" rx="7" fill="#00a83f"/>
 <text class="p" x="157.0" y="616.5" text-anchor="middle" fill="#000">PLY</text>
 <rect x="520" y="596" width="34" height="34" rx="7" fill="#c81ea0"/>
 <text class="p" x="537.0" y="616.5" text-anchor="middle" fill="#fff">×</text>
