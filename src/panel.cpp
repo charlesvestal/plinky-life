@@ -315,7 +315,8 @@ struct life_panel : panel_t {
        is ours to stop. */
     uint16_t play_down;            /* surface voices currently sounding */
     uint8_t surf_mode;             /* 0 = unified touch, 1 = the old play_surface path */
-    uint8_t voice_origin[LIFE_PLAY_VOICES];  /* origin pad of the finger owning each voice, 255 = free */
+    int16_t voice_cx_q4[LIFE_PLAY_VOICES];   /* where each voice's finger was, q4 pad units */
+    int16_t voice_cy_q4[LIFE_PLAY_VOICES];
     uint8_t voice_band[LIFE_PLAY_VOICES];    /* for lighting the pad being held */
     uint8_t voice_block[LIFE_PLAY_VOICES];
     uint8_t play_miss[16];         /* consecutive frames a sounding voice went unreported */
@@ -456,7 +457,7 @@ struct life_panel : panel_t {
         play_down = 0;
         surf_mode = 0;
         for (int i = 0; i < LIFE_PLAY_VOICES; ++i) {
-            voice_origin[i] = 255; voice_band[i] = 0; voice_block[i] = 0;
+            voice_cx_q4[i] = 0; voice_cy_q4[i] = 0; voice_band[i] = 0; voice_block[i] = 0;
         }
         for (int i = 0; i < 16; ++i) play_miss[i] = 0;
         play_seen = 0;
@@ -1566,86 +1567,134 @@ struct life_panel : panel_t {
        none of those was the fault. */
     /* One finger, one note, however many pads it covers.
 
-       play_surface_t reads the region as sixteen independent strings, and
-       STRINGOPHONIC_POLY finds local peaks along each one. Running a finger
-       along a row, pressure peaks over each pad centre and dips between them,
-       so the peak hops from pad to pad and its pressure hops with it - a
-       retrigger per physical pad, inside a single one of our four-wide pads.
-       That is why every driver mode retriggered: they all read the same
-       hopping peak.
+       Two earlier attempts failed for the same underlying reason. play_surface_t
+       reads the region as sixteen strings and finds a local PEAK along each, so
+       a finger sliding along a row makes the peak hop pad to pad and the
+       pressure hop with it. Grouping by touch origin then failed too: origin is
+       the pad where THAT pad's touch began, so sliding onto a fresh pad
+       originates there - every new pad became its own finger.
 
-       Every touched pad reports the pad where its touch BEGAN, so pads can be
-       grouped by origin into one logical finger with an identity that lasts the
-       whole gesture. Summing pressure across the group also removes the dip: a
-       finger between two pads reads half on each, and half plus half is whole.
+       So the finger is tracked here. Contiguous pressure is collected into a
+       blob, the blob is followed between frames by how close it is to where it
+       was, and its pressure is SUMMED - a finger between two pads reads half on
+       each, and half plus half is whole. The 4x3 region then behaves as one
+       large pad rather than twelve small ones.
 
-       Polyphonic by construction - each finger has its own origin, so two
-       fingers on the same row stay two notes, which one-note-per-string would
-       have merged. */
-    struct surface_touch_t {
-        int psum, xsum, ysum;
-        uint8_t origin;
-    };
+       Polyphonic by construction: separate fingers make separate blobs wherever
+       they are, including two on the same row. */
+    struct surface_blob_t { int psum, cx_q4, cy_q4; };
+
+    /* Pads this faint are the skirt of a touch, not a touch. Low enough to keep
+       a blob whole as it crosses a seam, which is the entire point. */
+    #define LIFE_TOUCH_FLOOR 6
+    #define LIFE_TRACK_DIST_Q4 (5 * 16)   /* how far a finger may move in a frame */
+
+    int surface_find_blobs(int sy, int sh, surface_blob_t *out) {
+        uint8_t pr[LIFE_W * LIFE_H], seen[LIFE_W * LIFE_H];
+        for (int y = 0; y < sh; ++y)
+            for (int x = 0; x < LIFE_W; ++x) {
+                int i = y * LIFE_W + x;
+                int p = get_touch_pressure_xy(x, sy + y);
+                pr[i] = (uint8_t)clamp_int(p, 0, 255);
+                seen[i] = 0;
+            }
+
+        int nb = 0;
+        int stack[LIFE_W * LIFE_H];
+        for (int y0 = 0; y0 < sh && nb < LIFE_PLAY_VOICES; ++y0)
+            for (int x0 = 0; x0 < LIFE_W && nb < LIFE_PLAY_VOICES; ++x0) {
+                int i0 = y0 * LIFE_W + x0;
+                if (seen[i0] || pr[i0] < LIFE_TOUCH_FLOOR) continue;
+
+                int ps = 0, xs = 0, ys = 0, sp = 0;
+                stack[sp++] = i0;
+                seen[i0] = 1;
+                while (sp > 0) {
+                    int i = stack[--sp];
+                    int x = i % LIFE_W, y = i / LIFE_W, p = pr[i];
+                    ps += p; xs += p * x; ys += p * y;
+                    for (int dy = -1; dy <= 1; ++dy)
+                        for (int dx = -1; dx <= 1; ++dx) {
+                            int nx = x + dx, ny = y + dy;
+                            if (nx < 0 || nx >= LIFE_W || ny < 0 || ny >= sh) continue;
+                            int ni = ny * LIFE_W + nx;
+                            if (seen[ni] || pr[ni] < LIFE_TOUCH_FLOOR) continue;
+                            seen[ni] = 1;
+                            stack[sp++] = ni;
+                        }
+                }
+                if (ps < PLAY_SURFACE_PRESSURE_NOTE_ON) continue;
+                out[nb].psum = ps;
+                out[nb].cx_q4 = (xs * 16) / ps;
+                out[nb].cy_q4 = (ys * 16) / ps;
+                ++nb;
+            }
+        return nb;
+    }
+
+    /* Half a pad of hysteresis at the edges, so a centroid resting on a seam
+       does not flip the note back and forth. */
+    int surface_snap(int c_q4, int cur, int span, int count) {
+        int lo = cur * span * 16, hi = lo + span * 16;
+        if (c_q4 < lo - 8) return clamp_int(c_q4 / (span * 16), 0, count - 1);
+        if (c_q4 >= hi + 8) return clamp_int(c_q4 / (span * 16), 0, count - 1);
+        return cur;
+    }
 
     void surface_sequence_unified(int sy, int sh, int nbands) {
-        surface_touch_t t[LIFE_PLAY_VOICES];
-        int nt = 0;
+        surface_blob_t b[LIFE_PLAY_VOICES];
+        int nb = surface_find_blobs(sy, sh, b);
 
-        for (int y = sy; y < sy + sh; ++y)
-            for (int x = 0; x < LIFE_W; ++x) {
-                int p = get_touch_pressure_xy(x, y);
-                if (p <= 0) continue;
-                int ox = get_touch_origin_x(x, y), oy = get_touch_origin_y(x, y);
-                if (ox < 0 || oy < sy || oy >= sy + sh) continue;   /* began elsewhere */
-                uint8_t key = (uint8_t)(oy * LIFE_W + ox);
-
-                int i = 0;
-                for (; i < nt; ++i) if (t[i].origin == key) break;
-                if (i == nt) {
-                    if (nt >= LIFE_PLAY_VOICES) continue;
-                    t[nt].origin = key; t[nt].psum = 0; t[nt].xsum = 0; t[nt].ysum = 0;
-                    i = nt++;
-                }
-                t[i].psum += p;
-                t[i].xsum += p * x;
-                t[i].ysum += p * y;
-            }
-
-        play_seen = 0;
+        bool blob_taken[LIFE_PLAY_VOICES] = { false, false, false, false };
         bool claimed[LIFE_PLAY_VOICES] = { false, false, false, false };
+        play_seen = 0;
 
-        for (int i = 0; i < nt; ++i) {
-            if (t[i].psum < PLAY_SURFACE_PRESSURE_NOTE_ON) continue;
+        /* Sounding voices keep their finger: nearest blob to where it was. */
+        for (int v = 0; v < LIFE_PLAY_VOICES; ++v) {
+            if (!(play_down & (1u << v))) continue;
+            int best = -1, best_d = LIFE_TRACK_DIST_Q4;
+            for (int i = 0; i < nb; ++i) {
+                if (blob_taken[i]) continue;
+                int dx = b[i].cx_q4 - voice_cx_q4[v], dy = b[i].cy_q4 - voice_cy_q4[v];
+                if (dx < 0) dx = -dx;
+                if (dy < 0) dy = -dy;
+                int d = dx + dy;
+                if (d < best_d) { best_d = d; best = i; }
+            }
+            if (best < 0) continue;
+            blob_taken[best] = true;
+            claimed[v] = true;
+            surface_voice_from_blob(v, &b[best], sh, nbands, false);
+        }
 
-            int cx = t[i].xsum / t[i].psum, cy = t[i].ysum / t[i].psum;
-            int block = clamp_int(cx / LIFE_BLOCK_W, 0, LIFE_BLOCKS - 1);
-            int band = nbands - 1 - clamp_int((cy - sy) / LIFE_BAND_ROWS, 0, nbands - 1);
-
-            /* Same finger keeps its voice, so the note glides rather than
-               striking. A finger the surface has not seen takes a free one. */
+        /* Whatever is left is a new finger. */
+        for (int i = 0; i < nb; ++i) {
+            if (blob_taken[i]) continue;
             int v = -1;
             for (int j = 0; j < LIFE_PLAY_VOICES; ++j)
-                if (voice_origin[j] == t[i].origin && !claimed[j]) { v = j; break; }
-            bool fresh = false;
-            if (v < 0) {
-                for (int j = 0; j < LIFE_PLAY_VOICES; ++j)
-                    if (!claimed[j] && !(play_down & (1u << j))) { v = j; fresh = true; break; }
-            }
+                if (!claimed[j] && !(play_down & (1u << j))) { v = j; break; }
             if (v < 0) continue;
-
             claimed[v] = true;
-            voice_origin[v] = t[i].origin;
-            voice_band[v] = (uint8_t)band;
-            voice_block[v] = (uint8_t)block;
-
-            int note = surface_note(band, block);
-            int velocity = clamp_int(touch_pressure_curve_q7(clamp_int(t[i].psum, 0, 255)), 1, 127);
-            play_surface_voice(v, note, note << 8, velocity, fresh);
+            blob_taken[i] = true;
+            voice_block[v] = (uint8_t)clamp_int(b[i].cx_q4 / (LIFE_BLOCK_W * 16), 0, LIFE_BLOCKS - 1);
+            voice_band[v] = (uint8_t)clamp_int(b[i].cy_q4 / (LIFE_BAND_ROWS * 16), 0, nbands - 1);
+            surface_voice_from_blob(v, &b[i], sh, nbands, true);
         }
 
         release_play_voices(play_seen);
-        for (int j = 0; j < LIFE_PLAY_VOICES; ++j)
-            if (!(play_down & (1u << j))) voice_origin[j] = 255;
+    }
+
+    void surface_voice_from_blob(int v, const surface_blob_t *bl, int sh, int nbands, bool fresh) {
+        (void)sh;
+        voice_cx_q4[v] = (int16_t)bl->cx_q4;
+        voice_cy_q4[v] = (int16_t)bl->cy_q4;
+        voice_block[v] = (uint8_t)surface_snap(bl->cx_q4, voice_block[v], LIFE_BLOCK_W, LIFE_BLOCKS);
+        voice_band[v]  = (uint8_t)surface_snap(bl->cy_q4, voice_band[v], LIFE_BAND_ROWS, nbands);
+
+        int band = nbands - 1 - voice_band[v];
+        int note = surface_note(band, voice_block[v]);
+        int velocity = clamp_int(touch_pressure_curve_q7(clamp_int(bl->psum, 0, 255)), 1, 127);
+        play_surface_voice(v, note, note << 8, velocity, fresh);
     }
 
     void surface_sequence(void) {
@@ -1715,8 +1764,9 @@ struct life_panel : panel_t {
            themselves happen in on_sequence, see surface_sequence(). */
         for (int v = 0; v < LIFE_PLAY_VOICES; ++v) {
             if (!(play_down & (1u << v))) continue;
-            int band = voice_band[v], block = voice_block[v];
-            int r0 = (nbands - 1 - band) * LIFE_BAND_ROWS;
+            /* voice_band is the row group counted from the top, which is what
+               the LEDs want directly - the musical band is its mirror. */
+            int r0 = (int)voice_band[v] * LIFE_BAND_ROWS, block = voice_block[v];
             if (r0 < 0 || r0 + LIFE_BAND_ROWS > sh) continue;
             for (int rr = 0; rr < LIFE_BAND_ROWS; ++rr)
                 for (int xx = block * LIFE_BLOCK_W; xx < (block + 1) * LIFE_BLOCK_W; ++xx)
