@@ -1664,7 +1664,10 @@ struct life_panel : panel_t {
        and finalise once it reports complete. */
     void draw_scene_page(void) {
         int grid_y = plate_is_printed() ? 2 : 0;
-        scene_picker.panel_picker(grid_y, grid_y + 8);
+        /* The stock wrappers default to FLAG_PICKER_ENABLE_DELETE. Calling the
+           pieces directly means passing it explicitly, or deleting a slot
+           quietly stops working. */
+        scene_picker.panel_picker(grid_y, grid_y + 8, FLAG_PICKER_ENABLE_DELETE);
         draw_voice_selector();
 
         if (scene_picker.panel_save_button(LIFE_SAVE_X, LIFE_FILE_BTN_Y))
@@ -1713,7 +1716,8 @@ struct life_panel : panel_t {
         int preset = preset_for(edit_voice);
         int grid_y = plate_is_printed() ? 2 : 0;
 
-        preset_pages.picker.preset_picker(preset, grid_y, grid_y + 8);
+        preset_pages.picker.preset_picker(preset, grid_y, grid_y + 8,
+                                          FLAG_PICKER_ENABLE_DELETE);
         draw_voice_selector();
 
         bool done = preset_pages.picker.preset_save_button(preset, LIFE_SAVE_X, LIFE_FILE_BTN_Y);
