@@ -175,6 +175,14 @@ static const uint8_t life_port_values[5] = {
    adjacent pads without smearing a fast run into one slur. */
 #define LIFE_SURFACE_GLIDE 36
 
+/* Three ways of driving a surface voice, switchable on the device, because four
+   flashes have gone on hypotheses that were each wrong. Mode 0 is what this
+   panel does now. Mode 2 is what the stock panel does, copied as closely as the
+   pad layout allows - its surface demonstrably does not retrigger while a finger
+   travels, so if 2 is clean the fault is in what 0 does differently, and if 2
+   also retriggers the fault is in the pad geometry or the flags. */
+#define LIFE_SURF_MODES 3
+
 #define LIFE_BAND_ROWS 3
 #define LIFE_BLOCKS    4
 #define LIFE_BLOCK_W   (LIFE_W / LIFE_BLOCKS)
@@ -306,6 +314,7 @@ struct life_panel : panel_t {
        no release callback, so anything sounding that it did not name this frame
        is ours to stop. */
     uint16_t play_down;            /* surface voices currently sounding */
+    uint8_t surf_mode;             /* 0 = curved velocity, 1 = raw pressure, 2 = stock-style */
     uint8_t play_miss[16];         /* consecutive frames a sounding voice went unreported */
     uint16_t play_seen;            /* named by the callback this frame */
     uint8_t play_note[16];         /* so a slide to a new note retriggers */
@@ -442,6 +451,7 @@ struct life_panel : panel_t {
         musical_state_seen = 0;
         scene_commit_wait = 0;
         play_down = 0;
+        surf_mode = 0;
         for (int i = 0; i < 16; ++i) play_miss[i] = 0;
         play_seen = 0;
         play_active = false;
@@ -1461,24 +1471,38 @@ struct life_panel : panel_t {
        VOICE_PARAM_GLIDE overrides the preset's own glide, so the surface glides
        whatever patch is loaded, and the note number now changes exactly once per
        pad. */
-    void play_surface_voice(int voice, int note, uint8_t velocity, bool finger_is_new) {
+    void play_surface_voice(int voice, int note, int note_q8, int velocity, bool finger_is_new) {
         if (voice < 0 || voice >= 16) return;
         play_seen |= (uint16_t)(1u << voice);
         bool strike = finger_is_new || !(play_down & (1u << voice));
 
+        /* Mode 2 uses the plain five-argument call the stock panel uses, with no
+           parameter override of any kind. */
+        if (surf_mode == 2) {
+            if (strike)
+                printf("life: strike v=%d note=%d isnew=%d mode=2\n", voice, note, finger_is_new);
+            else if (play_note[voice] != (uint8_t)note)
+                printf("life: move   v=%d note=%d->%d mode=2\n", voice, (int)play_note[voice], note);
+            play_note[voice] = (uint8_t)note;
+            play_synth(voice, preset_for(edit_voice), velocity, note_q8, strike);
+            return;
+        }
+
         synth_voice_note_t n;
-        n.note_q8 = note << 8;
+        n.note_q8 = note_q8;
         n.param_override_value = (int16_t)LIFE_SURFACE_GLIDE;
-        n.velocity = velocity;
+        n.velocity = (uint8_t)clamp_int(velocity, 0, 127);
         n.preset_idx = (int8_t)preset_for(edit_voice);
         n.x_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
         n.y_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
         n.param_override_idx = (int8_t)VOICE_PARAM_GLIDE;
 
         if (strike)
-            printf("life: strike v=%d note=%d isnew=%d\n", voice, note, finger_is_new ? 1 : 0);
+            printf("life: strike v=%d note=%d isnew=%d mode=%d\n", voice, note,
+                   finger_is_new ? 1 : 0, (int)surf_mode);
         else if (play_note[voice] != (uint8_t)note)
-            printf("life: move   v=%d note=%d->%d\n", voice, (int)play_note[voice], note);
+            printf("life: move   v=%d note=%d->%d mode=%d\n", voice, (int)play_note[voice],
+                   note, (int)surf_mode);
 
         play_note[voice] = (uint8_t)note;
         play_synth(voice, n, strike);
@@ -1569,8 +1593,21 @@ struct life_panel : panel_t {
             int band = nbands - 1 - (f.string_idx / LIFE_BAND_ROWS);
 
             int note = surface_note(band, block);
-            int velocity = touch_pressure_curve_q7(f.pressure);
-            velocity = clamp_int(velocity, 1, 127);
+
+            /* Mode 0: the pressure curve, as now. Modes 1 and 2: raw pressure,
+               which is what the stock surface passes - it saturates past 127 and
+               is clamped there, so a firm finger sends a steady value rather
+               than one that moves every frame. */
+            int velocity = (surf_mode == 0) ? clamp_int(touch_pressure_curve_q7(f.pressure), 1, 127)
+                                            : (int)f.pressure;
+
+            /* Mode 2 also takes pitch straight from the finger, continuously,
+               the way the stock surface builds note_q8 - no per-pad quantising
+               at all, so the pad face is not flat. That is the point: it is the
+               reference behaviour, not the desired one. */
+            int note_q8 = (surf_mode == 2)
+                        ? ((surface_note(band, 0) << 8) + (int)(f.string_pos_q8 / LIFE_BLOCK_W))
+                        : (note << 8);
 
             /* Light the whole block, seams included, so a held note is a solid
                shape rather than a gapped one. */
@@ -1579,7 +1616,7 @@ struct life_panel : panel_t {
                 for (int xx = block * LIFE_BLOCK_W; xx < (block + 1) * LIFE_BLOCK_W; ++xx)
                     set_led(xx, sy + r0 + rr, LIFE_COL_TRIGGER);
 
-            play_surface_voice(v, note, (uint8_t)velocity, f.is_new != 0);
+            play_surface_voice(v, note, note_q8, velocity, f.is_new != 0);
         }
         release_play_voices(play_seen);
 
@@ -1836,7 +1873,7 @@ struct life_panel : panel_t {
             "load a preset into this voice",
             "edit this voice's sound",
             "this voice's settings - tap again to flip the page",
-            "play this voice by hand",
+            "play this voice by hand - tap again to change how it drives the synth",
         };
         const int here[4] = { LIFE_UI_LOAD, LIFE_UI_PRESET, LIFE_UI_VOICE, LIFE_UI_PLAY };
 
@@ -1845,7 +1882,10 @@ struct life_panel : panel_t {
             if (!button(i, LIFE_SOUND_Y, current ? on[i] : off[i], NOT_ISOLATED, help[i]))
                 continue;
             if (i == 2 && mode == LIFE_UI_VOICE) voice_page = voice_page ? 0 : 1;
-            else ui_mode = (uint8_t)here[i];
+            else if (i == 3 && mode == LIFE_UI_PLAY) {
+                surf_mode = (uint8_t)((surf_mode + 1) % LIFE_SURF_MODES);
+                printf("life: surface mode = %d\n", (int)surf_mode);
+            } else ui_mode = (uint8_t)here[i];
         }
     }
 
