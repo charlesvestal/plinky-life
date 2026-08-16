@@ -129,6 +129,11 @@ struct play_surface_t {
     uint32_t next_finger_seq;
     int update_from_touch(int x1, int y1, int w, int h, int flags, int max_voices,
                           uint16_t string_mask = 0xffff, int string_pos_offset = 0);
+    /* Injects a virtual finger. If poke_finger is used instead of
+       update_from_touch, the surface never sees the raw pad grid. */
+    void poke_finger(int string_idx, int pos_q8, int pressure, int max_voices, bool is_touch = false,
+                     bool monophonic = false, int min_pressure_for_note_on = PLAY_SURFACE_PRESSURE_NOTE_ON,
+                     uint8_t origin_raw = 255);
     void update_voices(void);
     finger_t get_finger_for_voice(int voice);
     void do_play_surface(int x, int y, int w, int h, int max_voices, uint32_t bg_col,

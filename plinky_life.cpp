@@ -1349,8 +1349,6 @@ struct life_panel : panel_t {
        is ours to stop. */
     uint16_t play_down;            /* surface voices currently sounding */
     uint8_t surf_mode;             /* 0 = unified touch, 1 = the old play_surface path */
-    int16_t voice_cx_q4[LIFE_PLAY_VOICES];   /* where each voice's finger was, q4 pad units */
-    int16_t voice_cy_q4[LIFE_PLAY_VOICES];
     uint8_t voice_band[LIFE_PLAY_VOICES];    /* for lighting the pad being held */
     uint8_t voice_block[LIFE_PLAY_VOICES];
     uint8_t play_miss[16];         /* consecutive frames a sounding voice went unreported */
@@ -1491,7 +1489,7 @@ struct life_panel : panel_t {
         play_down = 0;
         surf_mode = 0;
         for (int i = 0; i < LIFE_PLAY_VOICES; ++i) {
-            voice_cx_q4[i] = 0; voice_cy_q4[i] = 0; voice_band[i] = 0; voice_block[i] = 0;
+            voice_band[i] = 0; voice_block[i] = 0;
         }
         for (int i = 0; i < 16; ++i) play_miss[i] = 0;
         play_seen = 0;
@@ -2661,60 +2659,54 @@ struct life_panel : panel_t {
         return cur;
     }
 
+    /* Hand the engine ONE finger, already living on our coarse grid.
+
+       There is no large-pad mode in the stock surface, so nothing copied from it
+       fits: update_from_touch reads the region as sixteen strings of sixteen
+       pads, and every attempt so far has been an effort to un-see that fine
+       grid after the fact. Peak finding hopped between physical pads. Touch
+       origin restarted on each new pad. Blob tracking cleaned up the geometry
+       but still fed a per-frame note call.
+
+       poke_finger injects a virtual finger directly, so update_from_touch is
+       never called and the engine never sees the fine grid. The poked finger's
+       string is the BAND and its position is the BLOCK - a four-by-four
+       instrument. Sliding inside one large pad changes neither, so there is
+       nothing for the engine to react to, and finger identity, is_new and voice
+       assignment are the firmware's own, which is what they are good at.
+
+       Our own blob pass is still what decides where the finger is, because that
+       is the part the firmware cannot do: it has no idea our pads are 4x3. */
     void surface_sequence_unified(int sy, int sh, int nbands) {
         surface_blob_t b[LIFE_PLAY_VOICES];
         int nb = surface_find_blobs(sy, sh, b);
 
-        bool blob_taken[LIFE_PLAY_VOICES] = { false, false, false, false };
-        bool claimed[LIFE_PLAY_VOICES] = { false, false, false, false };
-        play_seen = 0;
-
-        /* Sounding voices keep their finger: nearest blob to where it was. */
-        for (int v = 0; v < LIFE_PLAY_VOICES; ++v) {
-            if (!(play_down & (1u << v))) continue;
-            int best = -1, best_d = LIFE_TRACK_DIST_Q4;
-            for (int i = 0; i < nb; ++i) {
-                if (blob_taken[i]) continue;
-                int dx = b[i].cx_q4 - voice_cx_q4[v], dy = b[i].cy_q4 - voice_cy_q4[v];
-                if (dx < 0) dx = -dx;
-                if (dy < 0) dy = -dy;
-                int d = dx + dy;
-                if (d < best_d) { best_d = d; best = i; }
-            }
-            if (best < 0) continue;
-            blob_taken[best] = true;
-            claimed[v] = true;
-            surface_voice_from_blob(v, &b[best], sh, nbands, false);
-        }
-
-        /* Whatever is left is a new finger. */
         for (int i = 0; i < nb; ++i) {
-            if (blob_taken[i]) continue;
-            int v = -1;
-            for (int j = 0; j < LIFE_PLAY_VOICES; ++j)
-                if (!claimed[j] && !(play_down & (1u << j))) { v = j; break; }
-            if (v < 0) continue;
-            claimed[v] = true;
-            blob_taken[i] = true;
-            voice_block[v] = (uint8_t)clamp_int(b[i].cx_q4 / (LIFE_BLOCK_W * 16), 0, LIFE_BLOCKS - 1);
-            voice_band[v] = (uint8_t)clamp_int(b[i].cy_q4 / (LIFE_BAND_ROWS * 16), 0, nbands - 1);
-            surface_voice_from_blob(v, &b[i], sh, nbands, true);
+            int block = clamp_int(b[i].cx_q4 / (LIFE_BLOCK_W * 16), 0, LIFE_BLOCKS - 1);
+            int row_group = clamp_int(b[i].cy_q4 / (LIFE_BAND_ROWS * 16), 0, nbands - 1);
+            int pressure = clamp_int(b[i].psum, 0, 255);
+            /* string = band, position = block. A whole 4x3 pad is one point. */
+            play_surface.poke_finger(row_group, block << 8, pressure, LIFE_PLAY_VOICES, true);
         }
 
+        play_surface.update_voices();
+
+        play_seen = 0;
+        for (int v = 0; v < LIFE_PLAY_VOICES && v < 16; ++v) {
+            finger_t f = play_surface.get_finger_for_voice(v);
+            if (!f.pressure) continue;
+
+            int row_group = clamp_int((int)f.string_idx, 0, nbands - 1);
+            int block = clamp_int((int)(f.string_pos_q8 >> 8), 0, LIFE_BLOCKS - 1);
+            voice_band[v] = (uint8_t)row_group;
+            voice_block[v] = (uint8_t)block;
+
+            int band = nbands - 1 - row_group;
+            int note = surface_note(band, block);
+            int velocity = clamp_int(touch_pressure_curve_q7(f.pressure), 1, 127);
+            play_surface_voice(v, note, note << 8, velocity, f.is_new != 0);
+        }
         release_play_voices(play_seen);
-    }
-
-    void surface_voice_from_blob(int v, const surface_blob_t *bl, int sh, int nbands, bool fresh) {
-        (void)sh;
-        voice_cx_q4[v] = (int16_t)bl->cx_q4;
-        voice_cy_q4[v] = (int16_t)bl->cy_q4;
-        voice_block[v] = (uint8_t)surface_snap(bl->cx_q4, voice_block[v], LIFE_BLOCK_W, LIFE_BLOCKS);
-        voice_band[v]  = (uint8_t)surface_snap(bl->cy_q4, voice_band[v], LIFE_BAND_ROWS, nbands);
-
-        int band = nbands - 1 - voice_band[v];
-        int note = surface_note(band, voice_block[v]);
-        int velocity = clamp_int(touch_pressure_curve_q7(clamp_int(bl->psum, 0, 255)), 1, 127);
-        play_surface_voice(v, note, note << 8, velocity, fresh);
     }
 
     void surface_sequence(void) {
