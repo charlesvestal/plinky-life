@@ -1432,14 +1432,20 @@ struct life_panel : panel_t {
     }
 
     void draw_play_surface(void) {
-        /* Row 0 is the top and must be the highest note, so the roots descend.
-           Two degrees between rows spans about four octaves over the fifteen. */
-        for (int row = 0; row < 15; ++row)
-            string_roots[row] = (uint8_t)life_degree_to_note((14 - row) * 2, root_note(),
-                                                             scale_mask());
+        /* Chords and Drums print pad circles on rows 2..13 only, so the surface
+           sits on them rather than spilling onto the control rows. On a blank
+           plate it takes everything above the transport row. */
+        int sy = plate_is_printed() ? 2 : 0;
+        int sh = plate_is_printed() ? 12 : 15;
+
+        /* The top row is the highest note, so the roots descend. Two degrees
+           between rows spans about four octaves. */
+        for (int i = 0; i < sh; ++i)
+            string_roots[i] = (uint8_t)life_degree_to_note((sh - 1 - i) * 2, root_note(),
+                                                           scale_mask());
 
         play_seen = 0;
-        play_surface.do_play_surface(0, 0, LIFE_W, 15, LIFE_PLAY_VOICES,
+        play_surface.do_play_surface(0, sy, LIFE_W, sh, LIFE_PLAY_VOICES,
                                      LED_RGB(0, 2, 4), life_voice_bright[edit_voice],
                                      string_roots, play_surface_note, this,
                                      HORIZONTAL | SHOW_BACKGROUND | STRINGOPHONIC_MONO,
@@ -1517,10 +1523,13 @@ struct life_panel : panel_t {
         synth_xy_block(&preset_pages.the_xy_pad, preset, 8, 7, 7, 7,
                        WHITE, BLUE, false, 0, XY_BUTTONS_ON_LEFT);
 
-        /* Row 0 is a printed control row, so the voice selector goes there
-           rather than over the pad circles. */
+        /* Chords prints TREBLE, MID, BASS, MELODY across x6..x9 of row 1 - four
+           consecutive voice names, which is where four voice selectors belong.
+           Row 0 would have put voice 1 under "ALL", which on stock Chords means
+           every track and would have been the one pad on this page telling a
+           lie about itself. */
         for (int v = 0; v < LIFE_NUM_VOICES; ++v)
-            if (button(v, 0, v == edit_voice ? life_voice_bright[v] : life_voice_dim[v],
+            if (button(6 + v, 1, v == edit_voice ? life_voice_bright[v] : life_voice_dim[v],
                        NOT_ISOLATED, "edit this voice's sound"))
                 edit_voice = (uint8_t)v;
         if (button(0, 14, LIFE_COL_ACTION, NOT_ISOLATED, "back to the voice editor"))
@@ -1632,6 +1641,11 @@ struct life_panel : panel_t {
        transport: the picker owns row 15 while it is up. That is the right call
        for a modal file dialog, and x still escapes because the picker leaves
        (13,15) alone. */
+    /* NOT offset on Chords or Drums, and it cannot be: saveload_action() puts
+       its cancel and OK at y + 15, so any y above 0 pushes them off the grid.
+       The stock pickers are built for a full 16-row surface, which means on a
+       printed plate they straddle the control rows whatever we do. The sound
+       page and the play surface are ours to lay out; these are not. */
     void draw_preset_loader(void) {
         int r = preset_pages.saveload_action(preset_for(edit_voice), 0);
         if (r != 0) ui_mode = LIFE_UI_VOICE;   /* loaded, saved, or cancelled */

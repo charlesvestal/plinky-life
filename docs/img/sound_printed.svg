@@ -366,6 +366,10 @@
 <text class="h" x="654" y="397">x9-15, rows 7-13</text>
 <text class="t" x="654" y="414">the XY pad</text>
 <text class="t" x="654" y="431"></text>
-<text class="h" x="654" y="448">row 0 / (0,14)</text>
-<text class="t" x="654" y="465">switch voice / back</text>
+<text class="h" x="654" y="448">x6-9, row 1</text>
+<text class="t" x="654" y="465">switch voice - under the</text>
+<text class="t" x="654" y="482">printed TREBLE MID BASS</text>
+<text class="t" x="654" y="499">MELODY</text>
+<text class="t" x="654" y="516"></text>
+<text class="h" x="654" y="533">(0,14)  back</text>
 </svg>

@@ -408,8 +408,12 @@ def sound_printed():
         ("h", "x9-15, rows 7-13"),
         ("t", "the XY pad"),
         ("t", ""),
-        ("h", "row 0 / (0,14)"),
-        ("t", "switch voice / back"),
+        ("h", "x6-9, row 1"),
+        ("t", "switch voice - under the"),
+        ("t", "printed TREBLE MID BASS"),
+        ("t", "MELODY"),
+        ("t", ""),
+        ("h", "(0,14)  back"),
     ])
     out.append("</svg>")
     return "\n".join(out)

@@ -172,9 +172,12 @@ does before committing to it.
 over the sequence while it runs. Notes sound and nothing else happens: the world
 is left alone, because the point is to perform over it rather than disturb it.
 
-Rows are strings and row 0 is the highest, the same way the world reads, so a row
-here is the note that row would play over there. Moving right along a row climbs
-the scale from that row's root.
+Rows are strings and the top row is the highest, the same way the world reads,
+so a row here is the note that row would play over there. Moving right along a
+row climbs the scale from that row's root.
+
+On Chords and Drums the surface sits on rows 2 to 13, so it lands on the printed
+pad circles.
 
 It is always in key. The scale and root come from the same place as everything
 else, so it follows `KEY` and `SCAL` without being told.
@@ -265,7 +268,7 @@ pad sits under the label that names what it does.
 | rows 7–13, `x0–7` | GLIDE · PITCH · OCT · CHORUS · FOLD · START · END · SPEED |
 | `x8`, rows 7–13 | the MOD and XY buttons |
 | `x9–15`, rows 7–13 | the XY pad |
-| `(0,0)`–`(3,0)` | switch voice, the editor follows |
+| `(6,1)`–`(9,1)` | switch voice, under the printed TREBLE MID BASS MELODY |
 | `(0,14)` | back to the voice editor |
 
 ### On Blocks and Toadstep
