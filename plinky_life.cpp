@@ -2389,7 +2389,13 @@ struct life_panel : panel_t {
         const char *txt = readout_text(row);
         if (!txt[0]) return;
 
-        int zone_y = (touched_y <= 7) ? 11 : 0;
+        /* Chords and Drums give pad circles on rows 2..13 only; rows 0, 1, 14 and
+           15 are printed strips, where a four-row glyph would be sitting behind
+           label artwork rather than in a window. So both zones live inside the
+           circles there, and take the whole height on a blank plate. */
+        int zone_top = plate_is_printed() ? 2 : 0;
+        int zone_bot = plate_is_printed() ? 10 : 11;
+        int zone_y = (touched_y <= (zone_top + zone_bot) / 2) ? zone_bot : zone_top;
 
         /* Clear the zone first. Text drawn straight over lit pads is unreadable
            - the pads win, because they are solid and the glyph is a few pixels
