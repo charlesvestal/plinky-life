@@ -302,6 +302,7 @@ struct life_panel : panel_t {
        no release callback, so anything sounding that it did not name this frame
        is ours to stop. */
     uint16_t play_down;            /* surface voices currently sounding */
+    uint8_t play_band[16];         /* which band each surface voice was struck on */
     uint16_t play_seen;            /* named by the callback this frame */
     uint8_t play_note[16];         /* so a slide to a new note retriggers */
     bool play_active;              /* were we on the surface last frame */
@@ -437,6 +438,7 @@ struct life_panel : panel_t {
         musical_state_seen = 0;
         scene_commit_wait = 0;
         play_down = 0;
+        for (int i = 0; i < 16; ++i) play_band[i] = 0xff;
         play_seen = 0;
         play_active = false;
         picker_channel = -1;
@@ -1417,20 +1419,6 @@ struct life_panel : panel_t {
 
        It is always in key: the scale and root come from the instrument's
        globals, so it follows KEY and SCAL like everything else. */
-    static void play_surface_note(void *user, int voice, int note, uint8_t velocity,
-                                  finger_t finger) {
-        (void)finger;
-        life_panel *self = (life_panel *)user;
-        if (voice < 0 || voice >= 16) return;
-
-        self->play_seen |= (uint16_t)(1u << voice);
-        /* Strike on a new finger, or when a slide lands on a different note.
-           Otherwise this is the same note being re-reported with fresh
-           pressure, which should bend and swell rather than restrike. */
-        bool retrigger = !(self->play_down & (1u << voice)) || self->play_note[voice] != note;
-        self->play_note[voice] = (uint8_t)note;
-        play_synth(voice, self->preset_for(self->edit_voice), velocity, note << 8, retrigger);
-    }
 
     /* Stop any surface voice that is no longer being played. */
     void release_play_voices(uint16_t keep) {
@@ -1459,6 +1447,23 @@ struct life_panel : panel_t {
     int surface_note(int band, int block) const {
         int degree = band * LIFE_BLOCKS + block + (int)v_pitch[edit_voice];
         return life_degree_to_note(degree, root_note(), scale_mask());
+    }
+
+    /* The same mapping, but continuous: degree_q8 has 8 fractional bits, and the
+       pitch between two degrees is interpolated. play_synth takes q8 pitch, so
+       a finger moving along a band bends rather than stepping - which is what
+       the instrument does everywhere else, and what the blocks were missing.
+
+       Interpolating between the two notes rather than in semitones keeps it in
+       key: a fifth apart in a pentatonic glides across the fifth, not through
+       the notes the scale leaves out. */
+    int surface_pitch_q8(int band, int pos_q8) const {
+        int degree_q8 = ((band * LIFE_BLOCKS + (int)v_pitch[edit_voice]) << 8)
+                      + pos_q8 / LIFE_BLOCK_W;
+        int d = degree_q8 >> 8, frac = degree_q8 & 255;
+        int n0 = life_degree_to_note(d, root_note(), scale_mask());
+        int n1 = life_degree_to_note(d + 1, root_note(), scale_mask());
+        return (n0 << 8) + (n1 - n0) * frac;
     }
 
     int surface_rows(void) const { return plate_is_printed() ? 12 : 15; }
@@ -1512,12 +1517,11 @@ struct life_panel : panel_t {
                bits - so a plain shift gives the column. Not fretted(), which
                rounds to the nearest pad and would put the block boundaries half
                a pad off. */
-            int col = (int)(f.string_pos_q8 >> 8);
-            col = clamp_int(col, 0, LIFE_W - 1);
-            int block = col / LIFE_BLOCK_W;
+            int pos_q8 = clamp_int((int)f.string_pos_q8, 0, (LIFE_W - 1) << 8);
+            int block = (pos_q8 >> 8) / LIFE_BLOCK_W;
             int band = nbands - 1 - (f.string_idx / LIFE_BAND_ROWS);
 
-            int note = surface_note(band, block);
+            int pitch_q8 = surface_pitch_q8(band, pos_q8);
             int velocity = touch_pressure_curve_q7(f.pressure);
             velocity = clamp_int(velocity, 1, 127);
 
@@ -1528,7 +1532,7 @@ struct life_panel : panel_t {
                 for (int xx = block * LIFE_BLOCK_W; xx < (block + 1) * LIFE_BLOCK_W; ++xx)
                     set_led(xx, sy + r0 + rr, LIFE_COL_TRIGGER);
 
-            play_surface_note(this, v, note, (uint8_t)velocity, f);
+            play_surface_voice(v, band, pitch_q8, (uint8_t)velocity);
         }
         release_play_voices(play_seen);
 
