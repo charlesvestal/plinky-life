@@ -181,6 +181,27 @@ TREBLE MID BASS MELODY XY MODULO PROB PATTERN FILL UNLOCK`.
 
 Panel art: `https://plinky12.com/panel_art/<name>.png`, basic auth `p12code` / `jollygood`.
 
+### ⭐ `do_play_surface` derives pitch from BOTH axes - built for 8 strings, not 16 rows
+
+Plinky's own play surface tunes each string a fourth above the last and takes further pitch from
+the position **along** the string. That is right for the 8 strings the instrument ships with. Use
+the same offset across a full-height 16-row grid and the multiplication runs away: measured
+**7.4 octaves** on a Chords faceplate (12 usable rows) and 8.6 on a blank one, top corner clamping
+flat at MIDI 127, against a sequencer covering 3.2.
+
+It is not a bug in `do_play_surface`. The row count is the variable, and a panel using rows as
+strings has 12 to 15 of them rather than 8.
+
+**Any per-row offset above +1 degree overshoots a full-height grid.** Fourths (+3/row) give 7.4
+octaves; +2/row gives 4.8. Only +1 lands near the instrument's own range - 2.4 octaves on Chords,
+3.0 on a blank plate in a pentatonic scale.
+
+**How to apply:** for a full-height surface, skip `do_play_surface` and drive
+`update_from_touch` / `update_voices` / `get_finger_for_voice` yourself, with `STRINGOPHONIC_MONO`
+so a slide along a row holds its note rather than retriggering. Then map pitch from the row alone.
+Anchor the bottom row at scale degree 0: a window derived from world coordinates lands wherever
+the arithmetic drops it and will silently exclude the tonic.
+
 ### ⭐ Enabling the mic switches OFF four LEDs
 
 `codec_enable_mic(true)` makes the firmware disable **the 2 LEDs beside each microphone hole**
