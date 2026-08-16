@@ -1428,6 +1428,19 @@ struct life_panel : panel_t {
         play_down = keep;
     }
 
+    /* Strike when the finger is new or has crossed to another band; otherwise
+       hold the note and move its pitch. Restriking on every block boundary is
+       what "no glide" felt like - four separate notes across a band instead of
+       one that travels. */
+    void play_surface_voice(int voice, int band, int pitch_q8, uint8_t velocity) {
+        if (voice < 0 || voice >= 16) return;
+        play_seen |= (uint16_t)(1u << voice);
+        bool retrigger = !(play_down & (1u << voice)) || play_band[voice] != (uint8_t)band;
+        play_band[voice] = (uint8_t)band;
+        play_note[voice] = (uint8_t)clamp_int((pitch_q8 + 128) >> 8, 0, 127);
+        play_synth(voice, preset_for(edit_voice), velocity, pitch_q8, retrigger);
+    }
+
     /* The note a block plays.
 
        The surface is a grid of note blocks, not a mirror of the world. Each
