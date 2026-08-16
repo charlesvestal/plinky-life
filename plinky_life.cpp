@@ -1380,7 +1380,7 @@ struct life_panel : panel_t {
     uint8_t cc_in_last[CC_PARAM_COUNT];
     uint64_t cc_in_pending;
     uint32_t musical_state_seen;   /* so we notice key or scale changed elsewhere */
-    int plate_seen;                /* last front-panel code we reported in the log */
+    uint32_t plate_log_us;         /* when the front panel was last reported */
 
     /* Note input. on_midi records; on_ui paints, because touching the world is
        exactly what the sequence lock exists to protect. */
@@ -1475,7 +1475,7 @@ struct life_panel : panel_t {
     void on_load_finished(void) override {
         panel_t::on_load_finished();
 
-        plate_seen = -1;   /* so the code gets logged once after the load */
+        plate_log_us = 0;   /* log the front panel promptly after a load */
 
         /* SYSTEM_NOTES.md section 6b: setup_default_panel_state() does NOT run on
            a staged load, which is how the IDE loads a panel. The arena is zeroed,
@@ -2563,14 +2563,28 @@ struct life_panel : panel_t {
         return "standard";
     }
 
-    /* Log the code whenever it changes, so a late-settling strap read shows up
-       as a second line rather than as a layout that mysteriously never arrives. */
-    void log_plate_if_changed(void) {
+    /* Report the front panel every two seconds.
+
+       Logging it once at load, or only on change, is useless here: Device Logs
+       cannot be attached during boot, and a value that starts equal to a zeroed
+       member never counts as a change. A heartbeat can be read whenever you get
+       round to connecting.
+
+       Printed in decimal as well as hex because it is not established that the
+       firmware's printf handles %x - and if it does not, a hex-only readout is
+       a lie about the value rather than a report of it. */
+    void log_plate_periodically(void) {
+        uint32_t now = time_us();
+        if (plate_log_us && (uint32_t)(now - plate_log_us) < 2000000u) return;
+        plate_log_us = now ? now : 1;
+
         int code = get_frontpanel_code();
-        if (code == plate_seen) return;
-        plate_seen = code;
-        printf("life: frontpanel code 0x%x, orientation %d -> %s layout\n",
-               (unsigned)code, get_frontpanel_orientation(), plate_layout_name());
+        printf("life: frontpanel code dec=%d hex=0x%x orient=%d chords_bit=%d drums_bit=%d "
+               "-> %s\n",
+               code, (unsigned)code, get_frontpanel_orientation(),
+               (code & FRONT_PANEL_CODE_CHORDS) ? 1 : 0,
+               (code & FRONT_PANEL_CODE_DRUMS) ? 1 : 0,
+               plate_layout_name());
     }
 
     void draw_preset_editor(void) {
@@ -2883,7 +2897,7 @@ struct life_panel : panel_t {
     void on_ui(int delta_time_us) override {
         (void)delta_time_us;
 
-        log_plate_if_changed();
+        log_plate_periodically();
         follow_musical_state();
         apply_pending_cc();
         apply_note_input();
@@ -2966,9 +2980,8 @@ struct life_panel : panel_t {
            the top of it. */
         if (mode == LIFE_UI_PRESET) {
             draw_preset_editor();
-            set_help_text("V%d #fc2#*sound#. - %s layout, panel 0x%x - x to leave",
-                          edit_voice + 1, plate_layout_name(),
-                          (unsigned)get_frontpanel_code());
+            set_help_text("V%d #fc2#*sound#. - %s layout, panel %d - x to leave",
+                          edit_voice + 1, plate_layout_name(), get_frontpanel_code());
             return;
         }
 
