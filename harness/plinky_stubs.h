@@ -88,6 +88,7 @@ struct clock_divider_t {
 #define HORIZONTAL 1
 #define VERTICAL 2
 #define SHOW_BACKGROUND 1024
+#define TRACK_FINGERS_ACROSS_STRINGS 16
 #define POLYPHONIC 0
 #define MONOPHONIC 4
 #define STRINGOPHONIC_MONO 8

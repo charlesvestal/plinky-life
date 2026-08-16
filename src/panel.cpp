@@ -1494,13 +1494,20 @@ struct life_panel : panel_t {
            pads wide - POLYPHONIC gives every pad its own voice, so one finger
            spanning two pads would sound the same note twice. Peak finding along
            the band gives one voice per finger and still allows several fingers
-           in the same band. */
+           in the same band.
+
+           TRACK_FINGERS_ACROSS_STRINGS because every ROW is a string and a
+           block is three rows tall. Without it a finger drifting up or down
+           inside one block crosses a string boundary, gets handed a different
+           voice, and the note restrikes - while looking like it never left the
+           pad it is on. */
         int sy = plate_is_printed() ? 2 : 0;
         int sh = surface_rows();
         int nbands = surface_bands();
 
         play_surface.update_from_touch(0, sy, LIFE_W, sh,
-                                       HORIZONTAL | STRINGOPHONIC_POLY, LIFE_PLAY_VOICES);
+                                       HORIZONTAL | STRINGOPHONIC_POLY | TRACK_FINGERS_ACROSS_STRINGS,
+                                       LIFE_PLAY_VOICES);
         play_surface.update_voices();
 
         int root = current_key % 12;
