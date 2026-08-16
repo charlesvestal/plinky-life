@@ -74,11 +74,15 @@ enum divider_update_policy_t : uint8_t {
     UPDATE_DIV_ON_BAR,
 };
 #define DONT_UNWRAP_CLOCK 0
+#define PLEASE_UNWRAP_CLOCK 1
+#define CLOCK_DIVIDER_QUARTER_NOTE_Q16 65536u
 
 struct clock_divider_t {
     int numerator, denominator;
     int64_t clock_base;
     uint16_t phase;
+    void reset(int64_t clock_phase = 0, uint32_t grid_q16 = CLOCK_DIVIDER_QUARTER_NOTE_Q16,
+               int requested_numerator = -1, int requested_denominator = -1);
     int update(int64_t clock_phase = -1, int requested_numerator = -1, int requested_denominator = -1,
                divider_update_policy_t update_when = UPDATE_DIV_ON_HALF_NOTE,
                bool freerunning = false, bool unwrap_clock = DONT_UNWRAP_CLOCK);
@@ -116,7 +120,13 @@ typedef void (*play_surface_note_fn)(void *user, int voice, int note, uint8_t ve
 typedef uint8_t (*scale_play_surface_brightness_fn)(void *user, int string_idx, int string_pos,
                                                     int x, int y, int note);
 
-int touch_pressure_curve_q7(int pressure);
+/* The real body, not a declaration: it clamps to 255 and saturates at 128, and
+   a stub that hid that let a rect TOTAL be passed here unnoticed. */
+static inline int touch_pressure_curve_q7(int pressure) {
+    if (pressure < 0) pressure = 0;
+    if (pressure > 255) pressure = 255;
+    return ((pressure * pressure) + (pressure << 7)) >> 8;
+}
 #define PLAY_SURFACE_PRESSURE_NOTE_ON 24
 #define PLAY_SURFACE_PRESSURE_HOLD 16
 /* Average pressure and position of all touches in a rectangle. x/y come back
@@ -166,7 +176,9 @@ struct voice_alloc_state_t {
 struct voice_allocator_t {
     voice_alloc_state_t _state[MAX_VOICES];
     int voice_allocate(uint32_t source_id, uint8_t prio, uint8_t subset_start = 0,
-                       uint8_t subset_end = DEFAULT_VOICE_ALLOCATOR_VOICES);
+                       uint8_t subset_end = DEFAULT_VOICE_ALLOCATOR_VOICES,
+                       int8_t preferred_preset_idx = -1);
+    int garbage_collect_voices(uint32_t max_age);
     int voice_deallocate(uint32_t source_id, uint8_t subset_start = 0, uint8_t subset_end = MAX_VOICES);
     int find_voice(uint32_t source_id, uint8_t subset_start = 0, uint8_t subset_end = MAX_VOICES) const;
 };
@@ -195,6 +207,7 @@ int get_synth_note(int voice);
 #define MIDI_PORT_TRS1 64
 #define MIDI_PORT_TRS2 128
 #define MIDI_PORT_1 (MIDI_PORT_USB1 | MIDI_PORT_TRS1)
+#define MIDI_PORT_ALL (MIDI_PORT_USB1 | MIDI_PORT_USB2 | MIDI_PORT_TRS1 | MIDI_PORT_TRS2)
 #define MIDI_PORT_2 (MIDI_PORT_USB2 | MIDI_PORT_TRS2)
 
 #define MIDIMSG(status, data1, data2)                                                              \
@@ -229,7 +242,7 @@ static inline int midi_write_cc(int ports, int channel, int cc, int val) {
 uint8_t declare_midi_note(uint8_t channel, uint8_t note, uint8_t velocity, uint8_t midi_ports = MIDI_PORT_1);
 uint8_t declare_midi_note_for_preset_idx(int preset_idx, uint8_t note, uint8_t velocity,
                                          uint8_t midi_ports = MIDI_PORT_1, int midi_channel_wire = -1);
-void send_declared_midi_notes(int enable_aftertouch_on_ports = -1);
+void send_declared_midi_notes(int enable_aftertouch_on_ports = MIDI_PORT_ALL);
 
 int get_system_midi_channel(void);
 uint8_t get_midi_channel_for_preset_idx(int preset_idx, bool respect_system_midi_channel);
@@ -255,13 +268,13 @@ int synth_flags_button(int x, int y, int preset_idx, int synth_flag_enum,
 
 /* Only the parameters this panel names; the real enums are much longer. */
 enum {
-    VOICE_PARAM_OCTAVE, VOICE_PARAM_PITCH, VOICE_PARAM_GLIDE,
-    VOICE_PARAM_SAMPLE_START, VOICE_PARAM_SAMPLE_LENGTH, VOICE_PARAM_TIMESTRETCH,
-    VOICE_PARAM_CHORUS, VOICE_PARAM_SUBOSC, VOICE_PARAM_WAVEFOLD,
-    VOICE_PARAM_CUTOFF_HP, VOICE_PARAM_CUTOFF_LP, VOICE_PARAM_RESONANCE,
+    VOICE_PARAM_CUTOFF_HP = 0, VOICE_PARAM_CUTOFF_LP, VOICE_PARAM_RESONANCE,
     VOICE_PARAM_ATTACK, VOICE_PARAM_DECAY, VOICE_PARAM_SUSTAIN, VOICE_PARAM_RELEASE,
-    VOICE_PARAM_VOLUME, VOICE_PARAM_STEREO,
-    VOICE_PARAM_DELAY_SEND, VOICE_PARAM_REVERB_SEND,
+    VOICE_PARAM_GLIDE, VOICE_PARAM_PITCH, VOICE_PARAM_OCTAVE, VOICE_PARAM_SUBOSC,
+    VOICE_PARAM_WAVEFOLD, VOICE_PARAM_STEREO, VOICE_PARAM_DELAY_SEND,
+    VOICE_PARAM_REVERB_SEND, VOICE_PARAM_TOAD_FACTOR, VOICE_PARAM_VOLUME,
+    VOICE_PARAM_TIMESTRETCH, VOICE_PARAM_SAMPLE_START, VOICE_PARAM_SAMPLE_LENGTH,
+    VOICE_PARAM_CHORUS, VOICE_PARAM_SIDECHAIN_AMOUNT, VOICE_PARAM_LAST,
 };
 enum {
     MIX_PARAM_DELAY_TIME, MIX_PARAM_DELAY_FEEDBACK,
@@ -303,7 +316,7 @@ bool synth_xy_block(xy_pad_t *xy_pad, int preset_idx, int x, int y, int width = 
                     bool require_record_button_down_for_speed = false, bool read_only = false,
                     int flags = 0);
 
-enum panel_page_load_mode_t { PANEL_PAGE_LOAD_COMMIT_ASAP, PANEL_PAGE_LOAD_COMMIT_ON_STOP };
+enum panel_page_load_mode_t : uint8_t { PANEL_PAGE_LOAD_COMMIT_ASAP, PANEL_PAGE_LOAD_STAGE_ONLY };
 
 struct panel_page_t {
     file_picker_t picker;

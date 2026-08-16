@@ -359,7 +359,7 @@ Mixing them across the four voices is most of the instrument.
 Every pick except `ALL` plays one note per step, so four voices give you up to
 four notes. `ALL` plays the whole column.
 
-The synth has eight notes to share. Each voice you can hear is guaranteed one of
+Life gives the sequencer eight of the synth's voices, and keeps four for the play surface. Each voice you can hear is guaranteed one of
 them, so a chord can never cut off a melody, and whatever is spare goes to the
 voices playing `ALL`. Mute the other three and a single `ALL` voice gets all
 eight to itself.
