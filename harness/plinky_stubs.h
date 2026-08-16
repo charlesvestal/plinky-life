@@ -119,6 +119,14 @@ typedef uint8_t (*scale_play_surface_brightness_fn)(void *user, int string_idx, 
 int touch_pressure_curve_q7(int pressure);
 #define PLAY_SURFACE_PRESSURE_NOTE_ON 24
 #define PLAY_SURFACE_PRESSURE_HOLD 16
+/* Average pressure and position of all touches in a rectangle. x/y come back
+   with 8 fractional bits; p is the TOTAL pressure over the rect. Returns false
+   when nothing in the rectangle is firmly touched. (x1,y1) is top-left, or
+   bottom-left when from_bottom is set. */
+bool get_pressure_and_pos_in_rect(int x1, int y1, int w, int h, bool from_bottom, int *p, int *x, int *y,
+                                  int *minx = NULL, int *miny = NULL, int *maxx = NULL, int *maxy = NULL,
+                                  int ignore_pads_below = 0, int ignore_pads_above = 16,
+                                  bool ignore_pads_along_x = false);
 int get_touch_pressure_xy(int x, int y);
 int get_touch_origin_x(int x, int y);
 int get_touch_origin_y(int x, int y);

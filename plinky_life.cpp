@@ -1217,6 +1217,7 @@ static const uint8_t life_port_values[5] = {
    also retriggers the fault is in the pad geometry or the flags. */
 #define LIFE_SURF_MODES 3
 
+#define LIFE_MAX_BANDS 5
 #define LIFE_BAND_ROWS 3
 #define LIFE_BLOCKS    4
 #define LIFE_BLOCK_W   (LIFE_W / LIFE_BLOCKS)
@@ -2583,130 +2584,97 @@ struct life_panel : panel_t {
        voice from the UI hook restruck the note whenever a finger moved, and no
        amount of care about pitch, velocity or retrigger flags fixed it, because
        none of those was the fault. */
-    /* One finger, one note, however many pads it covers.
+    /* One large pad, read as one thing.
 
-       Two earlier attempts failed for the same underlying reason. play_surface_t
-       reads the region as sixteen strings and finds a local PEAK along each, so
-       a finger sliding along a row makes the peak hop pad to pad and the
-       pressure hop with it. Grouping by touch origin then failed too: origin is
-       the pad where THAT pad's touch began, so sliding onto a fresh pad
-       originates there - every new pad became its own finger.
+       get_pressure_and_pos_in_rect sums the pressure over a rectangle and says
+       whether anything in it is firmly touched. That is a big pad, natively, and
+       it is what the MIDI Panel Maker emits for its own big buttons. Everything
+       tried before this was an attempt to rebuild it from the 16x16 grid after
+       the fact - peak finding hopped between physical pads, touch origin
+       restarted on each new pad, hand-rolled blob tracking worked but was a
+       reimplementation of this call.
 
-       So the finger is tracked here. Contiguous pressure is collected into a
-       blob, the blob is followed between frames by how close it is to where it
-       was, and its pressure is SUMMED - a finger between two pads reads half on
-       each, and half plus half is whole. The 4x3 region then behaves as one
-       large pad rather than twelve small ones.
+       Sliding inside one pad leaves its total pressure high and every other pad
+       near zero, so nothing changes and there is nothing to retrigger.
 
-       Polyphonic by construction: separate fingers make separate blobs wherever
-       they are, including two on the same row. */
-    struct surface_blob_t { int psum, cx_q4, cy_q4; };
-
-    /* Pads this faint are the skirt of a touch, not a touch. Low enough to keep
-       a blob whole as it crosses a seam, which is the entire point. */
-    #define LIFE_TOUCH_FLOOR 6
-    #define LIFE_TRACK_DIST_Q4 (5 * 16)   /* how far a finger may move in a frame */
-
-    int surface_find_blobs(int sy, int sh, surface_blob_t *out) {
-        uint8_t pr[LIFE_W * LIFE_H], seen[LIFE_W * LIFE_H];
-        for (int y = 0; y < sh; ++y)
-            for (int x = 0; x < LIFE_W; ++x) {
-                int i = y * LIFE_W + x;
-                int p = get_touch_pressure_xy(x, sy + y);
-                pr[i] = (uint8_t)clamp_int(p, 0, 255);
-                seen[i] = 0;
-            }
-
-        int nb = 0;
-        int stack[LIFE_W * LIFE_H];
-        for (int y0 = 0; y0 < sh && nb < LIFE_PLAY_VOICES; ++y0)
-            for (int x0 = 0; x0 < LIFE_W && nb < LIFE_PLAY_VOICES; ++x0) {
-                int i0 = y0 * LIFE_W + x0;
-                if (seen[i0] || pr[i0] < LIFE_TOUCH_FLOOR) continue;
-
-                int ps = 0, xs = 0, ys = 0, sp = 0;
-                stack[sp++] = i0;
-                seen[i0] = 1;
-                while (sp > 0) {
-                    int i = stack[--sp];
-                    int x = i % LIFE_W, y = i / LIFE_W, p = pr[i];
-                    ps += p; xs += p * x; ys += p * y;
-                    for (int dy = -1; dy <= 1; ++dy)
-                        for (int dx = -1; dx <= 1; ++dx) {
-                            int nx = x + dx, ny = y + dy;
-                            if (nx < 0 || nx >= LIFE_W || ny < 0 || ny >= sh) continue;
-                            int ni = ny * LIFE_W + nx;
-                            if (seen[ni] || pr[ni] < LIFE_TOUCH_FLOOR) continue;
-                            seen[ni] = 1;
-                            stack[sp++] = ni;
-                        }
-                }
-                if (ps < PLAY_SURFACE_PRESSURE_NOTE_ON) continue;
-                out[nb].psum = ps;
-                out[nb].cx_q4 = (xs * 16) / ps;
-                out[nb].cy_q4 = (ys * 16) / ps;
-                ++nb;
-            }
-        return nb;
-    }
-
-    /* Half a pad of hysteresis at the edges, so a centroid resting on a seam
-       does not flip the note back and forth. */
-    int surface_snap(int c_q4, int cur, int span, int count) {
-        int lo = cur * span * 16, hi = lo + span * 16;
-        if (c_q4 < lo - 8) return clamp_int(c_q4 / (span * 16), 0, count - 1);
-        if (c_q4 >= hi + 8) return clamp_int(c_q4 / (span * 16), 0, count - 1);
-        return cur;
-    }
-
-    /* Hand the engine ONE finger, already living on our coarse grid.
-
-       There is no large-pad mode in the stock surface, so nothing copied from it
-       fits: update_from_touch reads the region as sixteen strings of sixteen
-       pads, and every attempt so far has been an effort to un-see that fine
-       grid after the fact. Peak finding hopped between physical pads. Touch
-       origin restarted on each new pad. Blob tracking cleaned up the geometry
-       but still fed a per-frame note call.
-
-       poke_finger injects a virtual finger directly, so update_from_touch is
-       never called and the engine never sees the fine grid. The poked finger's
-       string is the BAND and its position is the BLOCK - a four-by-four
-       instrument. Sliding inside one large pad changes neither, so there is
-       nothing for the engine to react to, and finger identity, is_new and voice
-       assignment are the firmware's own, which is what they are good at.
-
-       Our own blob pass is still what decides where the finger is, because that
-       is the part the firmware cannot do: it has no idea our pads are 4x3. */
+       Two thresholds, the ones the API itself defines: a pad must reach NOTE_ON
+       to start a note, but only stay above HOLD to keep it. A finger straddling
+       a seam therefore holds its current pad rather than flickering, and cannot
+       start a second note next door while a voice is on an adjacent pad. */
     void surface_sequence_unified(int sy, int sh, int nbands) {
-        surface_blob_t b[LIFE_PLAY_VOICES];
-        int nb = surface_find_blobs(sy, sh, b);
+        (void)sh;
+        int p[LIFE_MAX_BANDS][LIFE_BLOCKS];
+        for (int rg = 0; rg < nbands; ++rg)
+            for (int b = 0; b < LIFE_BLOCKS; ++b) {
+                int pp = 0, px = 0, py = 0;
+                bool t = get_pressure_and_pos_in_rect(b * LIFE_BLOCK_W, sy + rg * LIFE_BAND_ROWS,
+                                                      LIFE_BLOCK_W, LIFE_BAND_ROWS, false,
+                                                      &pp, &px, &py);
+                p[rg][b] = t ? pp : 0;
+            }
 
-        for (int i = 0; i < nb; ++i) {
-            int block = clamp_int(b[i].cx_q4 / (LIFE_BLOCK_W * 16), 0, LIFE_BLOCKS - 1);
-            int row_group = clamp_int(b[i].cy_q4 / (LIFE_BAND_ROWS * 16), 0, nbands - 1);
-            int pressure = clamp_int(b[i].psum, 0, 255);
-            /* string = band, position = block. A whole 4x3 pad is one point. */
-            play_surface.poke_finger(row_group, block << 8, pressure, LIFE_PLAY_VOICES, true);
-        }
-
-        play_surface.update_voices();
+        bool taken[LIFE_MAX_BANDS][LIFE_BLOCKS];
+        for (int rg = 0; rg < LIFE_MAX_BANDS; ++rg)
+            for (int b = 0; b < LIFE_BLOCKS; ++b) taken[rg][b] = false;
 
         play_seen = 0;
-        for (int v = 0; v < LIFE_PLAY_VOICES && v < 16; ++v) {
-            finger_t f = play_surface.get_finger_for_voice(v);
-            if (!f.pressure) continue;
 
-            int row_group = clamp_int((int)f.string_idx, 0, nbands - 1);
-            int block = clamp_int((int)(f.string_pos_q8 >> 8), 0, LIFE_BLOCKS - 1);
-            voice_band[v] = (uint8_t)row_group;
-            voice_block[v] = (uint8_t)block;
+        /* A sounding voice keeps its pad while it is merely held, and follows
+           the strongest neighbour if the finger has moved off it. Moving is not
+           a strike, so the note glides. */
+        for (int v = 0; v < LIFE_PLAY_VOICES; ++v) {
+            if (!(play_down & (1u << v))) continue;
+            int rg = clamp_int(voice_band[v], 0, nbands - 1), b = clamp_int(voice_block[v], 0, LIFE_BLOCKS - 1);
 
-            int band = nbands - 1 - row_group;
-            int note = surface_note(band, block);
-            int velocity = clamp_int(touch_pressure_curve_q7(f.pressure), 1, 127);
-            play_surface_voice(v, note, note << 8, velocity, f.is_new != 0);
+            if (p[rg][b] < PLAY_SURFACE_PRESSURE_HOLD) {
+                int best = 0, brg = -1, bb = -1;
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        int ny = rg + dy, nx = b + dx;
+                        if (ny < 0 || ny >= nbands || nx < 0 || nx >= LIFE_BLOCKS) continue;
+                        if (taken[ny][nx] || p[ny][nx] < PLAY_SURFACE_PRESSURE_HOLD) continue;
+                        if (p[ny][nx] > best) { best = p[ny][nx]; brg = ny; bb = nx; }
+                    }
+                if (brg < 0) continue;          /* finger gone - released below */
+                rg = brg; b = bb;
+            }
+
+            taken[rg][b] = true;
+            surface_play_pad(v, rg, b, p[rg][b], nbands, false);
         }
+
+        /* Anything else firmly pressed is a new finger - unless it touches a pad
+           a voice already holds, which is a straddled seam, not a second note. */
+        for (int rg = 0; rg < nbands; ++rg)
+            for (int b = 0; b < LIFE_BLOCKS; ++b) {
+                if (taken[rg][b] || p[rg][b] < PLAY_SURFACE_PRESSURE_NOTE_ON) continue;
+                bool beside_held = false;
+                for (int dy = -1; dy <= 1 && !beside_held; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        int ny = rg + dy, nx = b + dx;
+                        if (ny < 0 || ny >= nbands || nx < 0 || nx >= LIFE_BLOCKS) continue;
+                        if (taken[ny][nx]) { beside_held = true; break; }
+                    }
+                if (beside_held) continue;
+
+                int v = -1;
+                for (int j = 0; j < LIFE_PLAY_VOICES; ++j)
+                    if (!(play_down & (1u << j)) && !(play_seen & (1u << j))) { v = j; break; }
+                if (v < 0) continue;
+                taken[rg][b] = true;
+                surface_play_pad(v, rg, b, p[rg][b], nbands, true);
+            }
+
         release_play_voices(play_seen);
+    }
+
+    void surface_play_pad(int v, int row_group, int block, int pressure, int nbands, bool fresh) {
+        voice_band[v] = (uint8_t)row_group;
+        voice_block[v] = (uint8_t)block;
+        int band = nbands - 1 - row_group;
+        int note = surface_note(band, block);
+        int velocity = clamp_int(touch_pressure_curve_q7(clamp_int(pressure, 0, 255)), 1, 127);
+        play_surface_voice(v, note, note << 8, velocity, fresh);
     }
 
     void surface_sequence(void) {
