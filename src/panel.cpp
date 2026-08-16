@@ -1468,6 +1468,16 @@ struct life_panel : panel_t {
            Still ORed with our own check, so a voice that stopped sounding for
            any reason strikes rather than sliding up from silence. */
         bool strike = finger_is_new || !(play_down & (1u << voice));
+
+        /* Instrumented because this has been misdiagnosed three times: finger
+           tracking, then the release path, then is_new. Each was a real fault
+           and none was the one being heard. Logs only on a strike, so a held
+           finger that never restrikes prints nothing at all - and a line per
+           strike while sliding is itself the answer. */
+        if (strike)
+            printf("life: strike v=%d note=%d isnew=%d down=%04x miss=%d seen=%04x\n",
+                   voice, note, finger_is_new ? 1 : 0, (unsigned)play_down,
+                   (int)play_miss[voice], (unsigned)play_seen);
         if (strike) play_pitch_q8[voice] = (int16_t)target_q8;
         else {
             /* Asymptotic, with a floor so it always arrives: roughly a fifth of
