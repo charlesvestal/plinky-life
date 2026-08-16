@@ -1330,7 +1330,7 @@ struct life_panel : panel_t {
     uint16_t play_seen;            /* named by the callback this frame */
     uint8_t play_note[16];         /* so a slide to a new note retriggers */
     bool play_active;              /* were we on the surface last frame */
-    bool preset_picker_open;       /* so the picker can be told when we leave it */
+    int picker_channel;            /* preset channel the picker is open for, -1 closed */
     bool scene_picker_open;
 
     uint32_t last_edge_us[LIFE_NUM_VOICES];
@@ -1464,7 +1464,7 @@ struct life_panel : panel_t {
         play_down = 0;
         play_seen = 0;
         play_active = false;
-        preset_picker_open = false;
+        picker_channel = -1;
         scene_picker_open = false;
         for (int i = 0; i < 16; ++i) play_note[i] = 0;
         note_in_count = 0;
@@ -3068,11 +3068,20 @@ struct life_panel : panel_t {
            picker opens still holding the LAST voice's selection, and since it
            previews by loading, opening it for one voice could overwrite
            another. */
-        bool on_preset_picker = (page == 0 && ui_mode == LIFE_UI_LOAD);
-        if (on_preset_picker && !preset_picker_open)
-            preset_pages.picker.reset_which_slot_is_selected();
-        if (preset_picker_open && !on_preset_picker) preset_pages.picker.on_done();
-        preset_picker_open = on_preset_picker;
+        /* Tracked as WHICH CHANNEL it is open for, not merely whether it is
+           open. The voice selector sits on the picker page, so the channel can
+           change while it is up - and the picker treats a channel it was never
+           closed on as an abandoned preview and restores that voice to how it
+           was before you opened it. Switching voice therefore has to close the
+           old channel and open the new one, exactly as leaving and returning
+           would. */
+        int want_channel = (page == 0 && ui_mode == LIFE_UI_LOAD)
+                               ? preset_for(edit_voice) : -1;
+        if (want_channel != picker_channel) {
+            if (picker_channel >= 0) preset_pages.picker.on_done();
+            if (want_channel >= 0) preset_pages.picker.reset_which_slot_is_selected();
+            picker_channel = want_channel;
+        }
 
         bool on_scene_picker = (page == 1);
         if (on_scene_picker && !scene_picker_open) scene_picker.reset_which_slot_is_selected();
