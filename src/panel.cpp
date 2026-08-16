@@ -118,6 +118,16 @@ static const char *const life_rule_help[] = {
     "Seeds - everything dies every step and explodes outward. Chaos",
 };
 
+/* AUTO asks the firmware; the rest force it.
+
+   Detection is the right default and works on units whose straps read, but it
+   cannot be relied on alone: a Chords panel has been seen reporting code 0
+   (FRONT_PANEL_CODE_NONE) while get_frontpanel_orientation() said 1, i.e. the
+   firmware knew a panel was mounted but not which one. Without an override that
+   unit can never get its printed layout. */
+static const char *const life_plate_names[4] = { "AUTO", "BLNK", "CHRD", "DRUM" };
+enum { LIFE_PLATE_AUTO = 0, LIFE_PLATE_BLANK, LIFE_PLATE_CHORDS, LIFE_PLATE_DRUMS };
+
 static const char *const life_sink_names[3] = { "SYN ", "MIDI", "BOTH" };
 enum { LIFE_SINK_SYNTH = 0, LIFE_SINK_MIDI, LIFE_SINK_BOTH };
 
@@ -327,6 +337,7 @@ struct life_panel : panel_t {
     uint8_t pref_cc_out;      /* mirror parameter changes back out on the same block */
     uint8_t pref_cv_out;      /* drive the two CV outputs from the world */
     uint8_t pref_note_in;     /* played notes draw cells into the world */
+    uint8_t pref_plate;       /* AUTO, or force the faceplate - see life_plate_names */
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
@@ -350,6 +361,11 @@ struct life_panel : panel_t {
     uint64_t cc_in_pending;
     uint32_t musical_state_seen;   /* so we notice key or scale changed elsewhere */
     uint32_t plate_log_us;         /* when the front panel was last reported */
+
+    /* grid.cpp reads the front panel in a MEMBER INITIALISER, i.e. at
+       construction, not per frame. Whether that matters is exactly the question
+       here, so capture it both ways and log both. */
+    int plate_at_construct = get_frontpanel_code();
 
     /* Note input. on_midi records; on_ui paints, because touching the world is
        exactly what the sequence lock exists to protect. */
@@ -439,6 +455,7 @@ struct life_panel : panel_t {
         pref_cc_out = 1;
         pref_cv_out = 1;
         pref_note_in = 1;
+        pref_plate = LIFE_PLATE_AUTO;
     }
 
     void on_load_finished(void) override {
@@ -539,6 +556,7 @@ struct life_panel : panel_t {
         if (pref_sink > LIFE_SINK_BOTH) pref_sink = LIFE_SINK_BOTH;
         if (pref_port > 4) pref_port = 3;
         if (pref_cc_in > 127 - (CC_PARAM_COUNT - 1)) pref_cc_in = 0;
+        if (pref_plate > LIFE_PLATE_DRUMS) pref_plate = LIFE_PLATE_AUTO;
         if (edit_voice >= LIFE_NUM_VOICES) edit_voice = 0;
     }
 
@@ -1521,11 +1539,22 @@ struct life_panel : panel_t {
        the printed layout simply never appears. Reading it live costs nothing
        and cannot go stale. */
     bool plate_is_printed(void) const {
-        return (get_frontpanel_code() & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
+        if (pref_plate == LIFE_PLATE_CHORDS || pref_plate == LIFE_PLATE_DRUMS) return true;
+        if (pref_plate == LIFE_PLATE_BLANK) return false;
+        /* Either reading will do: whichever of the two is non-zero is the one
+           that saw the straps. */
+        int code = get_frontpanel_code() | plate_at_construct;
+        return (code & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
     }
 
-    static const char *plate_layout_name(void) {
-        int code = get_frontpanel_code();
+    const char *plate_layout_name(void) const {
+        switch (pref_plate) {
+        case LIFE_PLATE_CHORDS: return "Chords";
+        case LIFE_PLATE_DRUMS: return "Drums";
+        case LIFE_PLATE_BLANK: return "standard";
+        default: break;
+        }
+        int code = get_frontpanel_code() | plate_at_construct;
         if (code & FRONT_PANEL_CODE_CHORDS) return "Chords";
         if (code & FRONT_PANEL_CODE_DRUMS) return "Drums";
         if (code & FRONT_PANEL_CODE_TOADSTEP) return "Toadstep";
@@ -1537,20 +1566,21 @@ struct life_panel : panel_t {
        Logging it once at load, or only on change, is useless here: Device Logs
        cannot be attached during boot, and a value that starts equal to a zeroed
        member never counts as a change. A heartbeat can be read whenever you get
-       round to connecting.
+       round to connecting. Every thirty seconds once the question is settled -
+       often enough to catch a strap read that starts working, quiet enough to
+       leave in.
 
        Printed in decimal as well as hex because it is not established that the
        firmware's printf handles %x - and if it does not, a hex-only readout is
        a lie about the value rather than a report of it. */
     void log_plate_periodically(void) {
         uint32_t now = time_us();
-        if (plate_log_us && (uint32_t)(now - plate_log_us) < 2000000u) return;
+        if (plate_log_us && (uint32_t)(now - plate_log_us) < 30000000u) return;
         plate_log_us = now ? now : 1;
 
         int code = get_frontpanel_code();
-        printf("life: frontpanel code dec=%d hex=0x%x orient=%d chords_bit=%d drums_bit=%d "
-               "-> %s\n",
-               code, (unsigned)code, get_frontpanel_orientation(),
+        printf("life: frontpanel now=%d at_construct=%d orient=%d chords=%d drums=%d -> %s\n",
+               code, plate_at_construct, get_frontpanel_orientation(),
                (code & FRONT_PANEL_CODE_CHORDS) ? 1 : 0,
                (code & FRONT_PANEL_CODE_DRUMS) ? 1 : 0,
                plate_layout_name());
@@ -1615,7 +1645,7 @@ struct life_panel : panel_t {
 
     /* Global only. Per-voice config moved onto the grid, where it is one tap
        deep and visible all at once instead of fourteen side-button clicks. */
-    int settings_page_count(void) { return 17; }
+    int settings_page_count(void) { return 18; }
 
     /* Page 1 is the scene save/load picker. on_serialise() has always described
        the world and every voice setting, but without this there was no way to
@@ -1764,6 +1794,20 @@ struct life_panel : panel_t {
             break;
         }
         case 10: {
+            int d = draw_system_style_enum_settings_page("PLTE", pref_plate, life_plate_names, 4);
+            if (d) { settings_dirty = true;
+                     pref_plate = (uint8_t)clamp_int(pref_plate + d, 0, 3); }
+            if (pref_plate == LIFE_PLATE_AUTO)
+                set_help_text("#fc2#*Faceplate#. - #fc2#*auto#., panel reads %d now, %d at "
+                              "startup. If your Chords or Drums plate is not recognised, set "
+                              "it here.", get_frontpanel_code(), plate_at_construct);
+            else
+                set_help_text("#fc2#*Faceplate#. - forced to #fc2#*%s#.. The sound page uses "
+                              "that layout whatever the panel reports.",
+                              life_plate_names[pref_plate]);
+            break;
+        }
+        case 11: {
             int d = draw_system_style_enum_settings_page("OUT ", pref_sink, life_sink_names, 3);
             if (d) settings_dirty = true;
             if (d) {
@@ -1776,7 +1820,7 @@ struct life_panel : panel_t {
                                                         : "#fc2#*both#. the internal synth and MIDI");
             break;
         }
-        case 11: {
+        case 12: {
             int d = draw_system_style_enum_settings_page("PORT", pref_port, life_port_names, 5);
             if (d) settings_dirty = true;
             if (d) {
@@ -1792,7 +1836,7 @@ struct life_panel : panel_t {
                                            : "#fc2#*every port#., USB and TRS 1 and 2");
             break;
         }
-        case 12: {
+        case 13: {
             bool on = pref_send_cc != 0;
             int d = draw_system_style_bool_settings_page("CC  ", on);
             if (d) settings_dirty = true;
@@ -1807,7 +1851,7 @@ struct life_panel : panel_t {
                               "per-voice movement.");
             break;
         }
-        case 13: {
+        case 14: {
             if (pref_cc_in) snprintf(buf, sizeof(buf), "%d", pref_cc_in);
             else snprintf(buf, sizeof(buf), "OFF");
             int d = draw_system_style_settings_page("CIN ", buf, pref_cc_in * 100 / 92);
@@ -1824,7 +1868,7 @@ struct life_panel : panel_t {
                               "the world and every voice from a controller or a DAW.");
             break;
         }
-        case 14: {
+        case 15: {
             bool on = pref_cc_out != 0;
             int d = draw_system_style_bool_settings_page("COUT", on);
             if (d) { pref_cc_out = on ? 0 : 1; settings_dirty = true; cc_out_primed = false; }
@@ -1837,7 +1881,7 @@ struct life_panel : panel_t {
                               "report its own changes.");
             break;
         }
-        case 15: {
+        case 16: {
             bool on = pref_cv_out != 0;
             int d = draw_system_style_bool_settings_page("CV  ", on);
             if (d) { pref_cv_out = on ? 0 : 1; settings_dirty = true; }
@@ -1845,7 +1889,7 @@ struct life_panel : panel_t {
                           "changing. 0 to 5 volts.", pref_cv_out ? "#fc2#*on#." : "#fc2#*off#.");
             break;
         }
-        case 16: {
+        case 17: {
             bool on = pref_note_in != 0;
             int d = draw_system_style_bool_settings_page("NIN ", on);
             if (d) { pref_note_in = on ? 0 : 1; settings_dirty = true; }
@@ -2300,6 +2344,7 @@ struct life_panel : panel_t {
             pref_cc_out = 1;
             pref_cv_out = 1;
             pref_note_in = 1;
+            pref_plate = LIFE_PLATE_AUTO;
         }
 
         OBJECT_BEGIN(s);
@@ -2313,6 +2358,7 @@ struct life_panel : panel_t {
         FIELD("ccout", pref_cc_out);
         FIELD("cvout", pref_cv_out);
         FIELD("notein", pref_note_in);
+        FIELD("plate", pref_plate);
         OBJECT_END(s);
 
         clamp_settings();
