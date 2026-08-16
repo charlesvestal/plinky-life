@@ -1909,6 +1909,8 @@ struct life_panel : panel_t {
         int64_t phase = swung_phase(raw_phase);
         bool playing = is_transport_playing();
 
+        surface_sequence();
+
         /* Expire held notes first, so a note that ends exactly as the next one
            begins does not leave the new note's slot stolen from under it. */
         for (int v = 0; v < LIFE_NUM_VOICES; ++v) {
@@ -2564,6 +2566,50 @@ struct life_panel : panel_t {
     int surface_bands(void) const { return surface_rows() / LIFE_BAND_ROWS; }
 
 
+    /* Everything that touches a voice, on the sequence thread.
+
+       This used to run in on_ui, alongside the drawing. It is the difference
+       that survived three rewrites of the note handling: the stock panel calls
+       its equivalent from on_sequence(...), and the API reference says plainly
+       to call play_synth from on_sequence(...) or on_midi(...). Driving a synth
+       voice from the UI hook restruck the note whenever a finger moved, and no
+       amount of care about pitch, velocity or retrigger flags fixed it, because
+       none of those was the fault. */
+    void surface_sequence(void) {
+        if (ui_mode != LIFE_UI_PLAY) {
+            if (play_down) release_play_voices(0, true);
+            return;
+        }
+        int sy = plate_is_printed() ? 2 : 0;
+        int sh = surface_rows();
+        int nbands = surface_bands();
+
+        play_surface.update_from_touch(0, sy, LIFE_W, sh,
+                                       HORIZONTAL | STRINGOPHONIC_POLY | TRACK_FINGERS_ACROSS_STRINGS,
+                                       LIFE_PLAY_VOICES);
+        play_surface.update_voices();
+
+        play_seen = 0;
+        for (int v = 0; v < LIFE_PLAY_VOICES && v < 16; ++v) {
+            finger_t f = play_surface.get_finger_for_voice(v);
+            if (!f.pressure || f.string_idx >= sh) continue;
+
+            int pos_q8 = clamp_int((int)f.string_pos_q8, 0, (LIFE_W - 1) << 8);
+            int block = (pos_q8 >> 8) / LIFE_BLOCK_W;
+            int band = nbands - 1 - (f.string_idx / LIFE_BAND_ROWS);
+
+            int note = surface_note(band, block);
+            int velocity = (surf_mode == 0) ? clamp_int(touch_pressure_curve_q7(f.pressure), 1, 127)
+                                            : (int)f.pressure;
+            int note_q8 = (surf_mode == 2)
+                        ? ((surface_note(band, 0) << 8) + (int)(f.string_pos_q8 / LIFE_BLOCK_W))
+                        : (note << 8);
+
+            play_surface_voice(v, note, note_q8, velocity, f.is_new != 0);
+        }
+        release_play_voices(play_seen);
+    }
+
     void draw_play_surface(void) {
         /* Built from the surface's own pieces rather than do_play_surface,
            because that helper derives pitch from the string AND the position
@@ -2586,11 +2632,6 @@ struct life_panel : panel_t {
         int sh = surface_rows();
         int nbands = surface_bands();
 
-        play_surface.update_from_touch(0, sy, LIFE_W, sh,
-                                       HORIZONTAL | STRINGOPHONIC_POLY | TRACK_FINGERS_ACROSS_STRINGS,
-                                       LIFE_PLAY_VOICES);
-        play_surface.update_voices();
-
         int root = current_key % 12;
         for (int r = 0; r < sh; ++r) {
             int band = nbands - 1 - (r / LIFE_BAND_ROWS);   /* band 0 at the bottom */
@@ -2610,46 +2651,18 @@ struct life_panel : panel_t {
             }
         }
 
-        play_seen = 0;
+        /* Read-only here: which pads to light. The touch reading and the notes
+           themselves happen in on_sequence, see surface_sequence(). */
         for (int v = 0; v < LIFE_PLAY_VOICES && v < 16; ++v) {
             finger_t f = play_surface.get_finger_for_voice(v);
             if (!f.pressure || f.string_idx >= sh) continue;
-
-            /* string_pos_q8 is documented as 0..15*256 - pad units, 8 fractional
-               bits - so a plain shift gives the column. Not fretted(), which
-               rounds to the nearest pad and would put the block boundaries half
-               a pad off. */
-            int pos_q8 = clamp_int((int)f.string_pos_q8, 0, (LIFE_W - 1) << 8);
-            int block = (pos_q8 >> 8) / LIFE_BLOCK_W;
-            int band = nbands - 1 - (f.string_idx / LIFE_BAND_ROWS);
-
-            int note = surface_note(band, block);
-
-            /* Mode 0: the pressure curve, as now. Modes 1 and 2: raw pressure,
-               which is what the stock surface passes - it saturates past 127 and
-               is clamped there, so a firm finger sends a steady value rather
-               than one that moves every frame. */
-            int velocity = (surf_mode == 0) ? clamp_int(touch_pressure_curve_q7(f.pressure), 1, 127)
-                                            : (int)f.pressure;
-
-            /* Mode 2 also takes pitch straight from the finger, continuously,
-               the way the stock surface builds note_q8 - no per-pad quantising
-               at all, so the pad face is not flat. That is the point: it is the
-               reference behaviour, not the desired one. */
-            int note_q8 = (surf_mode == 2)
-                        ? ((surface_note(band, 0) << 8) + (int)(f.string_pos_q8 / LIFE_BLOCK_W))
-                        : (note << 8);
-
-            /* Light the whole block, seams included, so a held note is a solid
-               shape rather than a gapped one. */
-            int r0 = (nbands - 1 - band) * LIFE_BAND_ROWS;
+            int col = clamp_int((int)(f.string_pos_q8 >> 8), 0, LIFE_W - 1);
+            int block = col / LIFE_BLOCK_W;
+            int r0 = (f.string_idx / LIFE_BAND_ROWS) * LIFE_BAND_ROWS;
             for (int rr = 0; rr < LIFE_BAND_ROWS; ++rr)
                 for (int xx = block * LIFE_BLOCK_W; xx < (block + 1) * LIFE_BLOCK_W; ++xx)
                     set_led(xx, sy + r0 + rr, LIFE_COL_TRIGGER);
-
-            play_surface_voice(v, note, note_q8, velocity, f.is_new != 0);
         }
-        release_play_voices(play_seen);
 
         draw_voice_selector();
         draw_voice_nav(LIFE_UI_PLAY);
@@ -3231,7 +3244,8 @@ struct life_panel : panel_t {
            being drawn. Checked before the page dispatch so it also covers
            paging away to the settings or scene pages. */
         bool on_surface = (page == 0 && ui_mode == LIFE_UI_PLAY);
-        if (play_active && !on_surface) release_play_voices(0, true);
+        /* surface_sequence() releases when the page is left - doing it from here
+           as well would be a second thread touching the same voices. */
         play_active = on_surface;
 
         /* "call this when you close the file picker" - and we can leave one by
