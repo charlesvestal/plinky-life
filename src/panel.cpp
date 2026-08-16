@@ -321,6 +321,7 @@ struct life_panel : panel_t {
     uint8_t surf_mode;             /* 0 = unified touch, 1 = the old play_surface path */
     uint8_t voice_band[LIFE_PLAY_VOICES];    /* for lighting the pad being held */
     uint8_t voice_block[LIFE_PLAY_VOICES];
+    int16_t surf_p[LIFE_MAX_BANDS][LIFE_BLOCKS];   /* per large pad, sampled in on_ui */
     uint8_t play_miss[16];         /* consecutive frames a sounding voice went unreported */
     uint16_t play_seen;            /* named by the callback this frame */
     uint8_t play_note[16];         /* so a slide to a new note retriggers */
@@ -460,6 +461,9 @@ struct life_panel : panel_t {
         surf_mode = 0;
         for (int i = 0; i < LIFE_PLAY_VOICES; ++i) {
             voice_band[i] = 0; voice_block[i] = 0;
+        }
+        for (int rg = 0; rg < LIFE_MAX_BANDS; ++rg) {
+            for (int b = 0; b < LIFE_BLOCKS; ++b) surf_p[rg][b] = 0;
         }
         for (int i = 0; i < 16; ++i) play_miss[i] = 0;
         play_seen = 0;
@@ -1509,14 +1513,26 @@ struct life_panel : panel_t {
             n.y_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
             n.param_override_idx = (int8_t)VOICE_PARAM_GLIDE;
 
-            printf("life: %s v=%d note=%d->%d vel=%d\n", strike ? "STRIKE" : "move  ",
-                   voice, (int)play_note[voice], note, velocity);
+            printf("life: %s v=%d note=%d->%d vel=%d band=%d blk=%d\n",
+                   strike ? "STRIKE" : "move  ", voice, (int)play_note[voice], note,
+                   velocity, (int)voice_band[voice], (int)voice_block[voice]);
             play_note[voice] = (uint8_t)note;
             play_synth(voice, n, strike);
             return;
         }
 
-        set_synth_velocity(voice, clamp_int(velocity, 0, 127));
+        /* Deliberately nothing. Between a strike and a note change this panel
+           now makes NO call of any kind for a held voice - not play_synth, not
+           set_synth_velocity, which was the last per-frame call left and was
+           itself added untested.
+
+           So if a held finger still retriggers on this build, and the log below
+           stays silent while it does, the sound is not coming from this panel's
+           note handling and no further change here can fix it.
+
+           The cost is pressure expression while held, which comes back once the
+           cause is known. */
+        (void)velocity;
     }
 
     /* The note a block plays.
@@ -1572,15 +1588,10 @@ struct life_panel : panel_t {
        start a second note next door while a voice is on an adjacent pad. */
     void surface_sequence_unified(int sy, int sh, int nbands) {
         (void)sh;
+        (void)sy;
         int p[LIFE_MAX_BANDS][LIFE_BLOCKS];
         for (int rg = 0; rg < nbands; ++rg)
-            for (int b = 0; b < LIFE_BLOCKS; ++b) {
-                int pp = 0, px = 0, py = 0;
-                bool t = get_pressure_and_pos_in_rect(b * LIFE_BLOCK_W, sy + rg * LIFE_BAND_ROWS,
-                                                      LIFE_BLOCK_W, LIFE_BAND_ROWS, false,
-                                                      &pp, &px, &py);
-                p[rg][b] = t ? pp : 0;
-            }
+            for (int b = 0; b < LIFE_BLOCKS; ++b) p[rg][b] = surf_p[rg][b];
 
         bool taken[LIFE_MAX_BANDS][LIFE_BLOCKS];
         for (int rg = 0; rg < LIFE_MAX_BANDS; ++rg)
@@ -1708,6 +1719,21 @@ struct life_panel : panel_t {
                 set_led(x, sy + r, col);
             }
         }
+
+        /* Sample the large pads here, not in on_sequence. The generated MIDI
+           panel reads touch in on_ui, and passes the BOTTOM row with
+           from_bottom = true; both are copied rather than reasoned about,
+           because the previous version guessed at the y convention and read
+           touch from a hook with no UI frame context. */
+        for (int rg = 0; rg < nbands; ++rg)
+            for (int b = 0; b < LIFE_BLOCKS; ++b) {
+                int pp = 0;
+                bool t = get_pressure_and_pos_in_rect(b * LIFE_BLOCK_W,
+                                                      sy + rg * LIFE_BAND_ROWS + LIFE_BAND_ROWS - 1,
+                                                      LIFE_BLOCK_W, LIFE_BAND_ROWS, true,
+                                                      &pp, NULL, NULL);
+                surf_p[rg][b] = (int16_t)(t ? clamp_int(pp, 0, 32767) : 0);
+            }
 
         /* Read-only here: which pads to light. The touch reading and the notes
            themselves happen in on_sequence, see surface_sequence(). */
