@@ -294,6 +294,11 @@ labels at all.
 Voice editor, then `(0,15)`, opens the preset picker. Folders on the left, slots
 on the right, save and load at `(12,14)` and `(13,14)`.
 
+**Tapping a slot only previews it.** You hear it straight away, but the voice
+keeps its old sound until you press **LOAD**. Leave without loading, or switch
+to another voice, and the preview is discarded. Press **SAVE** to write the
+voice's current sound into the selected slot.
+
 On Chords and Drums the file grid sits on the printed pad circles and the two
 buttons land under the printed SAVE and LOAD. Transport stays live here, and `×`
 gets you out.

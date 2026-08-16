@@ -2760,11 +2760,9 @@ struct life_panel : panel_t {
         draw_voice_selector();
 
         bool done = preset_pages.picker.preset_save_button(preset, LIFE_SAVE_X, LIFE_FILE_BTN_Y);
-        if (done) printf("life: preset SAVE ch=%d\n", preset);
-        if (preset_pages.picker.preset_load_button(preset, LIFE_LOAD_BTN_X, LIFE_FILE_BTN_Y)) {
-            printf("life: preset LOAD ch=%d\n", preset);
+
+        if (preset_pages.picker.preset_load_button(preset, LIFE_LOAD_BTN_X, LIFE_FILE_BTN_Y))
             done = true;
-        }
         if (done) ui_mode = LIFE_UI_VOICE;
         draw_voice_nav(LIFE_UI_LOAD);
     }
@@ -3081,8 +3079,6 @@ struct life_panel : panel_t {
         int want_channel = (page == 0 && ui_mode == LIFE_UI_LOAD)
                                ? preset_for(edit_voice) : -1;
         if (want_channel != picker_channel) {
-            printf("life: picker %d -> %d (mode=%d page=%d voice=%d)\n",
-                   picker_channel, want_channel, ui_mode, page, edit_voice);
             if (picker_channel >= 0) preset_pages.picker.on_done();
             if (want_channel >= 0) preset_pages.picker.reset_which_slot_is_selected();
             picker_channel = want_channel;
@@ -3135,7 +3131,12 @@ struct life_panel : panel_t {
         /* The preset picker owns row 15 while it is up - see draw_preset_loader. */
         if (mode == LIFE_UI_LOAD) {
             draw_preset_loader();
-            set_help_text("V%d #fc2#*load preset#. - pick a slot, or cancel", edit_voice + 1);
+            /* Tapping a slot only PREVIEWS it. Say so, because nothing on the
+               grid does, and an uncommitted preview is discarded on the way
+               out - which reads as the panel losing your choice. */
+            set_help_text("V%d #fc2#*presets#. - tap a slot to hear it, then #fc2#*LOAD#. to "
+                          "keep it. Leaving without loading keeps the old sound.",
+                          edit_voice + 1);
             return;
         }
 
