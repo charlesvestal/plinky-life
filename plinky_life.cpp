@@ -2469,6 +2469,8 @@ struct life_panel : panel_t {
             if (!(play_down & bit)) continue;
             if (keep & bit) { play_miss[v] = 0; continue; }
             if (!force && play_miss[v] < 1) { ++play_miss[v]; keep |= bit; continue; }
+            printf("life: up     v=%d force=%d seen=%04x\n",
+                   v, force ? 1 : 0, (unsigned)keep);
             synth_note_up(v);
             play_miss[v] = 0;
         }
@@ -2500,15 +2502,18 @@ struct life_panel : panel_t {
            any reason strikes rather than sliding up from silence. */
         bool strike = finger_is_new || !(play_down & (1u << voice));
 
-        /* Instrumented because this has been misdiagnosed three times: finger
-           tracking, then the release path, then is_new. Each was a real fault
-           and none was the one being heard. Logs only on a strike, so a held
-           finger that never restrikes prints nothing at all - and a line per
-           strike while sliding is itself the answer. */
+        /* A device log showed exactly two strikes across twenty seconds of
+           sliding, both with isnew=1 and nothing sounding - two real presses.
+           So the strike path is not the source of the retriggering that is
+           audible, and the remaining candidates are a note_up landing mid-slide
+           or play_synth re-articulating when its note number moves. Both are
+           logged below. */
         if (strike)
-            printf("life: strike v=%d note=%d isnew=%d down=%04x miss=%d seen=%04x\n",
-                   voice, note, finger_is_new ? 1 : 0, (unsigned)play_down,
-                   (int)play_miss[voice], (unsigned)play_seen);
+            printf("life: strike v=%d note=%d isnew=%d down=%04x\n",
+                   voice, note, finger_is_new ? 1 : 0, (unsigned)play_down);
+        else if (play_note[voice] != (uint8_t)note)
+            printf("life: move   v=%d note=%d->%d pitch=%d\n",
+                   voice, (int)play_note[voice], note, (int)play_pitch_q8[voice]);
         if (strike) play_pitch_q8[voice] = (int16_t)target_q8;
         else {
             /* Asymptotic, with a floor so it always arrives: roughly a fifth of
