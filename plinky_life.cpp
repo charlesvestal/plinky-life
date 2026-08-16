@@ -2518,54 +2518,37 @@ struct life_panel : panel_t {
         if (voice < 0 || voice >= 16) return;
         play_seen |= (uint16_t)(1u << voice);
         bool strike = finger_is_new || !(play_down & (1u << voice));
+        bool note_changed = play_note[voice] != (uint8_t)note;
 
-        /* Mode 1 sends no parameter override at all, so the preset's own GLIDE
-           governs. Comparing it against mode 0, which forces GLIDE to maximum,
-           says whether the override reaches the engine and whether glide is the
-           thing that was missing all along. */
-        if (surf_mode == 1) {
-            if (strike)
-                printf("life: strike v=%d note=%d isnew=%d mode=1\n", voice, note, finger_is_new);
-            else if (play_note[voice] != (uint8_t)note)
-                printf("life: move   v=%d note=%d->%d mode=1\n", voice, (int)play_note[voice], note);
+        /* play_synth is a NOTE EVENT, not a per-frame update. This is the one
+           assumption never tested across eight attempts at the retriggering: the
+           surface called it every frame, so while a finger sat inside a single
+           pad it was re-issued perhaps a hundred times a second with a velocity
+           that wobbles as the finger crosses the physical pads underneath.
+
+           set_synth_velocity exists as a separate call, which is what a
+           continuous pressure update is meant to use. So play_synth is now only
+           called when a note actually starts or changes, and pressure goes
+           through set_synth_velocity in between. If the retriggering survives
+           this, it is not coming from this panel at all. */
+        if (strike || note_changed) {
+            synth_voice_note_t n;
+            n.note_q8 = note_q8;
+            n.param_override_value = (int16_t)(strike ? 0 : LIFE_SURFACE_GLIDE);
+            n.velocity = (uint8_t)clamp_int(velocity, 0, 127);
+            n.preset_idx = (int8_t)preset_for(edit_voice);
+            n.x_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
+            n.y_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
+            n.param_override_idx = (int8_t)VOICE_PARAM_GLIDE;
+
+            printf("life: %s v=%d note=%d->%d vel=%d\n", strike ? "STRIKE" : "move  ",
+                   voice, (int)play_note[voice], note, velocity);
             play_note[voice] = (uint8_t)note;
-            play_synth(voice, preset_for(edit_voice), velocity, note_q8, strike);
+            play_synth(voice, n, strike);
             return;
         }
 
-        /* Mode 2 uses the plain five-argument call the stock panel uses, with no
-           parameter override of any kind. */
-        if (surf_mode == 2) {
-            if (strike)
-                printf("life: strike v=%d note=%d isnew=%d mode=2\n", voice, note, finger_is_new);
-            else if (play_note[voice] != (uint8_t)note)
-                printf("life: move   v=%d note=%d->%d mode=2\n", voice, (int)play_note[voice], note);
-            play_note[voice] = (uint8_t)note;
-            play_synth(voice, preset_for(edit_voice), velocity, note_q8, strike);
-            return;
-        }
-
-        synth_voice_note_t n;
-        n.note_q8 = note_q8;
-        /* No glide on a fresh press - otherwise the note slides in from
-           wherever that voice happened to be left, which is the "always
-           gliding" sound. Glide is for a finger that travels. */
-        n.param_override_value = (int16_t)(strike ? 0 : LIFE_SURFACE_GLIDE);
-        n.velocity = (uint8_t)clamp_int(velocity, 0, 127);
-        n.preset_idx = (int8_t)preset_for(edit_voice);
-        n.x_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
-        n.y_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
-        n.param_override_idx = (int8_t)VOICE_PARAM_GLIDE;
-
-        if (strike)
-            printf("life: strike v=%d note=%d isnew=%d mode=%d\n", voice, note,
-                   finger_is_new ? 1 : 0, (int)surf_mode);
-        else if (play_note[voice] != (uint8_t)note)
-            printf("life: move   v=%d note=%d->%d mode=%d\n", voice, (int)play_note[voice],
-                   note, (int)surf_mode);
-
-        play_note[voice] = (uint8_t)note;
-        play_synth(voice, n, strike);
+        set_synth_velocity(voice, clamp_int(velocity, 0, 127));
     }
 
     /* The note a block plays.
