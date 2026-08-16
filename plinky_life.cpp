@@ -1202,6 +1202,10 @@ static const uint8_t life_port_values[5] = {
    cells are spent; they still simulate, they just cannot be seen or painted. */
 /* Play surface: bands of LIFE_BAND_ROWS rows, each holding LIFE_BLOCKS notes
    across the 16 columns. 4 bands x 4 notes = the world's 16 degrees exactly. */
+/* 0..127, the same units as a preset corner param. Enough travel to hear between
+   adjacent pads without smearing a fast run into one slur. */
+#define LIFE_SURFACE_GLIDE 36
+
 #define LIFE_BAND_ROWS 3
 #define LIFE_BLOCKS    4
 #define LIFE_BLOCK_W   (LIFE_W / LIFE_BLOCKS)
@@ -1333,9 +1337,7 @@ struct life_panel : panel_t {
        no release callback, so anything sounding that it did not name this frame
        is ours to stop. */
     uint16_t play_down;            /* surface voices currently sounding */
-    int16_t play_pitch_q8[16];     /* where each surface voice's pitch is now, q8 */
     uint8_t play_miss[16];         /* consecutive frames a sounding voice went unreported */
-    uint8_t play_rt_seen[16];      /* last observed get_synth_retrigger, to log edges only */
     uint16_t play_seen;            /* named by the callback this frame */
     uint8_t play_note[16];         /* so a slide to a new note retriggers */
     bool play_active;              /* were we on the surface last frame */
@@ -1471,7 +1473,7 @@ struct life_panel : panel_t {
         musical_state_seen = 0;
         scene_commit_wait = 0;
         play_down = 0;
-        for (int i = 0; i < 16; ++i) { play_pitch_q8[i] = 0; play_miss[i] = 0; play_rt_seen[i] = 0; }
+        for (int i = 0; i < 16; ++i) play_miss[i] = 0;
         play_seen = 0;
         play_active = false;
         picker_channel = -1;
@@ -2480,66 +2482,37 @@ struct life_panel : panel_t {
 
     /* A pad is one note, held steady across its whole face - four columns wide
        and three rows tall, so a finger moving inside it must not change pitch.
-       The glide happens BETWEEN pads: the target jumps, and the sounding pitch
-       slews to it over a few frames.
 
-       Interpolating continuously along the band was wrong in both directions at
-       once. It bent the note while you were still on one pad, and it never let
-       a note travel, because crossing into the next pad also restruck it. */
+       The glide between pads is the SYNTH's, not ours. Sliding the pitch here by
+       hand meant calling play_synth with a different note number on nearly every
+       frame of the crossing - a device log showed the note stepping 65, 65, 66,
+       66, 66 through a single one - and every one of those is a note change the
+       engine has to act on. One crossing became seven.
+
+       VOICE_PARAM_GLIDE overrides the preset's own glide, so the surface glides
+       whatever patch is loaded, and the note number now changes exactly once per
+       pad. */
     void play_surface_voice(int voice, int note, uint8_t velocity, bool finger_is_new) {
         if (voice < 0 || voice >= 16) return;
         play_seen |= (uint16_t)(1u << voice);
-
-        int target_q8 = note << 8;
-        /* The firmware already knows whether this is one touch travelling or a
-           fresh press: finger_t::is_new is set for the frame a finger is
-           allocated, and TRACK_FINGERS_ACROSS_STRINGS keeps a touch matched to
-           the same finger as it slides, using touch-origin metadata. That is the
-           signal to use. Deciding it here from "was this voice index sounding
-           last frame" only approximates it, and gets it wrong exactly when a
-           voice index is reused by a different finger.
-
-           Still ORed with our own check, so a voice that stopped sounding for
-           any reason strikes rather than sliding up from silence. */
         bool strike = finger_is_new || !(play_down & (1u << voice));
 
-        /* A device log showed exactly two strikes across twenty seconds of
-           sliding, both with isnew=1 and nothing sounding - two real presses.
-           So the strike path is not the source of the retriggering that is
-           audible, and the remaining candidates are a note_up landing mid-slide
-           or play_synth re-articulating when its note number moves. Both are
-           logged below. */
+        synth_voice_note_t n;
+        n.note_q8 = note << 8;
+        n.param_override_value = (int16_t)LIFE_SURFACE_GLIDE;
+        n.velocity = velocity;
+        n.preset_idx = (int8_t)preset_for(edit_voice);
+        n.x_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
+        n.y_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
+        n.param_override_idx = (int8_t)VOICE_PARAM_GLIDE;
+
         if (strike)
-            printf("life: strike v=%d note=%d isnew=%d down=%04x\n",
-                   voice, note, finger_is_new ? 1 : 0, (unsigned)play_down);
+            printf("life: strike v=%d note=%d isnew=%d\n", voice, note, finger_is_new ? 1 : 0);
         else if (play_note[voice] != (uint8_t)note)
-            printf("life: move   v=%d note=%d->%d pitch=%d vel=%d\n",
-                   voice, (int)play_note[voice], note, (int)play_pitch_q8[voice],
-                   (int)velocity);
-        if (strike) play_pitch_q8[voice] = (int16_t)target_q8;
-        else {
-            /* Asymptotic, with a floor so it always arrives: roughly a fifth of
-               the remaining distance per frame, which is a portamento you can
-               hear rather than a jump you cannot. */
-            int cur = play_pitch_q8[voice], d = target_q8 - cur;
-            int step = d / 5;
-            if (step == 0) step = (d > 0) ? 1 : ((d < 0) ? -1 : 0);
-            if ((d > 0 && step > d) || (d < 0 && step < d)) step = d;
-            play_pitch_q8[voice] = (int16_t)(cur + step);
-        }
+            printf("life: move   v=%d note=%d->%d\n", voice, (int)play_note[voice], note);
 
-        play_note[voice] = (uint8_t)clamp_int((play_pitch_q8[voice] + 128) >> 8, 0, 127);
-        play_synth(voice, preset_for(edit_voice), velocity, play_pitch_q8[voice], strike);
-
-        /* The synth reports whether it re-articulated. If this fires on a frame
-           we did not ask for a strike, the note is being restarted inside
-           play_synth - which is the only explanation left once strikes and
-           note-offs are ruled out. */
-        int rt = get_synth_retrigger(voice);
-        if (!strike && rt && !play_rt_seen[voice])
-            printf("life: SYNTH RETRIG v=%d note=%d pitch=%d vel=%d\n",
-                   voice, note, (int)play_pitch_q8[voice], (int)velocity);
-        play_rt_seen[voice] = (uint8_t)(rt ? 1 : 0);
+        play_note[voice] = (uint8_t)note;
+        play_synth(voice, n, strike);
     }
 
     /* The note a block plays.

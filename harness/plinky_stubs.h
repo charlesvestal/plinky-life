@@ -155,6 +155,17 @@ struct voice_allocator_t {
 void play_synth(int voice, int preset_idx, int velocity, int note_q8, bool retrigger);
 void synth_note_up(int voice);
 int get_synth_retrigger(int voice);
+#define SYNTH_VOICE_XY_OVERRIDE_NONE 255
+typedef struct synth_voice_note_t {
+    int note_q8;
+    int16_t param_override_value;
+    uint8_t velocity;
+    int8_t preset_idx;
+    uint8_t x_override;
+    uint8_t y_override;
+    int8_t param_override_idx;
+} synth_voice_note_t;
+void play_synth(int voice, const synth_voice_note_t &note, bool retrigger = false);
 void set_synth_velocity(int voice, int velocity);
 int get_synth_note(int voice);
 
