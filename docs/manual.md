@@ -174,13 +174,18 @@ does before committing to it.
 over the sequence while it runs. Notes sound and nothing else happens: the world
 is left alone, because the point is to perform over it rather than disturb it.
 
-Each row plays the note that row plays in the sequencer, so the pitch axis is
-the one you have been looking at on the world. Sliding sideways changes nothing;
-anywhere along a row is that row's note. The root of the scale is the brighter
-row, so you can find your way.
+The bottom row is the root of the scale and each row up is the next degree, so
+it reads like an instrument rather than like the world. Sliding sideways changes
+nothing; anywhere along a row is that row's note. Every root is a brighter row,
+so you can find your way.
 
 On Chords and Drums the surface sits on rows 2 to 13, so it lands on the printed
-pad circles.
+pad circles, which gives twelve degrees rather than the fifteen you get on a
+plain faceplate. Both start from the root.
+
+The surface follows the selected voice's `PTCH` offset, so it plays in that
+voice's register. That also moves the window: a voice pitched up four degrees
+has a surface that starts four degrees above the root.
 
 It is always in key. The scale and root come from the same place as everything
 else, so it follows `KEY` and `SCAL` without being told.
