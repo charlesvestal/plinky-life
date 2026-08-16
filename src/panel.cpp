@@ -173,7 +173,10 @@ static const uint8_t life_port_values[5] = {
    across the 16 columns. 4 bands x 4 notes = the world's 16 degrees exactly. */
 /* 0..127, the same units as a preset corner param. Enough travel to hear between
    adjacent pads without smearing a fast run into one slur. */
-#define LIFE_SURFACE_GLIDE 127
+/* 0..127, the same units as a preset corner param. Moderate on purpose: this was
+   briefly set to 127 while testing whether the override reached the engine, and
+   maximum glide on every note is not a setting, it is a leftover. */
+#define LIFE_SURFACE_GLIDE 40
 
 /* Three ways of driving a surface voice, switchable on the device, because four
    flashes have gone on hypotheses that were each wrong. Mode 0 is what this
@@ -1513,7 +1516,10 @@ struct life_panel : panel_t {
 
         synth_voice_note_t n;
         n.note_q8 = note_q8;
-        n.param_override_value = (int16_t)LIFE_SURFACE_GLIDE;
+        /* No glide on a fresh press - otherwise the note slides in from
+           wherever that voice happened to be left, which is the "always
+           gliding" sound. Glide is for a finger that travels. */
+        n.param_override_value = (int16_t)(strike ? 0 : LIFE_SURFACE_GLIDE);
         n.velocity = (uint8_t)clamp_int(velocity, 0, 127);
         n.preset_idx = (int8_t)preset_for(edit_voice);
         n.x_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
