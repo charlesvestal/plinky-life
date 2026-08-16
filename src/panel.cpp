@@ -255,6 +255,13 @@ static const life_param_row_t life_chance_rows[] = {
 #define LIFE_LOAD_X  0
 #define LIFE_SOUND_X 1
 #define LIFE_PLAY_X_PAD 3      /* opens the play surface for the selected voice */
+
+/* Chords prints SAVE and LOAD at (12,14) and (13,14), so the file pickers put
+   their commit buttons there. Row 14 is a printed control row on Chords and
+   Drums and free on a blank plate, so the same spot works everywhere. */
+#define LIFE_SAVE_X      12
+#define LIFE_LOAD_BTN_X  13
+#define LIFE_FILE_BTN_Y  14
 #define LIFE_SOUND_Y 15
 
 struct life_panel : panel_t {
@@ -280,7 +287,8 @@ struct life_panel : panel_t {
     voice_notes_t notes[LIFE_NUM_VOICES];
     voice_allocator_t allocator;
     preset_pages_t preset_pages;   /* the stock synth editor, hosted per voice */
-    panel_page_t panel_page;       /* the stock scene save/load picker, on page 1 */
+    file_picker_t scene_picker;    /* scenes, placed by us - see draw_scene_page */
+    int scene_commit_wait;         /* frames left to wait for a staged load to finish */
     play_surface_t play_surface;   /* play the selected voice over the running world */
     uint8_t string_roots[16];
 
@@ -416,6 +424,7 @@ struct life_panel : panel_t {
         cc_in_pending = 0;
         cc_out_primed = false;
         musical_state_seen = 0;
+        scene_commit_wait = 0;
         play_down = 0;
         play_seen = 0;
         play_active = false;
@@ -1641,14 +1650,61 @@ struct life_panel : panel_t {
        transport: the picker owns row 15 while it is up. That is the right call
        for a modal file dialog, and x still escapes because the picker leaves
        (13,15) alone. */
-    /* NOT offset on Chords or Drums, and it cannot be: saveload_action() puts
-       its cancel and OK at y + 15, so any y above 0 pushes them off the grid.
-       The stock pickers are built for a full 16-row surface, which means on a
-       printed plate they straddle the control rows whatever we do. The sound
-       page and the play surface are ours to lay out; these are not. */
+    /* Built from the picker's own pieces rather than saveload_action().
+
+       That wrapper hardcodes its cancel and OK to (14, y+15) and (15, y+15),
+       which is why it looked as though the picker could not be moved. It can:
+       preset_picker() takes its own y range and the save and load buttons are
+       placed separately. So on a printed plate the file grid sits on the pad
+       circles and the buttons land under the printed SAVE and LOAD at (12,14)
+       and (13,14).
+
+       It also frees the transport corner, so play and stop stay live here like
+       everywhere else. x cancels, as it does in every other mode. */
+    /* Scenes, placed the same way as the preset picker rather than through
+       panel_page_t::saveload(), for the same reason: that wrapper fixes its
+       buttons to the transport corner.
+
+       panel_load_button only STAGES a load. Finalising in the same frame races
+       the deserialise, so the documented shape is to poll is_panel_load_staged()
+       and finalise once it reports complete. */
+    void draw_scene_page(void) {
+        int grid_y = plate_is_printed() ? 2 : 0;
+        scene_picker.panel_picker(grid_y, grid_y + 8);
+
+        if (scene_picker.panel_save_button(LIFE_SAVE_X, LIFE_FILE_BTN_Y))
+            scroll_to_page(0);
+        if (scene_picker.panel_load_button(LIFE_LOAD_BTN_X, LIFE_FILE_BTN_Y))
+            scene_commit_wait = 250;      /* about a second of frames */
+    }
+
+    /* Returns true if the panel is about to be replaced, in which case the
+       caller must stop touching anything: an accepted request queues a swap of
+       this whole object. */
+    bool poll_staged_scene(void) {
+        if (scene_commit_wait <= 0) return false;
+        if (is_panel_load_staged()) {
+            scene_commit_wait = 0;
+            if (scene_picker.request_panel_load_finalise()) {
+                release_all_voices();
+                return true;
+            }
+        } else if (--scene_commit_wait == 0) {
+            printf("life: scene load never staged, commit abandoned\n");
+        }
+        return false;
+    }
+
     void draw_preset_loader(void) {
-        int r = preset_pages.saveload_action(preset_for(edit_voice), 0);
-        if (r != 0) ui_mode = LIFE_UI_VOICE;   /* loaded, saved, or cancelled */
+        int preset = preset_for(edit_voice);
+        int grid_y = plate_is_printed() ? 2 : 0;
+
+        preset_pages.picker.preset_picker(preset, grid_y, grid_y + 8);
+
+        bool done = preset_pages.picker.preset_save_button(preset, LIFE_SAVE_X, LIFE_FILE_BTN_Y);
+        if (preset_pages.picker.preset_load_button(preset, LIFE_LOAD_BTN_X, LIFE_FILE_BTN_Y))
+            done = true;
+        if (done) ui_mode = LIFE_UI_VOICE;
     }
 
     /* --- settings pages -------------------------------------------------
@@ -1924,6 +1980,8 @@ struct life_panel : panel_t {
     void on_ui(int delta_time_us) override {
         (void)delta_time_us;
 
+        if (poll_staged_scene()) return;
+
         log_plate_periodically();
         follow_musical_state();
         apply_pending_cc();
@@ -1946,9 +2004,8 @@ struct life_panel : panel_t {
             return;
         }
         if (page == 1) {
-            /* The stock whole-page helper draws itself at this offset. */
             leds_clear();
-            panel_page.saveload(16);
+            draw_scene_page();
             set_help_text("#fc2#*Scenes#. - save or load the world and every voice setting");
             return;
         }

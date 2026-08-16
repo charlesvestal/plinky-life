@@ -226,7 +226,21 @@ enum {
 
 struct slider_t { int _pad[8]; };
 struct xy_pad_t { int _pad[12]; };
-struct file_picker_t { int _pad[32]; };
+struct synth_preset_t;
+struct file_picker_t {
+    int _pad[32];
+    /* The pieces the wrappers are built from. These take their own coordinates,
+       which is how a picker gets placed on a printed faceplate. */
+    void preset_picker(int preset_idx, int y1, int y2, int flags = 0);
+    bool preset_save_button(int channel, int x, int y);
+    bool preset_load_button(int channel, int x, int y, int preset_idx_write_copies_mask = 0,
+                            const synth_preset_t **loaded_preset_out = nullptr);
+    void panel_picker(int y1, int y2, int flags = 0);
+    bool panel_save_button(int x, int y);
+    bool panel_load_button(int x, int y);
+    bool request_panel_load_finalise(void);
+};
+bool is_panel_load_staged(void);
 
 #define FLAG_PICKER_ENABLE_DELETE 1
 

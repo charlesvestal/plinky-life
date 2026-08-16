@@ -290,10 +290,11 @@ labels at all.
 ### Loading a preset
 
 Voice editor, then `(0,15)`, opens the preset picker. Folders on the left, slots
-on the right, cancel and OK at the bottom right.
+on the right, save and load at `(12,14)` and `(13,14)`.
 
-This is the one place transport is not available, because the picker needs those
-two pads for its own buttons. `×` still gets you out.
+On Chords and Drums the file grid sits on the printed pad circles and the two
+buttons land under the printed SAVE and LOAD. Transport stays live here, and `×`
+gets you out.
 
 ---
 
@@ -367,7 +368,8 @@ so the rest of the Plinky follows along.
 ## 7. Saving
 
 Press the right side button down from the world to reach the scene page. Folders
-on the left, slots on the right, cancel and OK bottom right.
+on the left, slots on the right, save and load at `(12,14)` and `(13,14)`, under
+the printed labels on Chords and Drums.
 
 A scene holds the world itself, every live cell, plus every voice's rate, pick,
 order, channel, pitch, length and mute, and the generation rate and respawn
