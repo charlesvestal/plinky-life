@@ -2760,8 +2760,11 @@ struct life_panel : panel_t {
         draw_voice_selector();
 
         bool done = preset_pages.picker.preset_save_button(preset, LIFE_SAVE_X, LIFE_FILE_BTN_Y);
-        if (preset_pages.picker.preset_load_button(preset, LIFE_LOAD_BTN_X, LIFE_FILE_BTN_Y))
+        if (done) printf("life: preset SAVE ch=%d\n", preset);
+        if (preset_pages.picker.preset_load_button(preset, LIFE_LOAD_BTN_X, LIFE_FILE_BTN_Y)) {
+            printf("life: preset LOAD ch=%d\n", preset);
             done = true;
+        }
         if (done) ui_mode = LIFE_UI_VOICE;
         draw_voice_nav(LIFE_UI_LOAD);
     }
@@ -3078,6 +3081,8 @@ struct life_panel : panel_t {
         int want_channel = (page == 0 && ui_mode == LIFE_UI_LOAD)
                                ? preset_for(edit_voice) : -1;
         if (want_channel != picker_channel) {
+            printf("life: picker %d -> %d (mode=%d page=%d voice=%d)\n",
+                   picker_channel, want_channel, ui_mode, page, edit_voice);
             if (picker_channel >= 0) preset_pages.picker.on_done();
             if (want_channel >= 0) preset_pages.picker.reset_which_slot_is_selected();
             picker_channel = want_channel;
