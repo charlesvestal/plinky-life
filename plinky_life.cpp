@@ -1401,9 +1401,13 @@ struct life_panel : panel_t {
     uint32_t musical_state_seen;   /* so we notice key or scale changed elsewhere */
     uint32_t plate_log_us;         /* when the front panel was last reported */
 
-    /* grid.cpp reads the front panel in a MEMBER INITIALISER, i.e. at
-       construction, not per frame. Whether that matters is exactly the question
-       here, so capture it both ways and log both. */
+    /* Read at CONSTRUCTION, in a member initialiser, which is what grid.cpp
+       does and the only place it works.
+
+       On a Chords unit get_frontpanel_code() returns the plate here and 0 from
+       on_ui later, while get_frontpanel_orientation() reports 1 throughout - so
+       the firmware knows a panel is mounted, but the code is only readable
+       early. Reading it per frame looked tidier and silently broke detection. */
     int plate_at_construct = get_frontpanel_code();
 
     /* Note input. on_midi records; on_ui paints, because touching the world is
@@ -2492,6 +2496,7 @@ struct life_panel : panel_t {
                                      scale_mask(), current_key);
         release_play_voices(play_seen);
 
+        draw_voice_selector();
         if (button(0, 15, LIFE_COL_ACTION, NOT_ISOLATED, "back to the voice editor"))
             ui_mode = LIFE_UI_VOICE;
     }
@@ -2563,15 +2568,7 @@ struct life_panel : panel_t {
         synth_xy_block(&preset_pages.the_xy_pad, preset, 8, 7, 7, 7,
                        WHITE, BLUE, false, 0, XY_BUTTONS_ON_LEFT);
 
-        /* Chords prints TREBLE, MID, BASS, MELODY across x6..x9 of row 1 - four
-           consecutive voice names, which is where four voice selectors belong.
-           Row 0 would have put voice 1 under "ALL", which on stock Chords means
-           every track and would have been the one pad on this page telling a
-           lie about itself. */
-        for (int v = 0; v < LIFE_NUM_VOICES; ++v)
-            if (button(6 + v, 1, v == edit_voice ? life_voice_bright[v] : life_voice_dim[v],
-                       NOT_ISOLATED, "edit this voice's sound"))
-                edit_voice = (uint8_t)v;
+        draw_voice_selector();
         if (button(0, 14, LIFE_COL_ACTION, NOT_ISOLATED, "back to the voice editor"))
             ui_mode = LIFE_UI_VOICE;
     }
@@ -2590,10 +2587,7 @@ struct life_panel : panel_t {
     bool plate_is_printed(void) const {
         if (pref_plate == LIFE_PLATE_CHORDS || pref_plate == LIFE_PLATE_DRUMS) return true;
         if (pref_plate == LIFE_PLATE_BLANK) return false;
-        /* Either reading will do: whichever of the two is non-zero is the one
-           that saw the straps. */
-        int code = get_frontpanel_code() | plate_at_construct;
-        return (code & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
+        return (plate_at_construct & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
     }
 
     const char *plate_layout_name(void) const {
@@ -2603,7 +2597,7 @@ struct life_panel : panel_t {
         case LIFE_PLATE_BLANK: return "standard";
         default: break;
         }
-        int code = get_frontpanel_code() | plate_at_construct;
+        int code = plate_at_construct;
         if (code & FRONT_PANEL_CODE_CHORDS) return "Chords";
         if (code & FRONT_PANEL_CODE_DRUMS) return "Drums";
         if (code & FRONT_PANEL_CODE_TOADSTEP) return "Toadstep";
@@ -2702,6 +2696,7 @@ struct life_panel : panel_t {
     void draw_scene_page(void) {
         int grid_y = plate_is_printed() ? 2 : 0;
         scene_picker.panel_picker(grid_y, grid_y + 8);
+        draw_voice_selector();
 
         if (scene_picker.panel_save_button(LIFE_SAVE_X, LIFE_FILE_BTN_Y))
             scroll_to_page(0);
@@ -2726,11 +2721,31 @@ struct life_panel : panel_t {
         return false;
     }
 
+    /* Four voice selectors at the top left, on printed plates only.
+
+       Chords row 0 reads ALL / TREBLE / BASS / MELODY and is a control strip
+       rather than playable pads, so the selector can live there permanently and
+       every page that acts on "the current voice" shows the same four pads in
+       the same place. A blank plate has no spare row - every pad there is world
+       - so it keeps the selector inside the voice editor instead. */
+    bool voice_selector_pad(int x, int y) const {
+        return plate_is_printed() && y == 0 && x < LIFE_NUM_VOICES;
+    }
+
+    void draw_voice_selector(void) {
+        if (!plate_is_printed()) return;
+        for (int v = 0; v < LIFE_NUM_VOICES; ++v)
+            if (button(v, 0, v == edit_voice ? life_voice_bright[v] : life_voice_dim[v],
+                       NOT_ISOLATED, "which voice the editors and the play surface act on"))
+                edit_voice = (uint8_t)v;
+    }
+
     void draw_preset_loader(void) {
         int preset = preset_for(edit_voice);
         int grid_y = plate_is_printed() ? 2 : 0;
 
         preset_pages.picker.preset_picker(preset, grid_y, grid_y + 8);
+        draw_voice_selector();
 
         bool done = preset_pages.picker.preset_save_button(preset, LIFE_SAVE_X, LIFE_FILE_BTN_Y);
         if (preset_pages.picker.preset_load_button(preset, LIFE_LOAD_BTN_X, LIFE_FILE_BTN_Y))
@@ -3030,6 +3045,7 @@ struct life_panel : panel_t {
 
         if (page < 0) {
             draw_settings(page);
+            draw_voice_selector();   /* the per-voice pages act on this */
             flush_settings();
             send_param_ccs();
             return;
@@ -3104,11 +3120,14 @@ struct life_panel : panel_t {
            The mode changes only each pad's colour and what a press does, which
            is why the voice editor lives inside this loop rather than drawing
            itself alongside it. */
+        if (mode == LIFE_UI_VOICE) draw_voice_selector();
+
         int touched_y = -1;
         for (int y = 0; y < LIFE_H; ++y) {
             for (int x = 0; x < LIFE_W; ++x) {
                 if (x == LIFE_MODIFIER_X && y == LIFE_MODIFIER_Y) continue;
                 if (is_transport_pad(x, y)) continue;   /* emitted once, above */
+                if (mode == LIFE_UI_VOICE && voice_selector_pad(x, y)) continue;
 
                 uint32_t col;
                 const char *help;
