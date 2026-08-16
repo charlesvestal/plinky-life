@@ -187,10 +187,10 @@ get the world plus four above it.
 Every root is a brighter block, and neighbouring blocks alternate in brightness
 so you can see where one ends and the next begins without losing any pads to a
 gap. A block is one note across its whole face, so moving inside one does not change
-the pitch. Keep one finger down and move it to another block, in any direction,
-and the note glides to the new pitch. Press a new finger and it strikes. This is
-the same distinction the instrument makes everywhere else, and it is the
-instrument deciding it, not the panel guessing.
+the pitch, however many of the small pads underneath you cross. Keep one finger
+down and move it to another block, in any direction, and the note glides to the
+new pitch. Press a new finger and it strikes. Pressure keeps working while you
+hold, so a note swells and fades under your finger.
 
 The surface follows the selected voice's `PTCH` offset, so it plays in that
 voice's register. That also moves the whole grid: a voice pitched up four degrees

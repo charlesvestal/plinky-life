@@ -1465,7 +1465,7 @@ struct life_panel : panel_t {
             uint16_t bit = (uint16_t)(1u << v);
             if (!(play_down & bit)) continue;
             if (keep & bit) { play_miss[v] = 0; continue; }
-            if (!force && play_miss[v] < 1) { ++play_miss[v]; keep |= bit; continue; }
+            if (!force && play_miss[v] < 3) { ++play_miss[v]; keep |= bit; continue; }
             printf("life: up     v=%d force=%d seen=%04x\n",
                    v, force ? 1 : 0, (unsigned)keep);
             synth_note_up(v);
@@ -1521,18 +1521,13 @@ struct life_panel : panel_t {
             return;
         }
 
-        /* Deliberately nothing. Between a strike and a note change this panel
-           now makes NO call of any kind for a held voice - not play_synth, not
-           set_synth_velocity, which was the last per-frame call left and was
-           itself added untested.
+        /* Pressure while held goes through set_synth_velocity, which is what it
+           is for: play_synth is a note event, this is the continuous control.
 
-           So if a held finger still retriggers on this build, and the log below
-           stays silent while it does, the sound is not coming from this panel's
-           note handling and no further change here can fix it.
-
-           The cost is pressure expression while held, which comes back once the
-           cause is known. */
-        (void)velocity;
+           It was removed for one build to prove that no per-frame call was
+           involved in the retriggering. It was not - the cause was treating the
+           firm-touch flag as pressure - so expression comes back. */
+        set_synth_velocity(voice, clamp_int(velocity, 0, 127));
     }
 
     /* The note a block plays.
@@ -1728,11 +1723,26 @@ struct life_panel : panel_t {
         for (int rg = 0; rg < nbands; ++rg)
             for (int b = 0; b < LIFE_BLOCKS; ++b) {
                 int pp = 0;
-                bool t = get_pressure_and_pos_in_rect(b * LIFE_BLOCK_W,
-                                                      sy + rg * LIFE_BAND_ROWS + LIFE_BAND_ROWS - 1,
-                                                      LIFE_BLOCK_W, LIFE_BAND_ROWS, true,
-                                                      &pp, NULL, NULL);
-                surf_p[rg][b] = (int16_t)(t ? clamp_int(pp, 0, 32767) : 0);
+                /* The return value is deliberately ignored. It reports whether
+                   anything in the rectangle is FIRMLY touched, which is right
+                   for the CC button this call was copied from - an unfirm knob
+                   reads zero - and wrong for a note: a finger dipping below firm
+                   for one frame took a note-off and a fresh strike. The device
+                   log showed exactly that, the same pad restriking at the same
+                   note with velocity climbing 20, 27, 45, 63. The total pressure
+                   is filled in either way, so use it and apply our own
+                   thresholds. */
+                (void)get_pressure_and_pos_in_rect(b * LIFE_BLOCK_W,
+                                                   sy + rg * LIFE_BAND_ROWS + LIFE_BAND_ROWS - 1,
+                                                   LIFE_BLOCK_W, LIFE_BAND_ROWS, true,
+                                                   &pp, NULL, NULL);
+                pp = clamp_int(pp, 0, 32767);
+
+                /* Fast attack, slow release. A touch must be able to start a
+                   note the instant it lands, but a one-frame dropout while a
+                   finger travels must not end one. */
+                int cur = surf_p[rg][b];
+                surf_p[rg][b] = (int16_t)((pp >= cur) ? pp : (cur + ((pp - cur) >> 2)));
             }
 
         /* Read-only here: which pads to light. The touch reading and the notes
