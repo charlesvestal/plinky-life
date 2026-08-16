@@ -186,9 +186,9 @@ get the world plus four above it.
 
 Every root is a brighter block, and neighbouring blocks alternate in brightness
 so you can see where one ends and the next begins without losing any pads to a
-gap. Sliding within a block bends the note rather than restriking it, and moving
-across a band bends through the notes between, staying in the scale. Moving up or
-down to another band strikes a new note.
+gap. A block is one note across its whole face, so moving inside one does not change
+the pitch. Move to another block, in any direction, and the note glides to the
+new pitch instead of restriking. It only strikes again when you lift and press.
 
 The surface follows the selected voice's `PTCH` offset, so it plays in that
 voice's register. That also moves the whole grid: a voice pitched up four degrees

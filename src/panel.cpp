@@ -302,7 +302,8 @@ struct life_panel : panel_t {
        no release callback, so anything sounding that it did not name this frame
        is ours to stop. */
     uint16_t play_down;            /* surface voices currently sounding */
-    uint8_t play_band[16];         /* which band each surface voice was struck on */
+    int16_t play_pitch_q8[16];     /* where each surface voice's pitch is now, q8 */
+    uint8_t play_miss[16];         /* consecutive frames a sounding voice went unreported */
     uint16_t play_seen;            /* named by the callback this frame */
     uint8_t play_note[16];         /* so a slide to a new note retriggers */
     bool play_active;              /* were we on the surface last frame */
@@ -438,7 +439,7 @@ struct life_panel : panel_t {
         musical_state_seen = 0;
         scene_commit_wait = 0;
         play_down = 0;
-        for (int i = 0; i < 16; ++i) play_band[i] = 0xff;
+        for (int i = 0; i < 16; ++i) { play_pitch_q8[i] = 0; play_miss[i] = 0; }
         play_seen = 0;
         play_active = false;
         picker_channel = -1;
@@ -1420,25 +1421,57 @@ struct life_panel : panel_t {
        It is always in key: the scale and root come from the instrument's
        globals, so it follows KEY and SCAL like everything else. */
 
-    /* Stop any surface voice that is no longer being played. */
-    void release_play_voices(uint16_t keep) {
-        uint16_t gone = (uint16_t)(play_down & ~keep);
-        for (int v = 0; v < 16; ++v)
-            if (gone & (1u << v)) synth_note_up(v);
+    /* Stop any surface voice that is no longer being played.
+
+       A frame of tolerance first. A finger moving across the surface can go
+       unreported for a single frame - pressure dips as it travels between pads,
+       or the peak finder loses it for an instant - and releasing on that dropout
+       restrikes the note the moment it comes back. That is a retrigger the
+       player never asked for and cannot see a reason for, because the finger
+       visibly never left the surface.
+
+       `force` skips the tolerance for the case where the surface is genuinely
+       gone, such as leaving the page. */
+    void release_play_voices(uint16_t keep, bool force = false) {
+        for (int v = 0; v < 16; ++v) {
+            uint16_t bit = (uint16_t)(1u << v);
+            if (!(play_down & bit)) continue;
+            if (keep & bit) { play_miss[v] = 0; continue; }
+            if (!force && play_miss[v] < 1) { ++play_miss[v]; keep |= bit; continue; }
+            synth_note_up(v);
+            play_miss[v] = 0;
+        }
         play_down = keep;
     }
 
-    /* Strike when the finger is new or has crossed to another band; otherwise
-       hold the note and move its pitch. Restriking on every block boundary is
-       what "no glide" felt like - four separate notes across a band instead of
-       one that travels. */
-    void play_surface_voice(int voice, int band, int pitch_q8, uint8_t velocity) {
+    /* A pad is one note, held steady across its whole face - four columns wide
+       and three rows tall, so a finger moving inside it must not change pitch.
+       The glide happens BETWEEN pads: the target jumps, and the sounding pitch
+       slews to it over a few frames.
+
+       Interpolating continuously along the band was wrong in both directions at
+       once. It bent the note while you were still on one pad, and it never let
+       a note travel, because crossing into the next pad also restruck it. */
+    void play_surface_voice(int voice, int note, uint8_t velocity) {
         if (voice < 0 || voice >= 16) return;
         play_seen |= (uint16_t)(1u << voice);
-        bool retrigger = !(play_down & (1u << voice)) || play_band[voice] != (uint8_t)band;
-        play_band[voice] = (uint8_t)band;
-        play_note[voice] = (uint8_t)clamp_int((pitch_q8 + 128) >> 8, 0, 127);
-        play_synth(voice, preset_for(edit_voice), velocity, pitch_q8, retrigger);
+
+        int target_q8 = note << 8;
+        bool strike = !(play_down & (1u << voice));
+        if (strike) play_pitch_q8[voice] = (int16_t)target_q8;
+        else {
+            /* Asymptotic, with a floor so it always arrives: roughly a fifth of
+               the remaining distance per frame, which is a portamento you can
+               hear rather than a jump you cannot. */
+            int cur = play_pitch_q8[voice], d = target_q8 - cur;
+            int step = d / 5;
+            if (step == 0) step = (d > 0) ? 1 : ((d < 0) ? -1 : 0);
+            if ((d > 0 && step > d) || (d < 0 && step < d)) step = d;
+            play_pitch_q8[voice] = (int16_t)(cur + step);
+        }
+
+        play_note[voice] = (uint8_t)clamp_int((play_pitch_q8[voice] + 128) >> 8, 0, 127);
+        play_synth(voice, preset_for(edit_voice), velocity, play_pitch_q8[voice], strike);
     }
 
     /* The note a block plays.
@@ -1460,23 +1493,6 @@ struct life_panel : panel_t {
     int surface_note(int band, int block) const {
         int degree = band * LIFE_BLOCKS + block + (int)v_pitch[edit_voice];
         return life_degree_to_note(degree, root_note(), scale_mask());
-    }
-
-    /* The same mapping, but continuous: degree_q8 has 8 fractional bits, and the
-       pitch between two degrees is interpolated. play_synth takes q8 pitch, so
-       a finger moving along a band bends rather than stepping - which is what
-       the instrument does everywhere else, and what the blocks were missing.
-
-       Interpolating between the two notes rather than in semitones keeps it in
-       key: a fifth apart in a pentatonic glides across the fifth, not through
-       the notes the scale leaves out. */
-    int surface_pitch_q8(int band, int pos_q8) const {
-        int degree_q8 = ((band * LIFE_BLOCKS + (int)v_pitch[edit_voice]) << 8)
-                      + pos_q8 / LIFE_BLOCK_W;
-        int d = degree_q8 >> 8, frac = degree_q8 & 255;
-        int n0 = life_degree_to_note(d, root_note(), scale_mask());
-        int n1 = life_degree_to_note(d + 1, root_note(), scale_mask());
-        return (n0 << 8) + (n1 - n0) * frac;
     }
 
     int surface_rows(void) const { return plate_is_printed() ? 12 : 15; }
@@ -1542,7 +1558,7 @@ struct life_panel : panel_t {
             int block = (pos_q8 >> 8) / LIFE_BLOCK_W;
             int band = nbands - 1 - (f.string_idx / LIFE_BAND_ROWS);
 
-            int pitch_q8 = surface_pitch_q8(band, pos_q8);
+            int note = surface_note(band, block);
             int velocity = touch_pressure_curve_q7(f.pressure);
             velocity = clamp_int(velocity, 1, 127);
 
@@ -1553,7 +1569,7 @@ struct life_panel : panel_t {
                 for (int xx = block * LIFE_BLOCK_W; xx < (block + 1) * LIFE_BLOCK_W; ++xx)
                     set_led(xx, sy + r0 + rr, LIFE_COL_TRIGGER);
 
-            play_surface_voice(v, band, pitch_q8, (uint8_t)velocity);
+            play_surface_voice(v, note, (uint8_t)velocity);
         }
         release_play_voices(play_seen);
 
@@ -2134,7 +2150,7 @@ struct life_panel : panel_t {
            being drawn. Checked before the page dispatch so it also covers
            paging away to the settings or scene pages. */
         bool on_surface = (page == 0 && ui_mode == LIFE_UI_PLAY);
-        if (play_active && !on_surface) release_play_voices(0);
+        if (play_active && !on_surface) release_play_voices(0, true);
         play_active = on_surface;
 
         /* "call this when you close the file picker" - and we can leave one by
