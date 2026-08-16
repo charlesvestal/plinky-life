@@ -2483,12 +2483,22 @@ struct life_panel : panel_t {
        Interpolating continuously along the band was wrong in both directions at
        once. It bent the note while you were still on one pad, and it never let
        a note travel, because crossing into the next pad also restruck it. */
-    void play_surface_voice(int voice, int note, uint8_t velocity) {
+    void play_surface_voice(int voice, int note, uint8_t velocity, bool finger_is_new) {
         if (voice < 0 || voice >= 16) return;
         play_seen |= (uint16_t)(1u << voice);
 
         int target_q8 = note << 8;
-        bool strike = !(play_down & (1u << voice));
+        /* The firmware already knows whether this is one touch travelling or a
+           fresh press: finger_t::is_new is set for the frame a finger is
+           allocated, and TRACK_FINGERS_ACROSS_STRINGS keeps a touch matched to
+           the same finger as it slides, using touch-origin metadata. That is the
+           signal to use. Deciding it here from "was this voice index sounding
+           last frame" only approximates it, and gets it wrong exactly when a
+           voice index is reused by a different finger.
+
+           Still ORed with our own check, so a voice that stopped sounding for
+           any reason strikes rather than sliding up from silence. */
+        bool strike = finger_is_new || !(play_down & (1u << voice));
         if (strike) play_pitch_q8[voice] = (int16_t)target_q8;
         else {
             /* Asymptotic, with a floor so it always arrives: roughly a fifth of
@@ -2600,7 +2610,7 @@ struct life_panel : panel_t {
                 for (int xx = block * LIFE_BLOCK_W; xx < (block + 1) * LIFE_BLOCK_W; ++xx)
                     set_led(xx, sy + r0 + rr, LIFE_COL_TRIGGER);
 
-            play_surface_voice(v, note, (uint8_t)velocity);
+            play_surface_voice(v, note, (uint8_t)velocity, f.is_new != 0);
         }
         release_play_voices(play_seen);
 
