@@ -370,7 +370,15 @@ struct life : panel_t {
        on_ui later, while get_frontpanel_orientation() reports 1 throughout - so
        the firmware knows a panel is mounted, but the code is only readable
        early. Reading it per frame looked tidier and silently broke detection. */
-    int plate_at_construct = get_frontpanel_code();
+    /* The last non-zero frontpanel code seen, seeded at construction.
+
+       Reading it once at construction is not enough. A scene load constructs a
+       NEW panel instance with placement-new at load time rather than at boot,
+       so that instance reads the code whenever the load happens - and if it
+       reads 0 then, the reloaded panel comes up in the blank-plate layout with
+       its pages two rows out of place. Latching the last non-zero reading is
+       true whether the code is readable early, late, or only sometimes. */
+    int plate_code = get_frontpanel_code();
 
     /* Note input. on_midi records; on_ui paints, because touching the world is
        exactly what the sequence lock exists to protect. */
@@ -1615,11 +1623,11 @@ struct life : panel_t {
        the code from on_ui rather than at construction, so the setting existed to
        work around a bug of ours and was removed once the bug was. */
     bool plate_is_printed(void) const {
-        return (plate_at_construct & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
+        return (plate_code & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
     }
 
     const char *plate_layout_name(void) const {
-        int code = plate_at_construct;
+        int code = plate_code;
         if (code & FRONT_PANEL_CODE_CHORDS) return "Chords";
         if (code & FRONT_PANEL_CODE_DRUMS) return "Drums";
         if (code & FRONT_PANEL_CODE_TOADSTEP) return "Toadstep";
@@ -2015,6 +2023,9 @@ struct life : panel_t {
 
     void on_ui(int delta_time_us) override {
         (void)delta_time_us;
+
+        /* Keep the latch fed. Zero means "no answer right now", not "no plate". */
+        { int c = get_frontpanel_code(); if (c) plate_code = c; }
 
 
         follow_musical_state();
