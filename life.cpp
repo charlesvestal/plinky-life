@@ -6,6 +6,7 @@
 @Tags: sequencer, generative, midi, cellular automata, game of life
 @Preferred Panels: blocks, chords, drums
 @Category: Sequencer
+@Artwork: artwork.png
 @Documentation: https://github.com/charlesvestal/plinky-life/blob/main/docs/manual.md
 @Discussion: https://github.com/charlesvestal/plinky-life
 @Description: A Game of Life sequencer. Four voices walk an evolving 16x16 world and play what they find alive.
