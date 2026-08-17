@@ -1,7 +1,7 @@
 /* plinky-life - minimal stand-ins for the Plinky panel API.
 
    This is NOT the SDK and it is NOT authoritative. It exists so the generated
-   plinky_life.cpp can be compiled locally and type-checked: wrong argument
+   life.cpp can be compiled locally and type-checked: wrong argument
    counts, misspelled members, bad types and dead code get caught here instead
    of in a flash-and-see cycle on the device.
 

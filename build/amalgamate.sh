@@ -5,11 +5,11 @@
 # ahead of panel.cpp. The metadata block comment must be the FIRST thing in the
 # file, so it is lifted off panel.cpp and re-emitted at the top.
 #
-# Output: plinky_life.cpp
+# Output: life.cpp
 set -e
 cd "$(dirname "$0")/.."
 
-OUT=plinky_life.cpp
+OUT=life.cpp
 HEADERS="src/life.h src/selection.h src/traversal.h src/scales.h src/voice.h src/ccmap.h src/chance.h"
 
 # 1. the metadata block comment, which must lead the file

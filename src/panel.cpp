@@ -30,7 +30,7 @@ clear, respawn and transport. Everything else lives on the settings pages.
 
    The pure logic lives in the src/ headers and is desktop-tested by harness/tests.c.
    `sh build/amalgamate.sh` splices those headers in ahead of this file to
-   produce the single plinky_life.cpp that gets flashed.
+   produce the single life.cpp that gets flashed.
    ------------------------------------------------------------------------- */
 
 #define PANEL_PAD_COLOR WHITE
@@ -272,7 +272,9 @@ static const life_param_row_t life_chance_rows[] = {
 #define LIFE_FILE_BTN_Y  14
 #define LIFE_SOUND_Y 15
 
-struct life_panel : panel_t {
+/* The struct name is what the instrument shows: "life_panel" displayed as
+   "LIFE PANEL". Just "life" gives "LIFE". */
+struct life : panel_t {
     /* --- world --- */
     life_world_t world;
     life_world_t scratch;
@@ -1533,7 +1535,7 @@ struct life_panel : panel_t {
                                      life_voice_dim[edit_voice],
                                      life_voice_bright[edit_voice],
                                      root_note(), 1 /* degree per string */,
-                                     &life_panel::surface_note_cb, this,
+                                     &life::surface_note_cb, this,
                                      VERTICAL | SHOW_BACKGROUND | STRINGOPHONIC_MONO,
                                      scale_mask(), current_key % 12);
 
@@ -1548,7 +1550,7 @@ struct life_panel : panel_t {
        answer to "is this one touch travelling or a fresh press". */
     static void surface_note_cb(void *user, int voice, int note, uint8_t velocity,
                                 finger_t finger) {
-        life_panel *self = (life_panel *)user;
+        life *self = (life *)user;
         if (voice < 0 || voice >= 16) return;
         self->play_seen |= (uint16_t)(1u << voice);
 

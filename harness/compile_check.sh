@@ -18,7 +18,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 {
     echo '#include "plinky_stubs.h"'
-    cat plinky_life.cpp
+    cat life.cpp
 } > "$TMP/check.cpp"
 
 # -Wno-unused-function: life.h exposes helpers the panel does not use but the

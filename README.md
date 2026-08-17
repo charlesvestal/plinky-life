@@ -13,7 +13,7 @@ independent voices walk through it at their own speeds, playing whatever they fi
 
 ## The panel
 
-**[`plinky_life.cpp`](https://raw.githubusercontent.com/charlesvestal/plinky-life/main/plinky_life.cpp)** — load this into the Plinky IDE.
+**[`life.cpp`](https://raw.githubusercontent.com/charlesvestal/plinky-life/main/life.cpp)** — load this into the Plinky IDE.
 
 ## Building
 
@@ -21,13 +21,13 @@ independent voices walk through it at their own speeds, playing whatever they fi
 sh tests.sh                  # everything checkable without hardware
 sh harness/build.sh          # desktop tests for the pure logic
 sh harness/compile_check.sh  # amalgamate, then type-check against stubbed headers
-sh build/amalgamate.sh       # just produce plinky_life.cpp
+sh build/amalgamate.sh       # just produce life.cpp
 python3 docs/make_maps.py    # regenerate the manual's pad maps
 ```
 
 `src/panel.cpp` does not compile on its own — panel code can't use `#include`, and it only
 type-checks once the IDE injects the SDK headers. `amalgamate.sh` splices the pure headers in
-ahead of it to produce the single `plinky_life.cpp` that gets flashed.
+ahead of it to produce the single `life.cpp` that gets flashed.
 
 `harness/plinky_stubs.h` is a transcription of the published API, not the SDK. It exists so the
 generated file can be type-checked locally instead of flash-and-see. **If it and the real
@@ -47,7 +47,7 @@ src/chance.h      conditional triggers derived from the world
 src/panel.cpp     clocks, output, drawing, touch, settings pages
 
 harness/          desktop tests + stubbed headers for the compile check
-build/            amalgamation into plinky_life.cpp
+build/            amalgamation into life.cpp
 docs/             manual, generated pad maps, design spec
 ```
 
