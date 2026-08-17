@@ -188,6 +188,15 @@ struct play_surface_t {
                          int scale = 0, int scale_root = -1,
                          scale_play_surface_brightness_fn brightness = nullptr,
                          void *brightness_user = nullptr, int highlight_pitch_class = -1);
+    /* Second overload: fills the string roots for you from a starting pitch and
+       a per-string interval in scale degrees. */
+    void do_play_surface(int x, int y, int w, int h, int max_voices, uint32_t bg_col,
+                         uint32_t root_col, int starting_pitch, int interval_degrees,
+                         play_surface_note_fn note_fn, void *note_user = nullptr,
+                         int flags = VERTICAL | SHOW_BACKGROUND | STRINGOPHONIC_MONO,
+                         int scale = 0, int scale_root = -1,
+                         scale_play_surface_brightness_fn brightness = nullptr,
+                         void *brightness_user = nullptr, int highlight_pitch_class = -1);
 };
 
 /* --- synth voices -------------------------------------------------------- */

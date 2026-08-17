@@ -174,27 +174,14 @@ does before committing to it.
 over the sequence while it runs. Notes sound and nothing else happens: the world
 is left alone, because the point is to perform over it rather than disturb it.
 
-The surface is a grid of note blocks. Each block is four columns wide and three
-rows tall, four of them side by side in a band, and the band above carries on
-where the one below ended. Bottom left is the root of the scale and it counts up
-and to the right, like reading a page from the bottom.
+The surface is Plinky's own. Each of the sixteen columns is a string and pitch
+runs up it, one scale degree per pad, with each string a degree above the one to
+its left. It is the same span as the instrument's own play surface, and it plays
+the way you already know: press for a note, slide along a string to bend, press
+harder for more.
 
-That is how all sixteen of the world's rows fit on a faceplate that only leaves
-twelve. One note per row cannot do it at any spacing, because twelve rows hold
-twelve notes. On a plain faceplate there are five bands and twenty notes, so you
-get the world plus four above it.
-
-Every root is a brighter block, and neighbouring blocks alternate in brightness
-so you can see where one ends and the next begins without losing any pads to a
-gap. A block is one note across its whole face, so moving inside one does not change
-the pitch, however many of the small pads underneath you cross. Keep one finger
-down and move it to another block, in any direction, and the note glides to the
-new pitch. Press a new finger and it strikes. Pressure keeps working while you
-hold, so a note swells and fades under your finger.
-
-The surface follows the selected voice's `PTCH` offset, so it plays in that
-voice's register. That also moves the whole grid: a voice pitched up four degrees
-starts a band higher.
+On Chords and Drums it sits on rows 2 to 13, so it lands on the printed pad
+circles. On a plain faceplate it takes rows 0 to 14.
 
 It is always in key. The scale and root come from the same place as everything
 else, so it follows `KEY` and `SCAL` without being told.

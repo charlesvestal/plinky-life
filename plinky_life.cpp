@@ -1235,38 +1235,14 @@ static const uint8_t life_port_values[5] = {
    the modifier on (15,15), which is the pad Plinky users reach for to start
    playback - so the panel answered "how do I play this?" with a menu. Three
    cells are spent; they still simulate, they just cannot be seen or painted. */
-/* Play surface: bands of LIFE_BAND_ROWS rows, each holding LIFE_BLOCKS notes
-   across the 16 columns. 4 bands x 4 notes = the world's 16 degrees exactly. */
-/* 0..127, the same units as a preset corner param. Enough travel to hear between
-   adjacent pads without smearing a fast run into one slur. */
-/* 0..127, the same units as a preset corner param. Moderate on purpose: this was
-   briefly set to 127 while testing whether the override reached the engine, and
-   maximum glide on every note is not a setting, it is a leftover. */
-#define LIFE_SURFACE_GLIDE 40
 
-/* Three ways of driving a surface voice, switchable on the device, because four
-   flashes have gone on hypotheses that were each wrong. Mode 0 is what this
-   panel does now. Mode 2 is what the stock panel does, copied as closely as the
-   pad layout allows - its surface demonstrably does not retrigger while a finger
-   travels, so if 2 is clean the fault is in what 0 does differently, and if 2
-   also retriggers the fault is in the pad geometry or the flags. */
-#define LIFE_SURF_MODES 3
 
-/* page 0 is at logical y 0, page 1 at y 16 */
 /* How many missed divider edges one frame may catch up on. Bounded so a seek or
    a stall cannot burn hundreds of steps inside an interrupt. */
 #define LIFE_MAX_CATCHUP 4
 
-/* How far pressure must move before the voice is told. Pressure jitters by a
-   few counts every frame; without this the surface issued hundreds of velocity
-   updates a second to a voice that had not changed. */
-
+/* page 0 is at logical y 0, page 1 at y 16 */
 #define LIFE_PAGE1_Y 16
-
-#define LIFE_MAX_BANDS 5
-#define LIFE_BAND_ROWS 3
-#define LIFE_BLOCKS    4
-#define LIFE_BLOCK_W   (LIFE_W / LIFE_BLOCKS)
 
 #define LIFE_MODIFIER_X 13
 #define LIFE_MODIFIER_Y 15
@@ -1397,13 +1373,8 @@ struct life_panel : panel_t {
        no release callback, so anything sounding that it did not name this frame
        is ours to stop. */
     uint16_t play_down;            /* surface voices currently sounding */
-    uint8_t surf_mode;             /* 0 = unified touch, 1 = the old play_surface path */
-    uint8_t voice_band[LIFE_PLAY_VOICES];    /* for lighting the pad being held */
-    uint8_t voice_block[LIFE_PLAY_VOICES];
-    uint16_t dbg_strikes, dbg_moves, dbg_vel;   /* counted on the sequence thread */
+    uint16_t dbg_strikes, dbg_moves;   /* counted in the surface callback */
     uint32_t dbg_last_us;                       /* reported from on_ui, never printf in an IRQ */
-    int32_t surf_tot[LIFE_MAX_BANDS][LIFE_BLOCKS];  /* smoothed pressure total, sequence thread only */
-    int32_t surf_cnt[LIFE_MAX_BANDS][LIFE_BLOCKS];  /* smoothed contact count, in sixteenths */
     uint8_t play_miss[16];         /* consecutive frames a sounding voice went unreported */
     uint16_t play_seen;            /* named by the callback this frame */
     uint8_t play_note[16];         /* so a slide to a new note retriggers */
@@ -1542,14 +1513,8 @@ struct life_panel : panel_t {
         scene_commit_failed = false;
         gen_div_edge_this_frame = false;
         play_down = 0;
-        surf_mode = 0;
-        for (int i = 0; i < LIFE_PLAY_VOICES; ++i) {
-            voice_band[i] = 0; voice_block[i] = 0;
-        }
         for (int i = 0; i < 16; ++i) play_miss[i] = 0;
-        for (int rg = 0; rg < LIFE_MAX_BANDS; ++rg)
-            for (int b = 0; b < LIFE_BLOCKS; ++b) { surf_tot[rg][b] = 0; surf_cnt[rg][b] = 0; }
-        dbg_strikes = dbg_moves = dbg_vel = 0;
+        dbg_strikes = dbg_moves = 0;
         dbg_last_us = 0;
         play_seen = 0;
         play_active = false;
@@ -2553,14 +2518,13 @@ struct life_panel : panel_t {
     void set_voice_help_text(void) {
         int v = edit_voice;
         if (voice_page) {
-            set_help_text("#fc2#*Voice %d behaviour#. - skip %d%%, ratchet %d%%, tie %d%%, "
-                          "every %d crossing%s, ch %d", v + 1, v_prob[v], v_ratchet[v],
+            set_help_text("#fc2#*V%d#. skip %d ratch %d tie %d every %d%s", v + 1, v_prob[v], v_ratchet[v],
                           v_tie[v], chance_pass_divisor(v_cond[v]),
                           chance_pass_divisor(v_cond[v]) == 1 ? "" : "s",
                           (v_channel[v] >= 1 && v_channel[v] <= 16) ? v_channel[v] : v + 1);
             return;
         }
-        set_help_text("#fc2#*Voice %d#. every %s, %s going %s. pitch %+d, len %d%%, accent %d%%",
+        set_help_text("#fc2#*V%d#. %s %s %s pitch %+d len %d%% acc %d%%",
                       v + 1, life_rate_names[v_rate[v]], life_sel_help[v_rule[v]],
                       life_trav_names[v_order[v]], (int)v_pitch[v], (int)v_length[v],
                       (int)v_accent[v]);
@@ -2604,240 +2568,64 @@ struct life_panel : panel_t {
         play_down = keep;
     }
 
-    /* A pad is one note, held steady across its whole face - four columns wide
-       and three rows tall, so a finger moving inside it must not change pitch.
-
-       The glide between pads is the SYNTH's, not ours. Sliding the pitch here by
-       hand meant calling play_synth with a different note number on nearly every
-       frame of the crossing - a device log showed the note stepping 65, 65, 66,
-       66, 66 through a single one - and every one of those is a note change the
-       engine has to act on. One crossing became seven.
-
-       VOICE_PARAM_GLIDE overrides the preset's own glide, so the surface glides
-       whatever patch is loaded, and the note number now changes exactly once per
-       pad. */
-    void play_surface_voice(int voice, int note, int note_q8, int velocity, bool finger_is_new) {
-        if (voice < 0 || voice >= 16) return;
-        play_seen |= (uint16_t)(1u << voice);
-
-        /* Called every frame with retrigger = is_new, which is what the stock
-           surface does. Pressure rides in on the same call, so there is no
-           separate set_synth_velocity: removing that call was the one build
-           that stopped the retriggering, and restoring it brought them back. */
-        bool strike = finger_is_new || !(play_down & (1u << voice));
-        if (strike) ++dbg_strikes;
-        else if (play_note[voice] != (uint8_t)note) ++dbg_moves;
-
-        synth_voice_note_t n;
-        n.note_q8 = note_q8;
-        n.param_override_value = (int16_t)(strike ? 0 : LIFE_SURFACE_GLIDE);
-        n.velocity = (uint8_t)clamp_int(velocity, 0, 127);
-        n.preset_idx = (int8_t)preset_for(edit_voice);
-        n.x_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
-        n.y_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
-        n.param_override_idx = (int8_t)VOICE_PARAM_GLIDE;
-
-        play_note[voice] = (uint8_t)note;
-        play_synth(voice, n, strike);
-    }
-
-    /* The note a block plays.
-
-       The surface is a grid of note blocks, not a mirror of the world. Each
-       band is LIFE_BAND_ROWS rows tall and holds LIFE_BLOCKS notes side by
-       side; the next band up carries on where the last one ended. So the whole
-       16-degree world fits on the 12 rows a printed faceplate leaves, which one
-       note per row cannot do at any offset - twelve rows hold twelve notes.
-
-       The offset between bands is therefore LIFE_BLOCKS degrees, which is a
-       fifth in a seven-note scale and a minor seventh in a pentatonic. It is
-       not chosen for its name: it is what makes the bands join up without gaps
-       or repeats. Larger, more guitar-like offsets were what sent the original
-       surface to seven octaves, because twelve bands multiply anything.
-
-       The voice's pitch offset still applies, so the surface plays in the
-       register of the voice you have selected. */
-    int surface_note(int band, int block) const {
-        int degree = band * LIFE_BLOCKS + block + (int)v_pitch[edit_voice];
-        return life_degree_to_note(degree, root_note(), scale_mask());
-    }
-
-    int surface_rows(void) const { return plate_is_printed() ? 12 : 15; }
-    int surface_bands(void) const { return surface_rows() / LIFE_BAND_ROWS; }
-
-
-    /* Everything that touches a voice, on the sequence thread.
-
-       This used to run in on_ui, alongside the drawing. It is the difference
-       that survived three rewrites of the note handling: the stock panel calls
-       its equivalent from on_sequence(...), and the API reference says plainly
-       to call play_synth from on_sequence(...) or on_midi(...). Driving a synth
-       voice from the UI hook restruck the note whenever a finger moved, and no
-       amount of care about pitch, velocity or retrigger flags fixed it, because
-       none of those was the fault. */
-    /* One large pad, proxied into ONE touch.
-
-       This is what the panel kept almost doing. A 4x3 pad is a shape the touch
-       layer has no concept of, so every earlier attempt read the fine grid and
-       then tried to un-see it: peak finding hopped between physical pads, touch
-       origin restarted on each new pad, blob tracking had to reinvent finger
-       identity, and a per-frame set_synth_velocity was needed to claw expression
-       back.
-
-       Instead each pad's pressure is AVERAGED into one figure and poked in as a
-       virtual finger. The average is the point: finger_t::pressure,
-       touch_pressure_curve_q7 and PLAY_SURFACE_PRESSURE_NOTE_ON/HOLD are all
-       defined on ONE pad's 0..255 scale, so a twelve-pad total was in the wrong
-       units for every one of them - which is why velocity pinned at 127 and the
-       thresholds were an order of magnitude too sensitive.
-
-       update_from_touch is never called, so the engine never sees the fine grid.
-       The poked finger's string is the band and its position is the block, and
-       from there finger identity, is_new, voice assignment and release are the
-       firmware's own. That is the part that makes the stock surface feel
-       refined, and it is the part this panel kept writing for itself. */
-    void surface_sequence_unified(int sy, int sh, int nbands) {
-        (void)sh;
-        for (int rg = 0; rg < nbands; ++rg)
-            for (int b = 0; b < LIFE_BLOCKS; ++b) {
-                int sum = 0, n = 0;
-                for (int r = 0; r < LIFE_BAND_ROWS; ++r)
-                    for (int c = 0; c < LIFE_BLOCK_W; ++c) {
-                        int pp = get_touch_pressure_xy(b * LIFE_BLOCK_W + c,
-                                                       sy + rg * LIFE_BAND_ROWS + r);
-                        if (pp > 0) { sum += pp; ++n; }
-                    }
-                /* Smooth the total and the contact count SEPARATELY, then
-                   divide. The bubbling came from dividing by a count that moves:
-                   as a finger slides, the total it deposits stays roughly
-                   constant, but it spreads over more pads between two pad
-                   centres and fewer over one. So the count swings, and an
-                   average divided by it swings too - an amplitude wobble at
-                   pad-crossing frequency, which is what the bumps between the
-                   native pads are.
-
-                   Smoothing the ratio afterwards only halves that and adds lag,
-                   because the wobble is already in the input. Smoothing both
-                   terms first removes the source: the total is stable to begin
-                   with, and a settled count stops manufacturing the dips.
-
-                   The count is held in sixteenths so the division keeps its
-                   resolution. Shift 2 still lands a press immediately, and
-                   update_ema's deadzone lets both terms settle exactly rather
-                   than creep toward the value. */
-                if (!n) {
-                    surf_tot[rg][b] = update_ema(surf_tot[rg][b], 0, 2);
-                    surf_cnt[rg][b] = update_ema(surf_cnt[rg][b], 0, 2);
-                    continue;
-                }
-                surf_tot[rg][b] = update_ema(surf_tot[rg][b], sum, 2);
-                surf_cnt[rg][b] = update_ema(surf_cnt[rg][b], n * 16, 2);
-
-                int p = surf_cnt[rg][b] > 0
-                      ? (int)((surf_tot[rg][b] * 16) / surf_cnt[rg][b]) : 0;
-                if (p > 255) p = 255;
-                if (p < PLAY_SURFACE_PRESSURE_HOLD) continue;
-                play_surface.poke_finger(rg, b << 8, p, LIFE_PLAY_VOICES, true);
-            }
-
-        play_surface.update_voices();
-
-        play_seen = 0;
-        for (int v = 0; v < LIFE_PLAY_VOICES && v < 16; ++v) {
-            finger_t f = play_surface.get_finger_for_voice(v);
-            if (!f.pressure) continue;
-
-            int rg = clamp_int((int)f.string_idx, 0, nbands - 1);
-            int block = clamp_int((int)(f.string_pos_q8 >> 8), 0, LIFE_BLOCKS - 1);
-            voice_band[v] = (uint8_t)rg;
-            voice_block[v] = (uint8_t)block;
-
-            int note = surface_note(nbands - 1 - rg, block);
-            int velocity = clamp_int(touch_pressure_curve_q7(f.pressure), 1, 127);
-            play_surface_voice(v, note, note << 8, velocity, f.is_new != 0);
-        }
-        release_play_voices(play_seen);
-    }
-
-
+    /* Nothing to drive here any more: do_play_surface reads touch, draws and
+       calls back in on_ui. This only makes sure a note cannot be left sounding
+       when the page is left. */
     void surface_sequence(void) {
-        if (ui_mode != LIFE_UI_PLAY) {
-            if (play_down) release_play_voices(0, true);
-            return;
-        }
-        int sy = plate_is_printed() ? 2 : 0;
-        int sh = surface_rows();
-        int nbands = surface_bands();
-
-        if (surf_mode == 0) { surface_sequence_unified(sy, sh, nbands); return; }
-
-        play_surface.update_from_touch(0, sy, LIFE_W, sh,
-                                       HORIZONTAL | STRINGOPHONIC_POLY | TRACK_FINGERS_ACROSS_STRINGS,
-                                       LIFE_PLAY_VOICES);
-        play_surface.update_voices();
-
-        play_seen = 0;
-        for (int v = 0; v < LIFE_PLAY_VOICES && v < 16; ++v) {
-            finger_t f = play_surface.get_finger_for_voice(v);
-            if (!f.pressure || f.string_idx >= sh) continue;
-
-            int pos_q8 = clamp_int((int)f.string_pos_q8, 0, (LIFE_W - 1) << 8);
-            int block = (pos_q8 >> 8) / LIFE_BLOCK_W;
-            int band = nbands - 1 - (f.string_idx / LIFE_BAND_ROWS);
-
-            int note = surface_note(band, block);
-            int velocity = (surf_mode == 2) ? (int)f.pressure
-                                            : clamp_int(touch_pressure_curve_q7(f.pressure), 1, 127);
-            int note_q8 = (surf_mode == 2)
-                        ? ((surface_note(band, 0) << 8) + (int)(f.string_pos_q8 / LIFE_BLOCK_W))
-                        : (note << 8);
-
-            play_surface_voice(v, note, note_q8, velocity, f.is_new != 0);
-        }
-        release_play_voices(play_seen);
+        if (ui_mode != LIFE_UI_PLAY && play_down) release_play_voices(0, true);
     }
 
+    /* The instrument's own play surface, not one of ours.
+
+       Every hand-built version of this failed in the same way: a 4x3 pad is a
+       shape the touch layer has no concept of, so the panel ended up
+       reimplementing finger identity, pressure smoothing and voice assignment,
+       and each attempt wobbled or retriggered somewhere the stock surface does
+       not. do_play_surface does the lot - background, root highlighting, scale
+       mapping, finger tracking, glide and pressure.
+
+       VERTICAL, so the strings are the sixteen COLUMNS and pitch runs up each
+       one. That is the shape the touch layer is built around: a string one pad
+       wide, which is what Plinky itself has.
+
+       One scale degree per string. The span works out at 26 degrees on a
+       printed plate and 29 on a blank one, against the 28 of stock Plinky's own
+       eight strings a fourth apart - so the range is the instrument's, not an
+       invention. Two degrees per string would reach 41, whose top note is past
+       the end of MIDI. */
     void draw_play_surface(void) {
-        /* Drawing only. Touch and notes are on the sequence thread, in
-           surface_sequence(). */
         int sy = plate_is_printed() ? 2 : 0;
-        int sh = surface_rows();
-        int nbands = surface_bands();
+        int sh = plate_is_printed() ? 12 : 15;
 
-        int root = current_key % 12;
-        for (int r = 0; r < sh; ++r) {
-            int band = nbands - 1 - (r / LIFE_BAND_ROWS);   /* band 0 at the bottom */
-            for (int x = 0; x < LIFE_W; ++x) {
-                int block = x / LIFE_BLOCK_W;
-                int note = surface_note(band, block);
+        play_surface.do_play_surface(0, sy, LIFE_W, sh, LIFE_PLAY_VOICES,
+                                     life_voice_dim[edit_voice],
+                                     life_voice_bright[edit_voice],
+                                     root_note(), 1 /* degree per string */,
+                                     &life_panel::surface_note_cb, this,
+                                     VERTICAL | SHOW_BACKGROUND | STRINGOPHONIC_MONO,
+                                     scale_mask(), current_key % 12);
 
-                /* Checkerboard rather than unlit seams. Seams cost a row and a
-                   column out of every block, which on a three-by-four pad is a
-                   third of it, and the blocks ended up smaller than the notes
-                   they stand for. Alternating brightness separates neighbours
-                   while leaving every pad lit and pressable. */
-                uint32_t col = ((note % 12) == root) ? life_voice_bright[edit_voice]
-                                                     : life_voice_dim[edit_voice];
-                if ((band + block) & 1) col = life_scale_col(col, 150);
-                set_led(x, sy + r, col);
-            }
-        }
-
-        /* Read-only here: which pads to light. The touch reading and the notes
-           themselves happen in on_sequence, see surface_sequence(). */
-        for (int v = 0; v < LIFE_PLAY_VOICES; ++v) {
-            if (!(play_down & (1u << v))) continue;
-            /* voice_band is the row group counted from the top, which is what
-               the LEDs want directly - the musical band is its mirror. */
-            int r0 = (int)voice_band[v] * LIFE_BAND_ROWS, block = voice_block[v];
-            if (r0 < 0 || r0 + LIFE_BAND_ROWS > sh) continue;
-            for (int rr = 0; rr < LIFE_BAND_ROWS; ++rr)
-                for (int xx = block * LIFE_BLOCK_W; xx < (block + 1) * LIFE_BLOCK_W; ++xx)
-                    set_led(xx, sy + r0 + rr, LIFE_COL_TRIGGER);
-        }
+        release_play_voices(play_seen);
+        play_seen = 0;
 
         draw_voice_selector();
         draw_voice_nav(LIFE_UI_PLAY);
+    }
+
+    /* Strike on a new finger, hold otherwise - is_new is the instrument's own
+       answer to "is this one touch travelling or a fresh press". */
+    static void surface_note_cb(void *user, int voice, int note, uint8_t velocity,
+                                finger_t finger) {
+        life_panel *self = (life_panel *)user;
+        if (voice < 0 || voice >= 16) return;
+        self->play_seen |= (uint16_t)(1u << voice);
+
+        bool strike = finger.is_new || !(self->play_down & (1u << voice));
+        if (strike) ++self->dbg_strikes;
+        else if (self->play_note[voice] != (uint8_t)note) ++self->dbg_moves;
+
+        self->play_note[voice] = (uint8_t)note;
+        play_synth(voice, self->preset_for(self->edit_voice), velocity, note << 8, strike);
     }
 
     /* --- the hosted synth editor ------------------------------------------
@@ -3105,7 +2893,7 @@ struct life_panel : panel_t {
             "load a preset into this voice",
             "edit this voice's sound",
             "this voice's settings - tap again to flip the page",
-            "play this voice by hand - tap again to change how it drives the synth",
+            "play this voice by hand",
         };
         const int here[4] = { LIFE_UI_LOAD, LIFE_UI_PRESET, LIFE_UI_VOICE, LIFE_UI_PLAY };
 
@@ -3114,10 +2902,7 @@ struct life_panel : panel_t {
             if (!button(i, LIFE_SOUND_Y, current ? on[i] : off[i], NOT_ISOLATED, help[i]))
                 continue;
             if (i == 2 && mode == LIFE_UI_VOICE) voice_page = voice_page ? 0 : 1;
-            else if (i == 3 && mode == LIFE_UI_PLAY) {
-                surf_mode = (uint8_t)((surf_mode + 1) % LIFE_SURF_MODES);
-                printf("life: surface mode = %d\n", (int)surf_mode);
-            } else ui_mode = (uint8_t)here[i];
+            else ui_mode = (uint8_t)here[i];
         }
     }
 
@@ -3201,8 +2986,7 @@ struct life_panel : panel_t {
             int d = draw_system_style_enum_settings_page("KEY ", pref_root, life_note_names, 12);
             if (d) settings_dirty = true;
             if (d) { pref_root = (uint8_t)((pref_root + d + 120) % 12); apply_scale_to_system(); }
-            set_help_text("#fc2#*Key#. - root note, now #fc2#*%s#.. Sets the whole instrument's "
-                          "key, not just this panel.", life_note_names[pref_root]);
+            set_help_text("#fc2#*Key#. %s - the whole instrument's key, not just Life.", life_note_names[pref_root]);
             break;
         }
         case 1: {
@@ -3213,8 +2997,7 @@ struct life_panel : panel_t {
                 pref_scale = (uint8_t)clamp_int(pref_scale + d, 0, LIFE_NUM_SCALES - 1);
                 apply_scale_to_system();
             }
-            set_help_text("#fc2#*Scale#. - #fc2#*%s#.. Grid rows are degrees of this scale, so "
-                          "every cell is in key. %d of %d.",
+            set_help_text("#fc2#*Scale#. %s - grid rows are its degrees.",
                           life_scale_long_names[pref_scale], pref_scale + 1, LIFE_NUM_SCALES);
             break;
         }
@@ -3223,8 +3006,7 @@ struct life_panel : panel_t {
             int d = draw_system_style_settings_page("OCT ", buf, pref_octave * 100 / 7);
             if (d) settings_dirty = true;
             if (d) pref_octave = (uint8_t)clamp_int(pref_octave + d, 1, 7);
-            set_help_text("#fc2#*Octave#. - base octave #fc2#*%d#. of 7. The bottom grid row "
-                          "plays %s%d; higher rows climb the scale from there.",
+            set_help_text("#fc2#*Octave#. %d of 7 - bottom row plays %s%d, rows climb.",
                           pref_octave, life_note_names[pref_root], pref_octave);
             break;
         }
@@ -3233,8 +3015,7 @@ struct life_panel : panel_t {
                                                         LIFE_NUM_RATES);
             if (d) settings_dirty = true;
             if (d) gen_rate = (uint8_t)clamp_int(gen_rate + d, 0, LIFE_NUM_RATES - 1);
-            set_help_text("#fc2#*Generation rate#. - the world evolves every #fc2#*%s#.. This is "
-                          "separate from the voice rates: slow it down for a palette that breathes.",
+            set_help_text("#fc2#*Gen rate#. %s - the world's clock, not the voices'.",
                           life_rate_names[gen_rate]);
             break;
         }
@@ -3251,8 +3032,7 @@ struct life_panel : panel_t {
             int d = draw_system_style_settings_page("FLOR", buf, clamp_int(respawn_floor, 0, 64) * 100 / 64);
             if (d) settings_dirty = true;
             if (d) respawn_floor = (uint8_t)clamp_int(respawn_floor + d, 0, 64);
-            set_help_text("#fc2#*Respawn floor#. - if fewer than #fc2#*%d#. of 256 cells are "
-                          "alive, sprinkle new ones in. 0 disables it and lets the world die.",
+            set_help_text("#fc2#*Floor#. %d of 256 - below this, sprinkle. 0 lets it die.",
                           respawn_floor);
             break;
         }
@@ -3261,8 +3041,7 @@ struct life_panel : panel_t {
             int d = draw_system_style_settings_page("SEED", buf, respawn_amount * 100 / 64);
             if (d) settings_dirty = true;
             if (d) respawn_amount = (uint8_t)clamp_int(respawn_amount + d, 1, 64);
-            set_help_text("#fc2#*Respawn amount#. - how many cells to sprinkle, now #fc2#*%d#.. "
-                          "Also what the SEED pad in the action layer drops in.", respawn_amount);
+            set_help_text("#fc2#*Seed#. %d cells - what a respawn drops in.", respawn_amount);
             break;
         }
         case 7: {
@@ -3271,12 +3050,9 @@ struct life_panel : panel_t {
             if (d) settings_dirty = true;
             if (d) respawn_stable = (uint8_t)clamp_int(respawn_stable + d, 0, 32);
             if (respawn_stable)
-                set_help_text("#fc2#*Stall limit#. - after #fc2#*%d#. generations with nothing "
-                              "changing at all, respawn. Blinkers keep changing, so they never "
-                              "count as stalled.", respawn_stable);
+                set_help_text("#fc2#*Stall#. %d frozen gens, then respawn. Blinkers do not.", respawn_stable);
             else
-                set_help_text("#fc2#*Stall limit#. - #fc2#*off#.. A world frozen into still lifes "
-                              "will stay frozen; only the floor can rescue it.");
+                set_help_text("#fc2#*Stall#. off - a frozen world stays frozen.");
             break;
         }
         case 8: {
@@ -3284,12 +3060,10 @@ struct life_panel : panel_t {
             int d = draw_system_style_settings_page("SWNG", buf, swing);
             if (d) { settings_dirty = true; swing = (uint8_t)clamp_int(swing + d, 0, 100); }
             if (swing)
-                set_help_text("#fc2#*Swing#. - #fc2#*%d%%#. of %s. Every voice shuffles together; "
-                              "the world keeps its own straight time.", swing,
+                set_help_text("#fc2#*Swing#. %d%% of %s - the world stays straight.", swing,
                               swing_pattern ? "the chosen pattern" : "plain 16th swing");
             else
-                set_help_text("#fc2#*Swing#. - #fc2#*straight#.. Turn it up to shuffle every "
-                              "voice together.");
+                set_help_text("#fc2#*Swing#. straight - turn up to shuffle every voice.");
             break;
         }
         case 9: {
@@ -3297,7 +3071,7 @@ struct life_panel : panel_t {
                                                         life_swing_names, 8);
             if (d) { settings_dirty = true;
                      swing_pattern = (uint8_t)clamp_int(swing_pattern + d, 0, 7); }
-            set_help_text("#fc2#*Swing feel#. - %s. Only audible with SWNG above zero.",
+            set_help_text("#fc2#*Feel#. %s - needs SWNG above zero.",
                           swing_pattern ? "one of the seven shuffle patterns" : "plain 16th swing");
             break;
         }
@@ -3306,12 +3080,9 @@ struct life_panel : panel_t {
             if (d) { settings_dirty = true;
                      pref_plate = (uint8_t)clamp_int(pref_plate + d, 0, 3); }
             if (pref_plate == LIFE_PLATE_AUTO)
-                set_help_text("#fc2#*Faceplate#. - #fc2#*auto#., panel reads %d now, %d at "
-                              "startup. If your Chords or Drums plate is not recognised, set "
-                              "it here.", get_frontpanel_code(), plate_at_construct);
+                set_help_text("#fc2#*Plate#. auto - reads %d, %d at boot. Set if wrong.", get_frontpanel_code(), plate_at_construct);
             else
-                set_help_text("#fc2#*Faceplate#. - forced to #fc2#*%s#.. The sound page uses "
-                              "that layout whatever the panel reports.",
+                set_help_text("#fc2#*Plate#. forced to %s - the sound page follows it.",
                               life_plate_names[pref_plate]);
             break;
         }
@@ -3335,8 +3106,7 @@ struct life_panel : panel_t {
                 release_all_voices();
                 pref_port = (uint8_t)clamp_int(pref_port + d, 0, 4);
             }
-            set_help_text("#fc2#*MIDI port#. - %s. Each voice sends on its own channel, set in "
-                          "the voice editor.",
+            set_help_text("#fc2#*Port#. %s - each voice has its own channel.",
                           pref_port == 0 ? "#fc2#*off#. - no MIDI leaves the panel"
                           : pref_port == 1 ? "#fc2#*USB 1#."
                           : pref_port == 2 ? "#fc2#*TRS 1#."
@@ -3350,13 +3120,9 @@ struct life_panel : panel_t {
             if (d) settings_dirty = true;
             if (d) pref_send_cc = on ? 0 : 1;
             if (pref_send_cc)
-                set_help_text("#fc2#*Simulation CCs#. - #fc2#*on#.. Sends CC20 density, 21 births, "
-                              "22 deaths, 23 stability and 24-27 per-voice movement, once per "
-                              "generation. Modulation from the automaton itself.");
+                set_help_text("#fc2#*Sim CCs#. on - CC20-27 describe the world, once a gen.");
             else
-                set_help_text("#fc2#*Simulation CCs#. - #fc2#*off#.. Turn on to send CC20-27 "
-                              "describing the world: density, births, deaths, stability and "
-                              "per-voice movement.");
+                set_help_text("#fc2#*Sim CCs#. off - turn on to send the world out as CC20-27.");
             break;
         }
         case 14: {
@@ -3367,13 +3133,10 @@ struct life_panel : panel_t {
             if (d) pref_cc_in = (uint8_t)clamp_int(pref_cc_in + d, 0,
                                                   127 - (CC_PARAM_COUNT - 1));
             if (pref_cc_in)
-                set_help_text("#fc2#*CC control#. - %d controllers from #fc2#*CC%d#. to "
-                              "#fc2#*CC%d#. on the system channel drive key, scale, the world "
-                              "and every voice.", CC_PARAM_COUNT, pref_cc_in,
+                set_help_text("#fc2#*CC in#. %d from CC%d to CC%d, system channel.", CC_PARAM_COUNT, pref_cc_in,
                               cc_last_number(pref_cc_in));
             else
-                set_help_text("#fc2#*CC control#. - #fc2#*off#.. Turn on to drive key, scale, "
-                              "the world and every voice from a controller or a DAW.");
+                set_help_text("#fc2#*CC in#. off - turn on to drive Life from a DAW.");
             break;
         }
         case 15: {
@@ -3381,20 +3144,16 @@ struct life_panel : panel_t {
             int d = draw_system_style_bool_settings_page("COUT", on);
             if (d) { pref_cc_out = on ? 0 : 1; settings_dirty = true; cc_out_primed = false; }
             if (pref_cc_out)
-                set_help_text("#fc2#*CC mirror#. - #fc2#*on#.. Changes made here are sent back "
-                              "out on the same controllers, so a DAW or a controller stays in "
-                              "step with the panel.");
+                set_help_text("#fc2#*CC out#. on - edits echo back, so a DAW stays in step.");
             else
-                set_help_text("#fc2#*CC mirror#. - #fc2#*off#.. The panel listens but does not "
-                              "report its own changes.");
+                set_help_text("#fc2#*CC out#. off - Life listens but does not report back.");
             break;
         }
         case 16: {
             bool on = pref_cv_out != 0;
             int d = draw_system_style_bool_settings_page("CV  ", on);
             if (d) { pref_cv_out = on ? 0 : 1; settings_dirty = true; }
-            set_help_text("#fc2#*CV out#. - %s. A follows how full the world is, B how much is "
-                          "changing. 0 to 5 volts.", pref_cv_out ? "#fc2#*on#." : "#fc2#*off#.");
+            set_help_text("#fc2#*CV#. %s - A is density, B is change.", pref_cv_out ? "#fc2#*on#." : "#fc2#*off#.");
             break;
         }
         case 17: {
@@ -3402,12 +3161,9 @@ struct life_panel : panel_t {
             int d = draw_system_style_bool_settings_page("NIN ", on);
             if (d) { pref_note_in = on ? 0 : 1; settings_dirty = true; }
             if (pref_note_in)
-                set_help_text("#fc2#*Note input#. - #fc2#*on#.. Played notes draw cells into the "
-                              "world, one column per note, left to right. Off-scale notes snap "
-                              "to the nearest degree.");
+                set_help_text("#fc2#*Note in#. on - played notes draw cells, one column each.");
             else
-                set_help_text("#fc2#*Note input#. - #fc2#*off#.. Turn on to draw into the world "
-                              "from a keyboard.");
+                set_help_text("#fc2#*Note in#. off - turn on to draw cells from a keyboard.");
             break;
         }
         default:
@@ -3423,12 +3179,12 @@ struct life_panel : panel_t {
            question needs anyway - how many strikes for one press. */
         {
             uint32_t now = time_us();
-            if ((dbg_strikes | dbg_moves | dbg_vel) &&
+            if ((dbg_strikes | dbg_moves) &&
                 (!dbg_last_us || (uint32_t)(now - dbg_last_us) > 2000000u)) {
                 dbg_last_us = now ? now : 1;
-                printf("life: surface strikes=%d moves=%d velupd=%d\n",
-                       (int)dbg_strikes, (int)dbg_moves, (int)dbg_vel);
-                dbg_strikes = dbg_moves = dbg_vel = 0;
+                printf("life: surface strikes=%d moves=%d\n",
+                       (int)dbg_strikes, (int)dbg_moves);
+                dbg_strikes = dbg_moves = 0;
             }
         }
 
@@ -3546,8 +3302,7 @@ struct life_panel : panel_t {
             /* Tapping a slot only PREVIEWS it. Say so, because nothing on the
                grid does, and an uncommitted preview is discarded on the way
                out - which reads as the panel losing your choice. */
-            set_help_text("V%d #fc2#*presets#. - tap a slot to hear it, then #fc2#*LOAD#. to "
-                          "keep it. Leaving without loading keeps the old sound.",
+            set_help_text("V%d #fc2#*presets#. tap to hear, LOAD to keep it.",
                           edit_voice + 1);
             return;
         }
@@ -3556,8 +3311,7 @@ struct life_panel : panel_t {
         /* The play surface owns the grid the same way the synth editor does. */
         if (mode == LIFE_UI_PLAY) {
             draw_play_surface();
-            set_help_text("#fc2#*Voice %d#. - play over the world. Notes sound, cells are "
-                          "untouched.", edit_voice + 1);
+            set_help_text("#fc2#*V%d#. play over the world - cells are untouched.", edit_voice + 1);
             return;
         }
 
@@ -3630,17 +3384,14 @@ struct life_panel : panel_t {
         if (mode == LIFE_UI_VOICE)
             set_voice_help_text();
         else if (mode == LIFE_UI_ACTION)
-            set_help_text("#fc2#*Actions#. - %s, gen %s, swing %d%%, edit, mute, solo, clear, "
-                          "seed, freeze, step", life_rulesets[rule_set].name,
+            set_help_text("#fc2#*Actions#. %s gen %s swing %d%% edit mute solo clear", life_rulesets[rule_set].name,
                           life_rate_names[gen_rate], swing);
         else
             /* The world view is where you spend the time, so its one line of
                text says what the four voices are set to - otherwise the only
                way to know is to open each editor in turn. */
-            set_help_text("#fc2#*%d#. alive, %s %s, gen %s%s  #fc2#*|#.  %s %s  %s %s  %s %s  %s %s",
-                          last_stats.alive, life_note_names[pref_root],
-                          life_scale_long_names[pref_scale], life_rate_names[gen_rate],
-                          is_transport_playing() ? "" : " (stopped)",
+            set_help_text("#fc2#*%d#. alive, gen %s  %s%s %s%s %s%s %s%s",
+                          last_stats.alive, life_rate_names[gen_rate],
                           life_rate_names[v_rate[0]], life_sel_names[v_rule[0]],
                           life_rate_names[v_rate[1]], life_sel_names[v_rule[1]],
                           life_rate_names[v_rate[2]], life_sel_names[v_rule[2]],
