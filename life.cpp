@@ -1460,6 +1460,8 @@ struct life : panel_t {
        the firmware knows a panel is mounted, but the code is only readable
        early. Reading it per frame looked tidier and silently broke detection. */
     int plate_at_construct = get_frontpanel_code();
+    uint32_t plate_log_us = 0;
+    bool plate_log_was = false;
 
     /* Note input. on_midi records; on_ui paints, because touching the world is
        exactly what the sequence lock exists to protect. */
@@ -2875,6 +2877,22 @@ struct life : panel_t {
         }
     }
 
+    /* Reports what the layout is keyed off, because every "is this drawn in the
+       right place" question comes down to this one boolean: the voice selector,
+       the editor's own voice row, and the play surface's rows all switch on it.
+       Logged on change and once a minute, from on_ui. */
+    void log_plate_periodically(void) {
+        uint32_t now = time_us();
+        bool printed = plate_is_printed();
+        if (plate_log_us && printed == plate_log_was &&
+            (uint32_t)(now - plate_log_us) < 60000000u) return;
+        plate_log_us = now ? now : 1;
+        plate_log_was = printed;
+        printf("life: plate code=%d pref=%d printed=%d -> selector row %d, surface rows %d-%d\n",
+               plate_at_construct, (int)pref_plate, printed ? 1 : 0,
+               printed ? 0 : 1, printed ? 2 : 0, printed ? 13 : 14);
+    }
+
     void draw_voice_selector(void) {
         if (!plate_is_printed()) return;
         for (int v = 0; v < LIFE_NUM_VOICES; ++v)
@@ -3151,6 +3169,8 @@ struct life : panel_t {
         follow_musical_state();
         apply_pending_cc();
         apply_note_input();
+
+        log_plate_periodically();
 
         int page = get_scroll_page();
 
