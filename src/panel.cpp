@@ -283,7 +283,6 @@ struct life : panel_t {
     file_picker_t scene_picker;    /* scenes, placed by us - see draw_scene_page */
     int scene_commit_wait;         /* sequence frames left to wait for a staged load */
     bool scene_commit_failed;      /* set on the sequence thread, logged from on_ui */
-    bool gen_div_edge_this_frame;  /* a generation edge landed - a musical boundary */
     play_surface_t play_surface;   /* play the selected voice over the running world */
     uint8_t string_roots[16];
 
@@ -426,7 +425,6 @@ struct life : panel_t {
         musical_state_seen = 0;
         scene_commit_wait = 0;
         scene_commit_failed = false;
-        gen_div_edge_this_frame = false;
         play_down = 0;
         for (int i = 0; i < 16; ++i) play_miss[i] = 0;
         play_seen = 0;
@@ -880,7 +878,6 @@ struct life : panel_t {
         int64_t phase = swung_phase(raw_phase);
         bool playing = is_transport_playing();
 
-        gen_div_edge_this_frame = false;
         surface_sequence();
 
         /* Expire held notes first, so a note that ends exactly as the next one
@@ -916,7 +913,6 @@ struct life : panel_t {
                up so a seek cannot burn hundreds of generations inside an IRQ. */
             if (gen_edges > LIFE_MAX_CATCHUP) gen_edges = LIFE_MAX_CATCHUP;
             for (int i = 0; i < gen_edges; ++i) step_generation();
-            gen_div_edge_this_frame = true;
         }
 
         poll_staged_scene_seq();
@@ -1710,28 +1706,29 @@ struct life : panel_t {
     /* Returns true if the panel is about to be replaced, in which case the
        caller must stop touching anything: an accepted request queues a swap of
        this whole object. */
-    /* Polled from on_sequence, not on_ui: the documented shape is to stage the
-       load from the UI and then "poll this from on_sequence(...) and call
-       request_panel_load_finalise() at a barline, stop point, or other safe
-       musical moment". Committing on an arbitrary UI frame swapped the whole
-       panel mid-step.
+    /* Polled from on_sequence, which is where the reference says to poll a
+       staged load from, and committed as soon as it is ready.
 
-       The wait is also counted in sequence frames now, so the timeout is a real
-       duration rather than one that depended on the UI frame rate. */
+       It used to wait for a generation edge, on the reasoning that a scene
+       should land on the beat. That was wrong twice over: a scene swap replaces
+       the world and every voice at once, so there is no beat to be in the middle
+       of, and the wait had no timeout - with FREEZE on, or a slow GEN rate, no
+       edge arrives and the load hangs with nothing on screen to explain it.
+
+       The countdown runs whether or not the load has staged yet, so a load that
+       never arrives gives up and says so instead of waiting forever. */
     void poll_staged_scene_seq(void) {
         if (scene_commit_wait <= 0) return;
-        if (!is_panel_load_staged()) {
-            if (--scene_commit_wait == 0)
-                scene_commit_failed = true;   /* reported from on_ui */
+        if (--scene_commit_wait == 0) {
+            scene_commit_failed = true;       /* reported from on_ui */
             return;
         }
+        if (!is_panel_load_staged()) return;
 
-        /* Wait for a musical boundary. Stopped counts: there is no step to
-           land on, so there is nothing to interrupt. */
-        if (is_transport_playing() && !gen_div_edge_this_frame) return;
-
-        scene_commit_wait = 0;
+        /* Only stop asking once it is accepted: a refusal is a "not yet", and
+           clearing the countdown here would abandon the load silently. */
         if (scene_picker.request_panel_load_finalise()) {
+            scene_commit_wait = 0;
             for (int v = 0; v < LIFE_NUM_VOICES; ++v) release_voice_locked(v);
         }
     }

@@ -427,9 +427,8 @@ order, channel, pitch, length, accent and mute, its whole behaviour page, and th
 rule, the swing, the generation rate and the respawn settings. Load one back and
 you get the same world and the same four voices.
 
-Loading waits for the next generation step before it swaps, so a scene change
-lands on the beat rather than halfway through one. With the transport stopped it
-happens straight away.
+Loading swaps straight away. A scene replaces the world and all four voices at
+once, so there is no half-finished step to land on.
 
 The settings pages are separate. Key, scale, octave, output, ports and CCs are
 preferences, along with CV and note input: saved automatically as you change them
