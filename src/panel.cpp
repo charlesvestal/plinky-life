@@ -186,13 +186,6 @@ static const uint8_t life_port_values[5] = {
    also retriggers the fault is in the pad geometry or the flags. */
 #define LIFE_SURF_MODES 3
 
-/* A fingertip covers roughly this many pads. Used to turn a rect TOTAL back
-   into a per-pad figure, because both touch_pressure_curve_q7 and the
-   PLAY_SURFACE_PRESSURE_* constants are defined per pad, not per region. */
-#define LIFE_TOUCH_PADS_PER_FINGER 3
-#define LIFE_SURF_NOTE_ON (PLAY_SURFACE_PRESSURE_NOTE_ON * LIFE_TOUCH_PADS_PER_FINGER)
-#define LIFE_SURF_HOLD    (PLAY_SURFACE_PRESSURE_HOLD * LIFE_TOUCH_PADS_PER_FINGER)
-
 /* page 0 is at logical y 0, page 1 at y 16 */
 /* How many missed divider edges one frame may catch up on. Bounded so a seek or
    a stall cannot burn hundreds of steps inside an interrupt. */
@@ -343,6 +336,8 @@ struct life_panel : panel_t {
     uint8_t voice_block[LIFE_PLAY_VOICES];
     uint16_t dbg_strikes, dbg_moves, dbg_vel;   /* counted on the sequence thread */
     uint32_t dbg_last_us;                       /* reported from on_ui, never printf in an IRQ */
+    int32_t surf_tot[LIFE_MAX_BANDS][LIFE_BLOCKS];  /* smoothed pressure total, sequence thread only */
+    int32_t surf_cnt[LIFE_MAX_BANDS][LIFE_BLOCKS];  /* smoothed contact count, in sixteenths */
     uint8_t play_miss[16];         /* consecutive frames a sounding voice went unreported */
     uint16_t play_seen;            /* named by the callback this frame */
     uint8_t play_note[16];         /* so a slide to a new note retriggers */
@@ -486,6 +481,8 @@ struct life_panel : panel_t {
             voice_band[i] = 0; voice_block[i] = 0;
         }
         for (int i = 0; i < 16; ++i) play_miss[i] = 0;
+        for (int rg = 0; rg < LIFE_MAX_BANDS; ++rg)
+            for (int b = 0; b < LIFE_BLOCKS; ++b) { surf_tot[rg][b] = 0; surf_cnt[rg][b] = 0; }
         dbg_strikes = dbg_moves = dbg_vel = 0;
         dbg_last_us = 0;
         play_seen = 0;
@@ -1644,14 +1641,37 @@ struct life_panel : panel_t {
                                                        sy + rg * LIFE_BAND_ROWS + r);
                         if (pp > 0) { sum += pp; ++n; }
                     }
-                if (!n) continue;
+                /* Smooth the total and the contact count SEPARATELY, then
+                   divide. The bubbling came from dividing by a count that moves:
+                   as a finger slides, the total it deposits stays roughly
+                   constant, but it spreads over more pads between two pad
+                   centres and fewer over one. So the count swings, and an
+                   average divided by it swings too - an amplitude wobble at
+                   pad-crossing frequency, which is what the bumps between the
+                   native pads are.
 
-                /* Averaged over the pads actually in contact, not over all
-                   twelve: a fingertip covers three or four of them, and dividing
-                   by twelve would report a firm press as a faint one. */
-                int avg = sum / n;
-                if (avg < PLAY_SURFACE_PRESSURE_HOLD) continue;
-                play_surface.poke_finger(rg, b << 8, avg, LIFE_PLAY_VOICES, true);
+                   Smoothing the ratio afterwards only halves that and adds lag,
+                   because the wobble is already in the input. Smoothing both
+                   terms first removes the source: the total is stable to begin
+                   with, and a settled count stops manufacturing the dips.
+
+                   The count is held in sixteenths so the division keeps its
+                   resolution. Shift 2 still lands a press immediately, and
+                   update_ema's deadzone lets both terms settle exactly rather
+                   than creep toward the value. */
+                if (!n) {
+                    surf_tot[rg][b] = update_ema(surf_tot[rg][b], 0, 2);
+                    surf_cnt[rg][b] = update_ema(surf_cnt[rg][b], 0, 2);
+                    continue;
+                }
+                surf_tot[rg][b] = update_ema(surf_tot[rg][b], sum, 2);
+                surf_cnt[rg][b] = update_ema(surf_cnt[rg][b], n * 16, 2);
+
+                int p = surf_cnt[rg][b] > 0
+                      ? (int)((surf_tot[rg][b] * 16) / surf_cnt[rg][b]) : 0;
+                if (p > 255) p = 255;
+                if (p < PLAY_SURFACE_PRESSURE_HOLD) continue;
+                play_surface.poke_finger(rg, b << 8, p, LIFE_PLAY_VOICES, true);
             }
 
         play_surface.update_voices();

@@ -137,6 +137,15 @@ typedef void (*play_surface_note_fn)(void *user, int voice, int note, uint8_t ve
 typedef uint8_t (*scale_play_surface_brightness_fn)(void *user, int string_idx, int string_pos,
                                                     int x, int y, int note);
 
+/* Transcribed body: the deadzone matters, it is what lets the value arrive
+   exactly instead of asymptotically approaching. */
+static inline int update_ema(int current, int target, int smooth_shift) {
+    int deadzone = 1 << smooth_shift;
+    int delta = target - current;
+    if (delta <= deadzone && delta >= -deadzone) return target;
+    return current + (delta >> smooth_shift);
+}
+
 /* The real body, not a declaration: it clamps to 255 and saturates at 128, and
    a stub that hid that let a rect TOTAL be passed here unnoticed. */
 static inline int touch_pressure_curve_q7(int pressure) {
