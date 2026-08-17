@@ -1227,6 +1227,9 @@ static const uint8_t life_port_values[5] = {
 /* page 0 is at logical y 0, page 1 at y 16 */
 #define LIFE_PAGE1_Y 16
 
+static const char *const life_plate_names[4] = { "AUTO", "BLNK", "CHRD", "DRUM" };
+enum { LIFE_PLATE_AUTO = 0, LIFE_PLATE_BLANK, LIFE_PLATE_CHORDS, LIFE_PLATE_DRUMS };
+
 #define LIFE_MODIFIER_X 13
 #define LIFE_MODIFIER_Y 15
 #define LIFE_STOP_X     14
@@ -1407,6 +1410,7 @@ struct life : panel_t {
     uint8_t pref_cv_out;      /* drive the two CV outputs from the world */
     uint8_t pref_note_in;     /* played notes draw cells into the world */
     uint8_t plate_saved;      /* last non-zero frontpanel code, carried across loads */
+    uint8_t pref_plate;       /* 0 auto, else force the layout - see life_plate_names */
     uint32_t plate_log_us;    /* rate limit for the plate report */
 
     /* --- transient UI state, never serialised --- */
@@ -1623,6 +1627,7 @@ struct life : panel_t {
        already in the object, i.e. the PREVIOUS scene's value. Clamping on load
        is what stops that becoming an out-of-range index. */
     void clamp_settings(void) {
+        if (pref_plate > LIFE_PLATE_DRUMS) pref_plate = LIFE_PLATE_AUTO;
         for (int v = 0; v < LIFE_NUM_VOICES; ++v) {
             if (v_rate[v] >= LIFE_NUM_RATES) v_rate[v] = 4;
             if (v_order[v] >= TRAV_COUNT) v_order[v] = TRAV_FORWARD;
@@ -2699,7 +2704,23 @@ struct life : panel_t {
        carried value is only consulted when this instance read nothing at all,
        which is the staged-load case: a scene load constructs a new instance at
        load time, and on this hardware the code is not readable then. */
-    int plate_code(void) const { return plate_boot ? plate_boot : (int)plate_saved; }
+    int plate_code(void) const {
+        /* The override wins outright.
+
+           Detection is best effort and cannot be made to work everywhere: on at
+           least one Chords unit get_frontpanel_code() returns 0 at construction
+           AND from on_ui, so there is no reading to have, carry or latch. grid.cpp
+           takes the same position - it seeds y_offset from the code at
+           construction, persists it as a setting, and gives the user a "yofs"
+           page to correct it. Detection is the default, not the contract. */
+        switch (pref_plate) {
+        case LIFE_PLATE_BLANK:  return 0;
+        case LIFE_PLATE_CHORDS: return FRONT_PANEL_CODE_CHORDS;
+        case LIFE_PLATE_DRUMS:  return FRONT_PANEL_CODE_DRUMS;
+        default: break;
+        }
+        return plate_boot ? plate_boot : (int)plate_saved;
+    }
 
     bool plate_is_printed(void) const {
         return (plate_code() & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
@@ -2878,7 +2899,7 @@ struct life : panel_t {
 
     /* Global only. Per-voice config moved onto the grid, where it is one tap
        deep and visible all at once instead of fourteen side-button clicks. */
-    int settings_page_count(void) { return 17; }
+    int settings_page_count(void) { return 18; }
 
     /* Page 1 is the scene save/load picker. on_serialise() has always described
        the world and every voice setting, but without this there was no way to
@@ -3093,6 +3114,16 @@ struct life : panel_t {
                 set_help_text("#fc2#*Note in#. on - played notes draw cells, one column each.");
             else
                 set_help_text("#fc2#*Note in#. off - turn on to draw cells from a keyboard.");
+            break;
+        }
+        case 17: {
+            int d = draw_system_style_enum_settings_page("PLTE", pref_plate, life_plate_names, 4);
+            if (d) { settings_dirty = true;
+                     pref_plate = (uint8_t)clamp_int(pref_plate + d, 0, 3); }
+            if (pref_plate == LIFE_PLATE_AUTO)
+                set_help_text("#fc2#*Plate#. auto - panel reads %d. Set it if wrong.", plate_code());
+            else
+                set_help_text("#fc2#*Plate#. forced to %s.", life_plate_names[pref_plate]);
             break;
         }
         default:
@@ -3625,6 +3656,7 @@ struct life : panel_t {
            nonsense - 2 is TOADSTEP - so an existing settings file would poison
            this field. A new key ignores them. */
         FIELD("fpcode", plate_saved);
+        FIELD("plateovr", pref_plate);   /* NOT "plate": that key held the old enum */
         OBJECT_END(s);
 
         clamp_settings();
