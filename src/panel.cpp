@@ -126,8 +126,6 @@ static const char *const life_rule_help[] = {
    (FRONT_PANEL_CODE_NONE) while get_frontpanel_orientation() said 1, i.e. the
    firmware knew a panel was mounted but not which one. Without an override that
    unit can never get its printed layout. */
-static const char *const life_plate_names[4] = { "AUTO", "BLNK", "CHRD", "DRUM" };
-enum { LIFE_PLATE_AUTO = 0, LIFE_PLATE_BLANK, LIFE_PLATE_CHORDS, LIFE_PLATE_DRUMS };
 
 static const char *const life_sink_names[3] = { "SYN ", "MIDI", "BOTH" };
 enum { LIFE_SINK_SYNTH = 0, LIFE_SINK_MIDI, LIFE_SINK_BOTH };
@@ -361,7 +359,6 @@ struct life : panel_t {
     uint8_t pref_cc_out;      /* mirror parameter changes back out on the same block */
     uint8_t pref_cv_out;      /* drive the two CV outputs from the world */
     uint8_t pref_note_in;     /* played notes draw cells into the world */
-    uint8_t pref_plate;       /* AUTO, or force the faceplate - see life_plate_names */
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
@@ -488,7 +485,6 @@ struct life : panel_t {
         pref_cc_out = 1;
         pref_cv_out = 1;
         pref_note_in = 1;
-        pref_plate = LIFE_PLATE_AUTO;
 
         /* The user-facing save and controller name. Left unset it takes whatever
            the firmware defaults to, which showed as "LIFE PANEL". */
@@ -595,7 +591,6 @@ struct life : panel_t {
         if (pref_sink > LIFE_SINK_BOTH) pref_sink = LIFE_SINK_BOTH;
         if (pref_port > 4) pref_port = 3;
         if (pref_cc_in > 127 - (CC_PARAM_COUNT - 1)) pref_cc_in = 0;
-        if (pref_plate > LIFE_PLATE_DRUMS) pref_plate = LIFE_PLATE_AUTO;
         if (edit_voice >= LIFE_NUM_VOICES) edit_voice = 0;
     }
 
@@ -1630,33 +1625,18 @@ struct life : panel_t {
        than equality: the codes are distinct bits (TOADSTEP 0x2, DRUMS 0x10,
        CHORDS 0x20), so a unit that reports extra bits alongside the plate still
        matches. */
-    /* Auto by default: the layout comes from the hardware, and pref_plate only
-       overrides it if you have gone into settings and said so.
+    /* The layout comes from the hardware, read at construction - which is what
+       grid.cpp does, in a member initialiser.
 
-       Reads the value captured at construction rather than calling
-       get_frontpanel_code() here - grid.cpp does the same, in a member
-       initialiser. Reading it live once broke detection on a Chords unit, though
-       that was never proven to be a firmware behaviour rather than a bug of
-       ours, so treat it as a convention that works rather than a rule.
-
-       The override is kept because the failure is asymmetric. Without it, a unit
-       whose straps misread has the wrong voice-selector row, the wrong editor
-       rows, the wrong play surface rows and no way to fix any of it. With it,
-       that is one setting away. grid.cpp does the same: it seeds y_offset from
-       the frontpanel code, persists it, and gives the user a page to nudge it. */
+       There is no manual override. One was carried for a while, after a Chords
+       unit appeared to report no plate; that turned out to be this panel reading
+       the code from on_ui rather than at construction, so the setting existed to
+       work around a bug of ours and was removed once the bug was. */
     bool plate_is_printed(void) const {
-        if (pref_plate == LIFE_PLATE_CHORDS || pref_plate == LIFE_PLATE_DRUMS) return true;
-        if (pref_plate == LIFE_PLATE_BLANK) return false;
         return (plate_at_construct & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
     }
 
     const char *plate_layout_name(void) const {
-        switch (pref_plate) {
-        case LIFE_PLATE_CHORDS: return "Chords";
-        case LIFE_PLATE_DRUMS: return "Drums";
-        case LIFE_PLATE_BLANK: return "standard";
-        default: break;
-        }
         int code = plate_at_construct;
         if (code & FRONT_PANEL_CODE_CHORDS) return "Chords";
         if (code & FRONT_PANEL_CODE_DRUMS) return "Drums";
@@ -1845,7 +1825,7 @@ struct life : panel_t {
 
     /* Global only. Per-voice config moved onto the grid, where it is one tap
        deep and visible all at once instead of fourteen side-button clicks. */
-    int settings_page_count(void) { return 18; }
+    int settings_page_count(void) { return 17; }
 
     /* Page 1 is the scene save/load picker. on_serialise() has always described
        the world and every voice setting, but without this there was no way to
@@ -1983,17 +1963,6 @@ struct life : panel_t {
             break;
         }
         case 10: {
-            int d = draw_system_style_enum_settings_page("PLTE", pref_plate, life_plate_names, 4);
-            if (d) { settings_dirty = true;
-                     pref_plate = (uint8_t)clamp_int(pref_plate + d, 0, 3); }
-            if (pref_plate == LIFE_PLATE_AUTO)
-                set_help_text("#fc2#*Plate#. auto - reads %d, %d at boot. Set if wrong.", get_frontpanel_code(), plate_at_construct);
-            else
-                set_help_text("#fc2#*Plate#. forced to %s - the sound page follows it.",
-                              life_plate_names[pref_plate]);
-            break;
-        }
-        case 11: {
             int d = draw_system_style_enum_settings_page("OUT ", pref_sink, life_sink_names, 3);
             if (d) settings_dirty = true;
             if (d) {
@@ -2006,7 +1975,7 @@ struct life : panel_t {
                                                         : "#fc2#*both#. the internal synth and MIDI");
             break;
         }
-        case 12: {
+        case 11: {
             int d = draw_system_style_enum_settings_page("PORT", pref_port, life_port_names, 5);
             if (d) settings_dirty = true;
             if (d) {
@@ -2021,7 +1990,7 @@ struct life : panel_t {
                                            : "#fc2#*every port#., USB and TRS 1 and 2");
             break;
         }
-        case 13: {
+        case 12: {
             bool on = pref_send_cc != 0;
             int d = draw_system_style_bool_settings_page("CC  ", on);
             if (d) settings_dirty = true;
@@ -2032,7 +2001,7 @@ struct life : panel_t {
                 set_help_text("#fc2#*Sim CCs#. off - turn on to send the world out as CC20-27.");
             break;
         }
-        case 14: {
+        case 13: {
             if (pref_cc_in) snprintf(buf, sizeof(buf), "%d", pref_cc_in);
             else snprintf(buf, sizeof(buf), "OFF");
             int d = draw_system_style_settings_page("CIN ", buf, pref_cc_in * 100 / (127 - (CC_PARAM_COUNT - 1)));
@@ -2046,7 +2015,7 @@ struct life : panel_t {
                 set_help_text("#fc2#*CC in#. off - turn on to drive Life from a DAW.");
             break;
         }
-        case 15: {
+        case 14: {
             bool on = pref_cc_out != 0;
             int d = draw_system_style_bool_settings_page("COUT", on);
             if (d) { pref_cc_out = on ? 0 : 1; settings_dirty = true; cc_out_primed = false; }
@@ -2056,14 +2025,14 @@ struct life : panel_t {
                 set_help_text("#fc2#*CC out#. off - Life listens but does not report back.");
             break;
         }
-        case 16: {
+        case 15: {
             bool on = pref_cv_out != 0;
             int d = draw_system_style_bool_settings_page("CV  ", on);
             if (d) { pref_cv_out = on ? 0 : 1; settings_dirty = true; }
             set_help_text("#fc2#*CV#. %s - A is density, B is change.", pref_cv_out ? "#fc2#*on#." : "#fc2#*off#.");
             break;
         }
-        case 17: {
+        case 16: {
             bool on = pref_note_in != 0;
             int d = draw_system_style_bool_settings_page("NIN ", on);
             if (d) { pref_note_in = on ? 0 : 1; settings_dirty = true; }
@@ -2568,8 +2537,7 @@ struct life : panel_t {
             pref_cc_out = 1;
             pref_cv_out = 1;
             pref_note_in = 1;
-            pref_plate = LIFE_PLATE_AUTO;
-            }
+                }
 
         OBJECT_BEGIN(s);
         FIELD("root", pref_root);
@@ -2582,7 +2550,6 @@ struct life : panel_t {
         FIELD("ccout", pref_cc_out);
         FIELD("cvout", pref_cv_out);
         FIELD("notein", pref_note_in);
-        FIELD("plate", pref_plate);
         OBJECT_END(s);
 
         clamp_settings();

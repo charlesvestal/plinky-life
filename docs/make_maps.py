@@ -607,6 +607,16 @@ def check_constants():
     assert PARAM_ROWS[0][0] == 1 and CHANCE_ROWS[0][0] == 1, \
         "the editor VOICE row moved off row 1"
 
+    # The manual lists the settings pages by name; keep the count honest.
+    pages = _re.search(r"settings_page_count\(void\) \{ return (\d+); \}", src)
+    assert pages, "cannot find settings_page_count"
+    man = open(_os.path.join(_os.path.dirname(__file__), "manual.md")).read()
+    listed = sum(man.count("`" + n + "`") > 0 for n in
+                 ("KEY ", "SCAL", "OCT ", "GEN ", "RULE", "FLOR", "SEED", "STAB",
+                  "SWNG", "SWPT", "OUT ", "PORT", "CC  ", "CIN ", "COUT", "CV  ", "NIN "))
+    assert listed == int(pages.group(1)), \
+        f"manual lists {listed} settings pages, the panel has {pages.group(1)}"
+
 
 def check_captions():
     """No caption may run off the edge of its own map."""

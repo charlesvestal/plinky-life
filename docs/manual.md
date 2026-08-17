@@ -264,8 +264,8 @@ reads `WALK` and order reads `FWD`.
 Voice editor, then `(1,15)`.
 
 This is the Plinky synth editor you already know, pointed at the selected voice.
-It reads your faceplate at boot and rearranges itself to match. If it guesses
-wrong, the `PLTE` settings page forces the layout. Otherwise you do not tell it which
+It reads your faceplate at boot and rearranges itself to match, so you do not
+have to tell it which
 overlay you have. The second screen names the layout you are looking at.
 
 ### On Chords and Drums
@@ -378,7 +378,6 @@ value. The second screen explains each page as you land on it.
 | `KEY ` `SCAL` `OCT ` | musical | key, scale, base octave |
 | `GEN ` `RULE` `FLOR` `SEED` `STAB` | the world | tempo, law, and keeping it alive |
 | `SWNG` `SWPT` | feel | swing amount and shuffle pattern |
-| `PLTE` | faceplate | auto-detect, or force Blocks, Chords or Drums |
 | `OUT ` `PORT` | output | synth, MIDI or both, and which ports |
 | `CC  ` `CIN ` `COUT` `CV  ` `NIN ` | control | CCs out and in, CV out, note input |
 
@@ -405,8 +404,8 @@ lands on the beat rather than halfway through one. With the transport stopped it
 happens straight away.
 
 The settings pages are separate. Key, scale, octave, output, ports and CCs are
-preferences, along with CV, note input and the faceplate override: saved
-automatically as you change them and shared by every scene.
+preferences, along with CV and note input: saved automatically as you change them
+and shared by every scene.
 
 ---
 
