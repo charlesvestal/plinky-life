@@ -385,6 +385,7 @@ struct life : panel_t {
     uint64_t cc_in_pending;
     uint32_t musical_state_seen;   /* so we notice key or scale changed elsewhere */
     uint32_t plate_log_us;         /* when the front panel was last reported */
+    bool plate_log_was;            /* the last reported value of plate_is_printed() */
 
     /* Read at CONSTRUCTION, in a member initialiser, which is what grid.cpp
        does and the only place it works.
@@ -394,8 +395,6 @@ struct life : panel_t {
        the firmware knows a panel is mounted, but the code is only readable
        early. Reading it per frame looked tidier and silently broke detection. */
     int plate_at_construct = get_frontpanel_code();
-    uint32_t plate_log_us = 0;
-    bool plate_log_was = false;
 
     /* Note input. on_midi records; on_ui paints, because touching the world is
        exactly what the sequence lock exists to protect. */
@@ -502,6 +501,7 @@ struct life : panel_t {
         panel_t::on_load_finished();
 
         plate_log_us = 0;   /* log the front panel promptly after a load */
+        plate_log_was = false;
 
         /* SYSTEM_NOTES.md section 6b: setup_default_panel_state() does NOT run on
            a staged load, which is how the IDE loads a panel. The arena is zeroed,
