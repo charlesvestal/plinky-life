@@ -3107,7 +3107,14 @@ struct life : panel_t {
            the system copies the live panel's declared settings into the staged
            instance in memory before deserialising, so a settings field carries
            the plate across while a re-read cannot. */
-        { int c = get_frontpanel_code();
+        /* Seed from THIS instance's construction reading first, and only fall
+           back to a live one. On a Chords unit the construction reading is 32
+           and the live reading is 0 forever, so seeding from the live reading
+           alone - which is what this did - never stored anything, and an
+           instance later constructed at a moment when the straps do not read had
+           nothing to inherit. Settings are copied into a staged instance before
+           it deserialises, so this is what carries the plate across a load. */
+        { int c = plate_boot ? plate_boot : get_frontpanel_code();
           if (c && c != plate_saved) { plate_saved = (uint8_t)c; settings_dirty = true; }
           uint32_t now = time_us();
           if (!plate_log_us || (uint32_t)(now - plate_log_us) > 3000000u) {
