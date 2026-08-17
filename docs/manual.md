@@ -186,7 +186,7 @@ circles. On a plain faceplate it takes rows 0 to 14.
 It is always in key. The scale and root come from the same place as everything
 else, so it follows `KEY` and `SCAL` without being told.
 
-`(0,15)` goes back to the voice editor, `×` goes back to the world.
+`(2,15)` goes back to the voice editor, `×` goes back to the world.
 
 ### Rate is where the groove comes from
 
@@ -207,11 +207,12 @@ that voice's slot.
 `(2,15)` flips between the two voice pages in both directions. Row 15 is the same
 everywhere.
 
-Four controls, each off at the left-hand pad and turning up from there. One
+Four behaviours, each off at the left-hand pad and turning up from there. One
 control both switches a behaviour on and sets how hard it bites.
 
 | Row | | |
 |---|---|---|
+| 1 | voice | which voice you are editing (blank faceplates only) |
 | 3 | chance | how much lone cells get skipped |
 | 5 | ratchet | how much a crowded cell repeats inside its step |
 | 7 | tie | how often a cell that survived holds instead of striking again |
@@ -256,7 +257,8 @@ reads `WALK` and order reads `FWD`.
 Voice editor, then `(1,15)`.
 
 This is the Plinky synth editor you already know, pointed at the selected voice.
-It rearranges itself to match your faceplate, so you do not have to tell it which
+It reads your faceplate at boot and rearranges itself to match. If it guesses
+wrong, the `PLTE` settings page forces the layout. Otherwise you do not tell it which
 overlay you have. The second screen names the layout you are looking at.
 
 ### On Chords and Drums
@@ -273,7 +275,7 @@ pad sits under the label that names what it does.
 | `x8`, rows 7–13 | the MOD and XY buttons |
 | `x9–15`, rows 7–13 | the XY pad |
 | `(0,0)`–`(3,0)` | switch voice, under the printed ALL TREBLE BASS MELODY |
-| `(0,14)` | back to the voice editor |
+| `(0,15)`-`(3,15)` | the shared nav strip; `(2,15)` returns to the voice editor |
 
 ### On Blocks and Toadstep
 
@@ -286,7 +288,7 @@ pad sits under the label that names what it does.
 | `x8–15`, rows 10–14 | the XY pad, with LFO and envelope buttons down its right edge |
 | `(0,10)`–`(3,10)` | switch voice, the editor follows |
 | `(0,12)`–`(5,12)` | simple · tune · chop · loop · sync · lowpass gate |
-| `(0,14)` | back to the voice editor |
+| `(0,15)`-`(3,15)` | the shared nav strip; `(2,15)` returns to the voice editor |
 
 The column order here already matches Toadstep's printed faders. Blocks prints no
 labels at all.
@@ -305,10 +307,11 @@ On Chords and Drums the file grid sits on the printed pad circles and the two
 buttons land under the printed SAVE and LOAD. Transport stays live here, and `×`
 gets you out.
 
-On those plates the four voice pads at `(0,0)`–`(3,0)` follow you everywhere —
-the settings pages, both pickers, the voice editor, the sound page and the play
+On those plates the four voice pads at `(0,0)`–`(3,0)` follow you nearly
+everywhere — the preset picker, the voice editor, the sound page and the play
 surface — so the voice you are working on is always the same four pads in the
-same place.
+same place. The settings pages and the scene page are the exceptions; neither is
+per-voice.
 
 ---
 
@@ -368,6 +371,7 @@ value. The second screen explains each page as you land on it.
 | `KEY ` `SCAL` `OCT ` | musical | key, scale, base octave |
 | `GEN ` `RULE` `FLOR` `SEED` `STAB` | the world | tempo, law, and keeping it alive |
 | `SWNG` `SWPT` | feel | swing amount and shuffle pattern |
+| `PLTE` | faceplate | auto-detect, or force Blocks, Chords or Drums |
 | `OUT ` `PORT` | output | synth, MIDI or both, and which ports |
 | `CC  ` `CIN ` `COUT` `CV  ` `NIN ` | control | CCs out and in, CV out, note input |
 
@@ -386,15 +390,16 @@ on the left, slots on the right, save and load at `(12,14)` and `(13,14)`, under
 the printed labels on Chords and Drums.
 
 A scene holds the world itself, every live cell, plus every voice's rate, pick,
-order, channel, pitch, length and mute, and the generation rate and respawn
-settings. Load one back and you get the same world and the same four voices.
+order, channel, pitch, length, accent and mute, its whole behaviour page, and the
+rule, the swing, the generation rate and the respawn settings. Load one back and you get the same world and the same four voices.
 
 Loading waits for the next generation step before it swaps, so a scene change
 lands on the beat rather than halfway through one. With the transport stopped it
 happens straight away.
 
 The settings pages are separate. Key, scale, octave, output, ports and CCs are
-preferences, saved automatically as you change them and shared by every scene.
+preferences, along with CV, note input and the faceplate override: saved
+automatically as you change them and shared by every scene.
 
 ---
 

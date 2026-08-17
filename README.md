@@ -51,8 +51,8 @@ build/            amalgamation into life.cpp
 docs/             manual, generated pad maps, design spec
 ```
 
-The five headers are pure functions of plain data with no Plinky API in them, which is why they
-run natively — the musical logic is proved on a laptop and `panel.cpp` is thin glue. Nearly 9,000
+The seven headers are pure functions of plain data with no Plinky API in them, which is why they
+run natively — the musical logic is proved on a laptop and `panel.cpp` is thin glue. Over 34,000
 assertions cover the world, the selection rules, the scale tables and the note lifecycle.
 
 The pad maps in the manual are generated from the same layout table the panel uses, so they can't

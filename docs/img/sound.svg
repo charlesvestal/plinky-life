@@ -320,6 +320,6 @@
 <text class="t" x="654" y="431">simple / tune / chop /</text>
 <text class="t" x="654" y="448">loop / sync / lowpass gate</text>
 <text class="t" x="654" y="465"></text>
-<text class="h" x="654" y="482">(0,14)  back</text>
+<text class="h" x="654" y="482">(0,15)-(3,15)  nav strip</text>
 <text class="t" x="654" y="499">x returns to the world.</text>
 </svg>

@@ -407,12 +407,12 @@ def sound_printed():
         ("h", "x9-15, rows 7-13"),
         ("t", "the XY pad"),
         ("t", ""),
-        ("h", "x6-9, row 1"),
+        ("h", "x0-3, row 0"),
         ("t", "switch voice - under the"),
-        ("t", "printed TREBLE MID BASS"),
+        ("t", "printed ALL TREBLE BASS"),
         ("t", "MELODY"),
         ("t", ""),
-        ("h", "(0,14)  back"),
+        ("h", "(0,15)-(3,15)  nav strip"),
     ])
     out.append("</svg>")
     return "\n".join(out)
@@ -549,19 +549,36 @@ def sound():
         ("t", "simple / tune / chop /"),
         ("t", "loop / sync / lowpass gate"),
         ("t", ""),
-        ("h", "(0,14)  back"),
+        ("h", "(0,15)-(3,15)  nav strip"),
         ("t", "x returns to the world."),
     ])
     out.append("</svg>")
     return "\n".join(out)
 
 
+import os as _os
+
 def check_constants():
+    s_all = open(__file__).read()
     """Guard against a repeat of PLY_X being spelled PLAY_X and quietly moving
     the transport pad. Generated maps only stay honest if the generator does."""
     assert (MOD_X, STOP_X, PLAY_X, ROW) == (13, 14, 15, 15), "transport moved"
     navx = [n[0] for n in NAV]
     assert navx == [0, 1, 2, 3], "the nav strip moved"
+
+    # Captions are documentation too, and stale ones survived for months because
+    # only their pixel width was ever checked. Assert the coordinates they claim.
+    import re as _re
+    src = open(_os.path.join(_os.path.dirname(__file__), "..", "src", "panel.cpp")).read()
+    rows = _re.search(r"life_param_rows\[\][^=]*=\s*\{(.*?)\};", src, _re.S)
+    assert rows, "cannot find life_param_rows to check captions against"
+    assert "struct life :" in src, "the panel struct was renamed; the maps may be stale"
+    # built at runtime so these needles do not match this check's own text
+    back_pad = "(0," + "14)"
+    old_sel = "x6" + "-9"
+    captions = "".join(t for t in _re.findall(r'\("[ht]",\s*"([^"]*)"\)', s_all))
+    assert back_pad not in captions, "a caption still claims a back pad on the sound page"
+    assert old_sel not in captions, "a caption still puts the voice selector on the wrong pads"
     assert len(set(navx) | {MOD_X, STOP_X, PLAY_X}) == 7, "a nav pad shares a column"
 
 

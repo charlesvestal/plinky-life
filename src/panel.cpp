@@ -1472,11 +1472,6 @@ struct life : panel_t {
        played here sound and nothing else: they do not draw cells, because the
        point is to perform over the world rather than to disturb it.
 
-       Rows are strings and row 0 is the highest, the same way the world reads,
-       so a row here is the degree it would be over there. Moving right along a
-       row climbs the scale from that row's root, which is the layout a Plinky
-       player already knows.
-
        It is always in key: the scale and root come from the instrument's
        globals, so it follows KEY and SCAL like everything else. */
 
