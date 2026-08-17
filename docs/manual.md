@@ -419,16 +419,16 @@ so the rest of the Plinky follows along.
 ## 7. Saving
 
 Press the right side button down from the world to reach the scene page. Folders
-on the left, slots on the right, save and load at `(12,14)` and `(13,14)`, under
-the printed labels on Chords and Drums.
+on the left, slots on the right, and the standard Plinky save and load buttons in
+the bottom corner: `(14,15)` cancels, `(15,15)` loads the slot you picked. Hold
+`(15,15)` to save into it instead.
 
 A scene holds the world itself, every live cell, plus every voice's rate, pick,
 order, channel, pitch, length, accent and mute, its whole behaviour page, and the
 rule, the swing, the generation rate and the respawn settings. Load one back and
 you get the same world and the same four voices.
 
-Loading swaps straight away. A scene replaces the world and all four voices at
-once, so there is no half-finished step to land on.
+Loading swaps straight away and takes you back to the world.
 
 The settings pages are separate. Key, scale, octave, output, ports and CCs are
 preferences, along with CV and note input: saved automatically as you change them

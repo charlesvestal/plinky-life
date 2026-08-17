@@ -1346,7 +1346,7 @@ struct life : panel_t {
     voice_notes_t notes[LIFE_NUM_VOICES];
     voice_allocator_t allocator;
     preset_pages_t preset_pages;   /* the stock synth editor, hosted per voice */
-    file_picker_t scene_picker;    /* scenes, placed by us - see draw_scene_page */
+    panel_page_t scene_page;       /* the stock whole-panel save/load page */
     play_surface_t play_surface;   /* play the selected voice over the running world */
     uint8_t string_roots[16];
 
@@ -1557,6 +1557,13 @@ struct life : panel_t {
         clamp_settings();
         unpack_world();
         rebuild_runtime();
+
+        /* Silence every voice this panel can own. On a staged load the previous
+           instance is replaced wholesale, and rebuild_runtime only clears the
+           NEW object's bookkeeping - it cannot send a note-off for something the
+           old one left sounding. MIDI needs nothing: it is level-triggered, so a
+           note stops being declared and releases itself. */
+        for (int v = 0; v < MAX_VOICES; ++v) synth_note_up(v);
 
         if (fresh) {
             /* An empty Game of Life stays empty forever. Seed it so the panel is
@@ -1977,7 +1984,6 @@ struct life : panel_t {
             for (int i = 0; i < gen_edges; ++i) step_generation();
         }
 
-        poll_staged_scene_seq();
 
         uint32_t now = time_us();
         bool seeked = has_transport_just_seeked();
@@ -2750,41 +2756,22 @@ struct life : panel_t {
        panel_load_button only STAGES a load. Finalising in the same frame races
        the deserialise, so the documented shape is to poll is_panel_load_staged()
        and finalise once it reports complete. */
-    /* Page 1's window is at logical y = 16, so everything on it is drawn there.
-       The grid is one window onto a taller surface and set_led/button take
-       ABSOLUTE logical y, so a page drawn at y 0..15 while the window sits at
-       16..31 is simply off screen - which is what this page was doing, picker,
-       buttons and all. Both stock panels that add a second page pass 16. */
+    /* The stock whole-panel save/load page, placed at page 1's logical y.
+
+       This was hand-built from picker pieces because an earlier note claimed the
+       wrapper hardcodes its buttons into the transport corner. It does place
+       them at (14, y+15) and (15, y+15) - but on page 1 that is logical y 31,
+       page 1's own bottom row, nowhere near page 0's transport. There was never
+       a conflict to avoid.
+
+       The hand-built version also used panel_load_button, which is not the load
+       path the wrapper uses: saveload() drives panel_ok_button, which returns 1
+       for a load, and then calls request_panel_load_finalise() itself. Pressing
+       LOAD deserialised the file and then nothing committed it. */
     void draw_scene_page(void) {
-        int grid_y = LIFE_PAGE1_Y + (plate_is_printed() ? 2 : 0);
-        scene_picker.panel_picker(grid_y, grid_y + 8, FLAG_PICKER_ENABLE_DELETE);
-
-        if (scene_picker.panel_save_button(LIFE_SAVE_X, LIFE_PAGE1_Y + LIFE_FILE_BTN_Y))
-            scroll_to_page(0);
-        /* The return value is deliberately ignored: it reports whether the load
-           completed inline, and a load that stages instead returns false.
-           on_sequence commits whatever stages. */
-        (void)scene_picker.panel_load_button(LIFE_LOAD_BTN_X, LIFE_PAGE1_Y + LIFE_FILE_BTN_Y);
+        scene_page.saveload(LIFE_PAGE1_Y, true, FLAG_PICKER_ENABLE_DELETE);
     }
 
-    /* Commit a staged panel load, from on_sequence.
-
-       This is polled unconditionally rather than being armed by the load button.
-       file_picker_t::panel_load_button returns whatever
-       load_panel_from_selected_slot returns, and a load that STAGES rather than
-       completing inline returns false - so arming from the button meant the
-       finalise was never requested and pressing LOAD did nothing at all, which
-       is exactly how it behaved on hardware.
-
-       is_panel_load_staged() is documented as "true while a staged panel load is
-       complete and waiting for a commit request", so if it is up, committing it
-       is the whole job. Voices are released first: the swap replaces every voice
-       and a note sounding across it would never be turned off. */
-    void poll_staged_scene_seq(void) {
-        if (!is_panel_load_staged()) return;
-        for (int v = 0; v < LIFE_NUM_VOICES; ++v) release_voice_locked(v);
-        (void)scene_picker.request_panel_load_finalise();
-    }
 
     /* Four voice selectors at the top left, on printed plates only.
 
@@ -3129,8 +3116,8 @@ struct life : panel_t {
         }
 
         bool on_scene_picker = (page == 1);
-        if (on_scene_picker && !scene_picker_open) scene_picker.reset_which_slot_is_selected();
-        if (scene_picker_open && !on_scene_picker) scene_picker.on_done();
+        if (on_scene_picker && !scene_picker_open) scene_page.picker.reset_which_slot_is_selected();
+        if (scene_picker_open && !on_scene_picker) scene_page.picker.on_done();
         scene_picker_open = on_scene_picker;
 
         if (page < 0) {
