@@ -7,13 +7,13 @@ The 16×16 grid is a living palette, not a piano roll: **columns are steps, rows
 degrees**, and a Conway world rewrites the whole grid underneath you on its own clock. Four
 independent voices walk through it at their own speeds, playing whatever they find alive.
 
-**An empty column is a rest** — which is what turns the shape of the world into rhythm.
+**An empty column is a rest**, which is what turns the shape of the world into rhythm.
 
-**→ [Manual](docs/manual.md)** — how to play it, with pad maps of every mode.
+**→ [Manual](docs/manual.md)**: how to play it, with pad maps of every mode.
 
 ## The panel
 
-**[`life.cpp`](https://raw.githubusercontent.com/charlesvestal/plinky-life/main/life.cpp)** — load this into the Plinky IDE.
+**[`life.cpp`](https://raw.githubusercontent.com/charlesvestal/plinky-life/main/life.cpp)**: load this into the Plinky IDE.
 
 ## Building
 
@@ -25,14 +25,14 @@ sh build/amalgamate.sh       # just produce life.cpp
 python3 docs/make_maps.py    # regenerate the manual's pad maps
 ```
 
-`src/panel.cpp` does not compile on its own — panel code can't use `#include`, and it only
+`src/panel.cpp` does not compile on its own. Panel code cannot use `#include`, and it only
 type-checks once the IDE injects the SDK headers. `amalgamate.sh` splices the pure headers in
 ahead of it to produce the single `life.cpp` that gets flashed.
 
 `harness/plinky_stubs.h` is a transcription of the published API, not the SDK. It exists so the
 generated file can be type-checked locally instead of flash-and-see. **If it and the real
-firmware disagree, the firmware is right** — it has been wrong at least once, and the resulting
-errors only showed up server-side.
+firmware disagree, the firmware is right**. It has been wrong several times, and the resulting
+errors only showed up server-side or, worse, as behaviour that made no sense on the device.
 
 ## Layout
 
@@ -52,18 +52,20 @@ docs/             manual, generated pad maps, design spec
 ```
 
 The seven headers are pure functions of plain data with no Plinky API in them, which is why they
-run natively — the musical logic is proved on a laptop and `panel.cpp` is thin glue. Over 34,000
+run natively. The musical logic is proved on a laptop and `panel.cpp` is thin glue. Over 34,000
 assertions cover the world, the selection rules, the scale tables and the note lifecycle.
 
-The pad maps in the manual are generated from the same layout table the panel uses, so they can't
-drift from what the pads actually do.
+The pad maps in the manual are generated from the same layout table the panel uses, and
+`make_maps.py` asserts its captions and page counts against `panel.cpp`, so they cannot quietly
+drift from what the pads do. The editor pages have a map per faceplate, because the panel lays
+them out differently on Chords and Drums.
 
 ## Design notes
 
 `docs/superpowers/specs/` holds the design spec, including the deviations made during
 implementation and why.
 
-`SYSTEM_NOTES.md` is the working reference for Plinky 12 panel development generally — hardware,
+`SYSTEM_NOTES.md` is the working reference for Plinky 12 panel development generally: hardware,
 execution model, memory, and the gotchas that cost real debugging time. Not specific to this
 panel.
 

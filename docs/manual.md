@@ -134,12 +134,22 @@ a time so you can hunt for a shape you like. Step works even while stopped.
 
 ## 3. The voice editor
 
+The voice pads sit on row 1 on a plain faceplate. On Chords and Drums they move
+to row 0, under the printed ALL TREBLE BASS MELODY, and row 1 goes dark.
+
+<details open>
+<summary><b>Blocks and Toadstep</b></summary>
+
 ![Voice editor, blank faceplate](img/voice.svg)
 
-On Chords and Drums the voice pads move to row 0, under the printed ALL TREBLE
-BASS MELODY, and row 1 goes dark.
+</details>
+
+<details>
+<summary><b>Chords and Drums</b></summary>
 
 ![Voice editor, Chords and Drums](img/voice_printed.svg)
+
+</details>
 
 `×` then one of the four edit pads.
 
@@ -207,9 +217,19 @@ that voice's slot.
 
 ### The behaviour page
 
+<details open>
+<summary><b>Blocks and Toadstep</b></summary>
+
 ![Behaviour page, blank faceplate](img/chance.svg)
 
+</details>
+
+<details>
+<summary><b>Chords and Drums</b></summary>
+
 ![Behaviour page, Chords and Drums](img/chance_printed.svg)
+
+</details>
 
 `(2,15)` flips between the two voice pages in both directions. Row 15 is the same
 everywhere.
@@ -264,11 +284,12 @@ reads `WALK` and order reads `FWD`.
 Voice editor, then `(1,15)`.
 
 This is the Plinky synth editor you already know, pointed at the selected voice.
-It reads your faceplate at boot and rearranges itself to match, so you do not
-have to tell it which
-overlay you have. The second screen names the layout you are looking at.
+It reads your faceplate at boot and rearranges itself to match, so you never have
+to tell it which overlay you have. The second screen names the layout you are
+looking at.
 
-### On Chords and Drums
+<details open>
+<summary><b>Chords and Drums</b></summary>
 
 ![Sound page on Chords and Drums](img/sound_printed.svg)
 
@@ -284,7 +305,10 @@ pad sits under the label that names what it does.
 | `(0,0)`–`(3,0)` | switch voice, under the printed ALL TREBLE BASS MELODY |
 | `(0,15)`-`(3,15)` | the shared nav strip; `(2,15)` returns to the voice editor |
 
-### On Blocks and Toadstep
+</details>
+
+<details>
+<summary><b>Blocks and Toadstep</b></summary>
 
 ![Sound page, standard layout](img/sound.svg)
 
@@ -299,6 +323,8 @@ pad sits under the label that names what it does.
 
 The column order here already matches Toadstep's printed faders. Blocks prints no
 labels at all.
+
+</details>
 
 ### Loading a preset
 
@@ -315,9 +341,9 @@ buttons land under the printed SAVE and LOAD. Transport stays live here, and `×
 gets you out.
 
 On those plates the four voice pads at `(0,0)`–`(3,0)` follow you nearly
-everywhere — the preset picker, the voice editor, the sound page and the play
-surface — so the voice you are working on is always the same four pads in the
-same place. The settings pages and the scene page are the exceptions; neither is
+everywhere: the preset picker, the voice editor, the sound page and the play
+surface. The voice you are working on is always the same four pads in the same
+place. The settings pages and the scene page are the exceptions; neither is
 per-voice.
 
 ---
@@ -356,7 +382,8 @@ Mixing them across the four voices is most of the instrument.
 Every pick except `ALL` plays one note per step, so four voices give you up to
 four notes. `ALL` plays the whole column.
 
-Life gives the sequencer eight of the synth's voices, and keeps four for the play surface. Each voice you can hear is guaranteed one of
+Life gives the sequencer eight of the synth's voices, and keeps four for the
+play surface. Each voice you can hear is guaranteed one of
 them, so a chord can never cut off a melody, and whatever is spare goes to the
 voices playing `ALL`. Mute the other three and a single `ALL` voice gets all
 eight to itself.
@@ -397,7 +424,8 @@ the printed labels on Chords and Drums.
 
 A scene holds the world itself, every live cell, plus every voice's rate, pick,
 order, channel, pitch, length, accent and mute, its whole behaviour page, and the
-rule, the swing, the generation rate and the respawn settings. Load one back and you get the same world and the same four voices.
+rule, the swing, the generation rate and the respawn settings. Load one back and
+you get the same world and the same four voices.
 
 Loading waits for the next generation step before it swaps, so a scene change
 lands on the beat rather than halfway through one. With the transport stopped it
