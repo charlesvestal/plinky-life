@@ -613,8 +613,7 @@ def check_constants():
     man = open(_os.path.join(_os.path.dirname(__file__), "manual.md")).read()
     listed = sum(man.count("`" + n + "`") > 0 for n in
                  ("KEY ", "SCAL", "OCT ", "GEN ", "RULE", "FLOR", "SEED", "STAB",
-                  "SWNG", "SWPT", "OUT ", "PORT", "CC  ", "CIN ", "COUT", "CV  ", "NIN ",
-                  "PLTE"))
+                  "SWNG", "SWPT", "OUT ", "PORT", "CC  ", "CIN ", "COUT", "CV  ", "NIN "))
     assert listed == int(pages.group(1)), \
         f"manual lists {listed} settings pages, the panel has {pages.group(1)}"
 

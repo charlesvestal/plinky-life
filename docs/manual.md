@@ -284,9 +284,8 @@ reads `WALK` and order reads `FWD`.
 Voice editor, then `(1,15)`.
 
 This is the Plinky synth editor you already know, pointed at the selected voice.
-It reads your faceplate at boot and rearranges itself to match. Some units do not
-report their overlay at all, so if the layout comes up wrong, the `PLTE` settings
-page forces it. The second screen names the layout you are looking at.
+It reads your faceplate at boot and rearranges itself to match. The second screen
+names the layout you are looking at.
 
 <details open>
 <summary><b>Chords and Drums</b></summary>
@@ -407,7 +406,6 @@ value. The second screen explains each page as you land on it.
 | `SWNG` `SWPT` | feel | swing amount and shuffle pattern |
 | `OUT ` `PORT` | output | synth, MIDI or both, and which ports |
 | `CC  ` `CIN ` `COUT` `CV  ` `NIN ` | control | CCs out and in, CV out, note input |
-| `PLTE` | faceplate | auto, or force Blocks, Chords or Drums |
 
 They run in that order, so the pages you set once are at the end and stay out of
 your way.
