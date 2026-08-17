@@ -134,7 +134,12 @@ a time so you can hunt for a shape you like. Step works even while stopped.
 
 ## 3. The voice editor
 
-![Voice editor](img/voice.svg)
+![Voice editor, blank faceplate](img/voice.svg)
+
+On Chords and Drums the voice pads move to row 0, under the printed ALL TREBLE
+BASS MELODY, and row 1 goes dark.
+
+![Voice editor, Chords and Drums](img/voice_printed.svg)
 
 `×` then one of the four edit pads.
 
@@ -202,7 +207,9 @@ that voice's slot.
 
 ### The behaviour page
 
-![Behaviour page](img/chance.svg)
+![Behaviour page, blank faceplate](img/chance.svg)
+
+![Behaviour page, Chords and Drums](img/chance_printed.svg)
 
 `(2,15)` flips between the two voice pages in both directions. Row 15 is the same
 everywhere.

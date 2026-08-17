@@ -291,9 +291,9 @@ def action():
 
 
 # --------------------------------------------------------------------------- voice
-def voice():
+def voice(printed=False):
     w, h = grid_size(300)
-    out = svg_open(w, h, "plinky-life voice editor")
+    out = svg_open(w, h, "plinky-life voice editor" + (" (Chords/Drums)" if printed else ""))
     axes(out)
     sel = {1: 1, 3: 4, 5: 7, 7: 0, 9: 4, 11: 5, 13: 6}   # the illustrated voice 2
     rows = {y: (n, name) for y, n, name, _ in PARAM_ROWS}
@@ -305,7 +305,9 @@ def voice():
                 pad(out, x, y, "#0e0e12")
                 continue
             n, _ = rows[y]
-            if x >= n:
+            if y == 1 and printed:
+                pad(out, x, y, "#0e0e12")      # suppressed: the shared selector is row 0
+            elif x >= n:
                 pad(out, x, y, "#0e0e12")
             elif y == 1:
                 pad(out, x, y, V[x] if x == sel[y] else V_DIM[x])
@@ -315,6 +317,9 @@ def voice():
                 pad(out, x, y, "#33333c")
             else:
                 pad(out, x, y, V_DIM[1])
+    if printed:
+        for v in range(4):
+            pad(out, v, 0, V[v] if v == 1 else V_DIM[v])
     for nx, label, colour in NAV:
         pad(out, nx, SOUND_Y, colour, label, "#fff" if label == "LD" else "#000")
     transport(out)
@@ -327,8 +332,12 @@ def voice():
         out.append(f'<text class="h" x="{lx}" y="{py - 2}">{esc(name)}</text>')
         out.append(f'<text class="k" x="{lx}" y="{py + 12}">{esc(desc)}</text>')
     caption(out, w, h,
-            "Selected pad bright; the rest of the row dim. Row 15: LD loads a preset, "
-            "SND edits the sound, P2 flips to the behaviour page, PLY plays this voice by hand.")
+            ("Chords and Drums: the voice pads are row 0, under the printed ALL TREBLE BASS "
+             "MELODY, and row 1 is unused. " if printed else
+             "Blank faceplates: the voice pads are row 1. On Chords and Drums they move to "
+             "row 0 and row 1 goes dark. ")
+            + "Selected pad bright, the rest of the row dim. Row 15: LD loads a preset, "
+              "SND edits the sound, P2 flips to the behaviour page, PLY plays by hand.")
     out.append("</svg>")
     return "\n".join(out)
 
@@ -419,10 +428,10 @@ def sound_printed():
 
 
 # --------------------------------------------------------------------------- chance
-def chance():
+def chance(printed=False):
     """The voice editor's second page: four behaviours read off the world."""
     w, h = grid_size(300)
-    out = svg_open(w, h, "plinky-life voice chance page")
+    out = svg_open(w, h, "plinky-life voice chance page" + (" (Chords/Drums)" if printed else ""))
     axes(out)
     sel = {1: 1, 3: 4, 5: 6, 7: 0, 9: 2, 11: 1}
     rows = {y: n for y, n, _, _ in CHANCE_ROWS}
@@ -434,7 +443,9 @@ def chance():
                 pad(out, x, y, "#0e0e12")
                 continue
             n = rows[y]
-            if x >= n:
+            if y == 1 and printed:
+                pad(out, x, y, "#0e0e12")      # suppressed: the shared selector is row 0
+            elif x >= n:
                 pad(out, x, y, "#0e0e12")
             elif y == 1:
                 pad(out, x, y, V[x] if x == sel[y] else V_DIM[x])
@@ -444,6 +455,9 @@ def chance():
                 pad(out, x, y, "#33333c")
             else:
                 pad(out, x, y, V_DIM[1])
+    if printed:
+        for v in range(4):
+            pad(out, v, 0, V[v] if v == 1 else V_DIM[v])
     for nx, label, colour in NAV:
         pad(out, nx, SOUND_Y, colour, label, "#fff" if label == "LD" else "#000")
     transport(out)
@@ -480,8 +494,11 @@ def chance():
     out.append(f'<text class="k" x="{zx1}" y="{zy1 + 16}" text-anchor="end" fill="{V[3]}">'
                'readout zone - the held value appears here</text>')
     caption(out, w, h,
-            "Left-hand pad of each row is OFF. Hold a pad and the zone furthest from your "
-            "hand is blanked and shows the value, tagged.")
+            ("Chords and Drums: the voice pads are row 0 and row 1 is unused. " if printed else
+             "Blank faceplates: the voice pads are row 1. On Chords and Drums they move to "
+             "row 0. ")
+            + "Left-hand pad of each row is OFF. Hold a pad and the zone furthest from your "
+              "hand is blanked and shows the value, tagged.")
     out.append("</svg>")
     return "\n".join(out)
 
@@ -581,11 +598,21 @@ def check_constants():
     assert old_sel not in captions, "a caption still puts the voice selector on the wrong pads"
     assert len(set(navx) | {MOD_X, STOP_X, PLAY_X}) == 7, "a nav pad shares a column"
 
+    # The editor pages differ by faceplate: the panel suppresses its own VOICE row
+    # on a printed plate and puts the shared selector on row 0 instead
+    # (param_row_for_y: "if (i == 0 && plate_is_printed()) return -1"). Both
+    # variants must exist, or one faceplate reads a map of the other.
+    assert "if (i == 0 && plate_is_printed()) return -1;" in src, \
+        "the printed-plate voice row rule changed; the _printed maps may be wrong"
+    assert PARAM_ROWS[0][0] == 1 and CHANCE_ROWS[0][0] == 1, \
+        "the editor VOICE row moved off row 1"
+
 
 def check_captions():
     """No caption may run off the edge of its own map."""
     import re
-    for name in ("world", "action", "voice", "chance", "sound", "sound_printed"):
+    for name in ("world", "action", "voice", "voice_printed", "chance",
+                 "chance_printed", "sound", "sound_printed"):
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "img", name + ".svg")
         svg = open(path).read()
         width = int(re.search(r'width="(\d+)"', svg).group(1))
@@ -599,8 +626,10 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     outdir = os.path.join(here, "img")
     os.makedirs(outdir, exist_ok=True)
-    for name, fn in (("world", world), ("action", action), ("voice", voice),
-                     ("chance", chance), ("sound", sound), ("sound_printed", sound_printed)):
+    for name, fn in (("world", world), ("action", action),
+                     ("voice", voice), ("voice_printed", lambda: voice(True)),
+                     ("chance", chance), ("chance_printed", lambda: chance(True)),
+                     ("sound", sound), ("sound_printed", sound_printed)):
         path = os.path.join(outdir, name + ".svg")
         with open(path, "w") as f:
             f.write(fn())

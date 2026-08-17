@@ -327,5 +327,6 @@
 <line x1="635" y1="21" x2="635" y2="179" stroke="#e8a72a" stroke-width="1.5"/>
 <text x="330" y="108" text-anchor="middle" fill="#e8a72a" style="font-size:26px;font-weight:700;font-family:ui-monospace,monospace">AC 60</text>
 <text class="k" x="635" y="195" text-anchor="end" fill="#e8a72a">readout zone - the held value appears here</text>
-<text class="t" x="26" y="680">Left-hand pad of each row is OFF. Hold a pad and the zone furthest from your hand is blanked and shows the value, tagged.</text>
+<text class="t" x="26" y="680">Blank faceplates: the voice pads are row 1. On Chords and Drums they move to row 0. Left-hand pad of each row is OFF. Hold a pad and the</text>
+<text class="t" x="26" y="695">zone furthest from your hand is blanked and shows the value, tagged.</text>
 </svg>
