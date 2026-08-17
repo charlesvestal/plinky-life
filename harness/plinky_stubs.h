@@ -512,6 +512,7 @@ struct on_sequence_lock_guard_t {
 
 /* --- panel_t ------------------------------------------------------------- */
 struct panel_t {
+    char song_name[17];   /* user-facing save/controller name (llm.txt:370) */
     virtual ~panel_t() {}
     virtual void setup_default_panel_state() {}
     virtual void on_load_finished(void) {}

@@ -1373,8 +1373,6 @@ struct life_panel : panel_t {
        no release callback, so anything sounding that it did not name this frame
        is ours to stop. */
     uint16_t play_down;            /* surface voices currently sounding */
-    uint16_t dbg_strikes, dbg_moves;   /* counted in the surface callback */
-    uint32_t dbg_last_us;                       /* reported from on_ui, never printf in an IRQ */
     uint8_t play_miss[16];         /* consecutive frames a sounding voice went unreported */
     uint16_t play_seen;            /* named by the callback this frame */
     uint8_t play_note[16];         /* so a slide to a new note retriggers */
@@ -1514,8 +1512,6 @@ struct life_panel : panel_t {
         gen_div_edge_this_frame = false;
         play_down = 0;
         for (int i = 0; i < 16; ++i) play_miss[i] = 0;
-        dbg_strikes = dbg_moves = 0;
-        dbg_last_us = 0;
         play_seen = 0;
         play_active = false;
         picker_channel = -1;
@@ -1557,6 +1553,10 @@ struct life_panel : panel_t {
         pref_cv_out = 1;
         pref_note_in = 1;
         pref_plate = LIFE_PLATE_AUTO;
+
+        /* The user-facing save and controller name. Left unset it takes whatever
+           the firmware defaults to, which showed as "LIFE PANEL". */
+        snprintf(song_name, sizeof(song_name), "LIFE");
     }
 
     void on_load_finished(void) override {
@@ -2179,7 +2179,6 @@ struct life_panel : panel_t {
             stop_transport();
             release_all_voices();
         }
-        printf("life: transport now %s\n", is_transport_playing() ? "playing" : "stopped");
     }
 
     /* Swing is 0..100 in tens, like the behaviour rows. */
@@ -2241,7 +2240,6 @@ struct life_panel : panel_t {
     }
 
     void do_action(int x, int y) {
-        printf("life: action pad (%d,%d)\n", x, y);
         if (y == 10 && x < 11) { swing = (uint8_t)(x * 10); settings_dirty = true; return; }
         if (y == 11 && x < LIFE_NUM_RATES) { gen_rate = (uint8_t)x; settings_dirty = true; return; }
         if (y == 12 && x < LIFE_NUM_RULESETS) {
@@ -2621,8 +2619,6 @@ struct life_panel : panel_t {
         self->play_seen |= (uint16_t)(1u << voice);
 
         bool strike = finger.is_new || !(self->play_down & (1u << voice));
-        if (strike) ++self->dbg_strikes;
-        else if (self->play_note[voice] != (uint8_t)note) ++self->dbg_moves;
 
         self->play_note[voice] = (uint8_t)note;
         play_synth(voice, self->preset_for(self->edit_voice), velocity, note << 8, strike);
@@ -2732,31 +2728,6 @@ struct life_panel : panel_t {
         return "standard";
     }
 
-    /* Report the front panel every two seconds.
-
-       Logging it once at load, or only on change, is useless here: Device Logs
-       cannot be attached during boot, and a value that starts equal to a zeroed
-       member never counts as a change. A heartbeat can be read whenever you get
-       round to connecting. Every thirty seconds once the question is settled -
-       often enough to catch a strap read that starts working, quiet enough to
-       leave in. It also documents the on_ui-returns-0 behaviour in the field,
-       for anyone who hits this on another panel.
-
-       Printed in decimal as well as hex because it is not established that the
-       firmware's printf handles %x - and if it does not, a hex-only readout is
-       a lie about the value rather than a report of it. */
-    void log_plate_periodically(void) {
-        uint32_t now = time_us();
-        if (plate_log_us && (uint32_t)(now - plate_log_us) < 30000000u) return;
-        plate_log_us = now ? now : 1;
-
-        int code = get_frontpanel_code();
-        printf("life: frontpanel now=%d at_construct=%d orient=%d chords=%d drums=%d -> %s\n",
-               code, plate_at_construct, get_frontpanel_orientation(),
-               (code & FRONT_PANEL_CODE_CHORDS) ? 1 : 0,
-               (code & FRONT_PANEL_CODE_DRUMS) ? 1 : 0,
-               plate_layout_name());
-    }
 
     void draw_preset_editor(void) {
         int preset = preset_for(edit_voice);
@@ -3174,26 +3145,11 @@ struct life_panel : panel_t {
     void on_ui(int delta_time_us) override {
         (void)delta_time_us;
 
-        /* Counted on the sequence thread, printed here: printf inside a
-           high-rate interrupt is its own problem, and the counts are what the
-           question needs anyway - how many strikes for one press. */
-        {
-            uint32_t now = time_us();
-            if ((dbg_strikes | dbg_moves) &&
-                (!dbg_last_us || (uint32_t)(now - dbg_last_us) > 2000000u)) {
-                dbg_last_us = now ? now : 1;
-                printf("life: surface strikes=%d moves=%d\n",
-                       (int)dbg_strikes, (int)dbg_moves);
-                dbg_strikes = dbg_moves = 0;
-            }
-        }
-
         if (scene_commit_failed) {
             scene_commit_failed = false;
             printf("life: scene load never staged, commit abandoned\n");
         }
 
-        log_plate_periodically();
         follow_musical_state();
         apply_pending_cc();
         apply_note_input();
