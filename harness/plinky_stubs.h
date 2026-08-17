@@ -337,6 +337,9 @@ struct file_picker_t {
     int panel_picker(int main_y, int hue_y, int flags = FLAG_PICKER_ENABLE_DELETE);
     bool panel_save_button(int x, int y);
     bool panel_load_button(int x, int y);
+    bool cancel_button(int x, int y);
+    /* returns 0 for nothing, 1 for a load, 2 for a save on long press */
+    int panel_ok_button(bool allow_save_on_long_press, int x, int y);
     bool request_panel_load_finalise(void);
     void on_done(void);   /* "call this when you close the file picker" */
 };

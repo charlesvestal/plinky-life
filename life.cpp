@@ -2756,20 +2756,31 @@ struct life : panel_t {
        panel_load_button only STAGES a load. Finalising in the same frame races
        the deserialise, so the documented shape is to poll is_panel_load_staged()
        and finalise once it reports complete. */
-    /* The stock whole-panel save/load page, placed at page 1's logical y.
+    /* The stock page's own calls, in its own order, placed for the faceplate.
 
-       This was hand-built from picker pieces because an earlier note claimed the
-       wrapper hardcodes its buttons into the transport corner. It does place
-       them at (14, y+15) and (15, y+15) - but on page 1 that is logical y 31,
-       page 1's own bottom row, nowhere near page 0's transport. There was never
-       a conflict to avoid.
+       panel_page_t::saveload() is the documented wrapper and its mechanism is
+       the right one: panel_ok_button returns 1 for a load, and the load is only
+       committed by request_panel_load_finalise(). An earlier version used
+       panel_load_button instead and nothing ever committed.
 
-       The hand-built version also used panel_load_button, which is not the load
-       path the wrapper uses: saveload() drives panel_ok_button, which returns 1
-       for a load, and then calls request_panel_load_finalise() itself. Pressing
-       LOAD deserialised the file and then nothing committed it. */
+       What the wrapper cannot do is fit a printed plate. It spans all sixteen
+       rows - picker at y..y+8, buttons at y+15 - so on Chords the picker
+       straddles the top control strips and the buttons land under the printed
+       stop and play. Same calls, then, with the picker on the pad circles and
+       the buttons under the printed SAVE and LOAD. */
     void draw_scene_page(void) {
-        scene_page.saveload(LIFE_PAGE1_Y, true, FLAG_PICKER_ENABLE_DELETE);
+        int grid_y = LIFE_PAGE1_Y + (plate_is_printed() ? 2 : 0);
+        scene_page.picker.panel_picker(grid_y, grid_y + 8, FLAG_PICKER_ENABLE_DELETE);
+
+        int by = LIFE_PAGE1_Y + LIFE_FILE_BTN_Y;
+        if (scene_page.picker.panel_save_button(LIFE_SAVE_X, by))
+            scroll_to_page(0);
+
+        /* No save on long press: SAVE has its own pad, under its own label. */
+        if (scene_page.picker.panel_ok_button(false, LIFE_LOAD_BTN_X, by) == 1) {
+            scroll_to_page(0);
+            scene_page.picker.request_panel_load_finalise();
+        }
     }
 
 
