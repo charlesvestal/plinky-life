@@ -1407,6 +1407,7 @@ struct life : panel_t {
     uint8_t pref_cv_out;      /* drive the two CV outputs from the world */
     uint8_t pref_note_in;     /* played notes draw cells into the world */
     uint8_t plate_saved;      /* last non-zero frontpanel code, carried across loads */
+    uint32_t plate_log_us;    /* rate limit for the plate report */
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
@@ -1499,6 +1500,7 @@ struct life : panel_t {
         play_active = false;
         picker_channel = -1;
         scene_picker_open = false;
+        plate_log_us = 0;
         for (int i = 0; i < 16; ++i) play_note[i] = 0;
         note_in_count = 0;
         note_write_x = 0;
@@ -2691,17 +2693,20 @@ struct life : panel_t {
        unit appeared to report no plate; that turned out to be this panel reading
        the code from on_ui rather than at construction, so the setting existed to
        work around a bug of ours and was removed once the bug was. */
+    /* One place decides, so nothing can disagree with anything else.
+
+       plate_boot is this instance's own reading, taken at construction. The
+       carried value is only consulted when this instance read nothing at all,
+       which is the staged-load case: a scene load constructs a new instance at
+       load time, and on this hardware the code is not readable then. */
+    int plate_code(void) const { return plate_boot ? plate_boot : (int)plate_saved; }
+
     bool plate_is_printed(void) const {
-        /* This instance's own reading wins when it has one, so moving the panel
-           to a different faceplate is picked up at the next boot. The carried
-           value is the fallback for an instance that was constructed at a moment
-           when the code was not readable. */
-        int code = plate_boot ? plate_boot : (int)plate_saved;
-        return (code & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
+        return (plate_code() & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
     }
 
     const char *plate_layout_name(void) const {
-        int code = plate_boot ? plate_boot : (int)plate_saved;
+        int code = plate_code();
         if (code & FRONT_PANEL_CODE_CHORDS) return "Chords";
         if (code & FRONT_PANEL_CODE_DRUMS) return "Drums";
         if (code & FRONT_PANEL_CODE_TOADSTEP) return "Toadstep";
@@ -3103,7 +3108,14 @@ struct life : panel_t {
            instance in memory before deserialising, so a settings field carries
            the plate across while a re-read cannot. */
         { int c = get_frontpanel_code();
-          if (c && c != plate_saved) { plate_saved = (uint8_t)c; settings_dirty = true; } }
+          if (c && c != plate_saved) { plate_saved = (uint8_t)c; settings_dirty = true; }
+          uint32_t now = time_us();
+          if (!plate_log_us || (uint32_t)(now - plate_log_us) > 3000000u) {
+              plate_log_us = now ? now : 1;
+              printf("life: plate boot=%d live=%d saved=%d used=%d printed=%d\n",
+                     plate_boot, c, (int)plate_saved, plate_code(),
+                     plate_is_printed() ? 1 : 0);
+          } }
 
 
         follow_musical_state();
@@ -3601,7 +3613,11 @@ struct life : panel_t {
         FIELD("ccout", pref_cc_out);
         FIELD("cvout", pref_cv_out);
         FIELD("notein", pref_note_in);
-        FIELD("plate", plate_saved);
+        /* NOT "plate": that key held the old PLTE override, an enum where 1 was
+           BLNK, 2 was CHRD and 3 was DRUM. Read into a frontpanel code those are
+           nonsense - 2 is TOADSTEP - so an existing settings file would poison
+           this field. A new key ignores them. */
+        FIELD("fpcode", plate_saved);
         OBJECT_END(s);
 
         clamp_settings();
