@@ -515,6 +515,9 @@ struct on_sequence_lock_guard_t {
 
 /* --- panel_t ------------------------------------------------------------- */
 struct panel_t {
+    virtual bool on_prepare_staged_load(panel_t *staged_state, size_t panel_memory_size) {
+        (void)staged_state; (void)panel_memory_size; return true;
+    }
     char song_name[17];   /* user-facing save/controller name (llm.txt:370) */
     virtual ~panel_t() {}
     virtual void setup_default_panel_state() {}

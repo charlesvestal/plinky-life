@@ -483,6 +483,26 @@ struct life : panel_t {
         snprintf(song_name, sizeof(song_name), "LIFE");
     }
 
+    /* Hand this instance's faceplate reading to the staged instance.
+
+       The commit is a whole-object memcpy of the staged copy over the live one
+       (panel_t::on_commit_staged_load_audio_thread), so a plain member cannot
+       survive a load: the staged instance was placement-new'd at LOAD time, and
+       on this hardware the straps do not read then, so its plate_boot is 0 and
+       that 0 overwrites the good value read at boot.
+
+       A remembered-song boot follows the same staged sequence, so this happens
+       before the user ever sees a frame.
+
+       This hook runs on the LIVE instance, with the staged pointer, after
+       settings are copied into it and before it is deserialised - the one moment
+       where the reading can be passed across. */
+    bool on_prepare_staged_load(panel_t *staged_state, size_t panel_memory_size) override {
+        if (staged_state && plate_code())
+            ((life *)staged_state)->plate_saved = (uint8_t)plate_code();
+        return panel_t::on_prepare_staged_load(staged_state, panel_memory_size);
+    }
+
     void on_load_finished(void) override {
         panel_t::on_load_finished();
 
@@ -2051,14 +2071,15 @@ struct life : panel_t {
            instance later constructed at a moment when the straps do not read had
            nothing to inherit. Settings are copied into a staged instance before
            it deserialises, so this is what carries the plate across a load. */
-        { int c = plate_boot ? plate_boot : get_frontpanel_code();
+        { int live = get_frontpanel_code();
+          int c = plate_boot ? plate_boot : live;
           if (c && c != plate_saved) { plate_saved = (uint8_t)c; settings_dirty = true; }
           uint32_t now = time_us();
           if (!plate_log_us || (uint32_t)(now - plate_log_us) > 3000000u) {
               plate_log_us = now ? now : 1;
-              printf("life: plate boot=%d live=%d saved=%d used=%d printed=%d\n",
-                     plate_boot, c, (int)plate_saved, plate_code(),
-                     plate_is_printed() ? 1 : 0);
+              printf("life: plate boot=%d live=%d orient=%d saved=%d used=%d printed=%d\n",
+                     plate_boot, live, get_frontpanel_orientation(), (int)plate_saved,
+                     plate_code(), plate_is_printed() ? 1 : 0);
           } }
 
 
@@ -2066,6 +2087,12 @@ struct life : panel_t {
         apply_pending_cc();
         apply_note_input();
 
+
+        /* Every frame, not only on a settings page. flush_settings() used to sit
+           inside the page < 0 branch, so anything set elsewhere - including the
+           faceplate reading - never reached the card unless the user happened to
+           visit a settings page before powering off. */
+        flush_settings();
 
         int page = get_scroll_page();
 
@@ -2115,7 +2142,6 @@ struct life : panel_t {
                page's window is at y -16 or lower, so it was landing a whole
                page away every frame. None of these pages is per-voice anyway. */
             draw_settings(page);
-            flush_settings();
             send_param_ccs();
             return;
         }
