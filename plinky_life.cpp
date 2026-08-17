@@ -1264,6 +1264,11 @@ static const uint8_t life_port_values[5] = {
    a stall cannot burn hundreds of steps inside an interrupt. */
 #define LIFE_MAX_CATCHUP 4
 
+/* How far pressure must move before the voice is told. Pressure jitters by a
+   few counts every frame; without this the surface issued hundreds of velocity
+   updates a second to a voice that had not changed. */
+#define LIFE_VEL_DEADBAND 6
+
 #define LIFE_PAGE1_Y 16
 
 #define LIFE_MAX_BANDS 5
@@ -1405,6 +1410,9 @@ struct life_panel : panel_t {
     uint8_t voice_block[LIFE_PLAY_VOICES];
     int16_t surf_p[LIFE_MAX_BANDS][LIFE_BLOCKS];   /* per large pad, sampled in on_ui */
     uint8_t surf_touches;                          /* distinct fingers on the surface */
+    uint8_t play_vel[16];          /* last velocity actually sent, for the deadband */
+    uint16_t dbg_strikes, dbg_moves, dbg_vel;   /* counted on the sequence thread */
+    uint32_t dbg_last_us;                       /* reported from on_ui, never printf in an IRQ */
     uint8_t play_miss[16];         /* consecutive frames a sounding voice went unreported */
     uint16_t play_seen;            /* named by the callback this frame */
     uint8_t play_note[16];         /* so a slide to a new note retriggers */
@@ -1551,7 +1559,9 @@ struct life_panel : panel_t {
         for (int rg = 0; rg < LIFE_MAX_BANDS; ++rg) {
             for (int b = 0; b < LIFE_BLOCKS; ++b) surf_p[rg][b] = 0;
         }
-        for (int i = 0; i < 16; ++i) play_miss[i] = 0;
+        for (int i = 0; i < 16; ++i) { play_miss[i] = 0; play_vel[i] = 0; }
+        dbg_strikes = dbg_moves = dbg_vel = 0;
+        dbg_last_us = 0;
         play_seen = 0;
         play_active = false;
         picker_channel = -1;
@@ -2634,6 +2644,9 @@ struct life_panel : panel_t {
            called when a note actually starts or changes, and pressure goes
            through set_synth_velocity in between. If the retriggering survives
            this, it is not coming from this panel at all. */
+        if (strike) ++dbg_strikes;
+        else if (note_changed) ++dbg_moves;
+
         if (strike || note_changed) {
             synth_voice_note_t n;
             n.note_q8 = note_q8;
@@ -2645,17 +2658,30 @@ struct life_panel : panel_t {
             n.param_override_idx = (int8_t)VOICE_PARAM_GLIDE;
 
             play_note[voice] = (uint8_t)note;
+            play_vel[voice] = (uint8_t)clamp_int(velocity, 0, 127);
             play_synth(voice, n, strike);
             return;
         }
 
-        /* Pressure while held goes through set_synth_velocity, which is what it
-           is for: play_synth is a note event, this is the continuous control.
+        /* Only when the value actually moves, and only past a deadband.
 
-           It was removed for one build to prove that no per-frame call was
-           involved in the retriggering. It was not - the cause was treating the
-           firm-touch flag as pressure - so expression comes back. */
-        set_synth_velocity(voice, clamp_int(velocity, 0, 127));
+           Removing this call entirely was the one build that stopped the
+           retriggering ("not getting retrigs any more but also not getting
+           pressure"), and putting it back brought them straight back - including
+           while velocity was pinned at 127, so it was the CALL and not the value
+           changing. Pressure jitters every frame, so at frame rate this was
+           several hundred calls a second into a voice that had not changed.
+
+           A deadband keeps expression while a steady finger makes no calls at
+           all. If retriggers survive this, the call cannot be used at all here
+           and pressure has to come from the preset instead. */
+        int v = clamp_int(velocity, 0, 127);
+        int diff = v - (int)play_vel[voice];
+        if (diff < 0) diff = -diff;
+        if (diff < LIFE_VEL_DEADBAND) return;
+        play_vel[voice] = (uint8_t)v;
+        ++dbg_vel;
+        set_synth_velocity(voice, v);
     }
 
     /* The note a block plays.
@@ -3489,6 +3515,20 @@ struct life_panel : panel_t {
 
     void on_ui(int delta_time_us) override {
         (void)delta_time_us;
+
+        /* Counted on the sequence thread, printed here: printf inside a
+           high-rate interrupt is its own problem, and the counts are what the
+           question needs anyway - how many strikes for one press. */
+        {
+            uint32_t now = time_us();
+            if ((dbg_strikes | dbg_moves | dbg_vel) &&
+                (!dbg_last_us || (uint32_t)(now - dbg_last_us) > 2000000u)) {
+                dbg_last_us = now ? now : 1;
+                printf("life: surface strikes=%d moves=%d velupd=%d\n",
+                       (int)dbg_strikes, (int)dbg_moves, (int)dbg_vel);
+                dbg_strikes = dbg_moves = dbg_vel = 0;
+            }
+        }
 
         if (scene_commit_failed) {
             scene_commit_failed = false;
