@@ -2,8 +2,7 @@
 
 <img src="artwork.png" width="240" align="right" alt="A Life world with four voice columns tinted">
 
-A Game of Life sequencer panel for the [Plinky 12](https://plinky12.com), in the spirit of
-[ZOA](https://apps.apple.com/us/app/zoa-living-midi-sequencer/id1581881354).
+A Game of Life sequencer panel for the [Plinky 12](https://plinky12.com).
 
 The 16×16 grid is a living palette, not a piano roll: **columns are steps, rows are scale
 degrees**, and a Conway world rewrites the whole grid underneath you on its own clock. Four
@@ -78,8 +77,10 @@ MIT, see [`LICENSE`](LICENSE).
 
 ## Credits
 
-Conway's Game of Life, by way of ZOA's idea of using it as a musical palette rather than a
-visualisation.
+Conway's Game of Life.
+
+The idea of running it as a musical palette rather than a visualisation comes from
+[ZOA](https://apps.apple.com/us/app/zoa-living-midi-sequencer/id1581881354).
 
 ## How this was built
 
