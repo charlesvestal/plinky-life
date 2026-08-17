@@ -1406,6 +1406,7 @@ struct life : panel_t {
     uint8_t pref_cc_out;      /* mirror parameter changes back out on the same block */
     uint8_t pref_cv_out;      /* drive the two CV outputs from the world */
     uint8_t pref_note_in;     /* played notes draw cells into the world */
+    uint8_t plate_saved;      /* last non-zero frontpanel code, carried across loads */
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
@@ -1436,15 +1437,12 @@ struct life : panel_t {
        on_ui later, while get_frontpanel_orientation() reports 1 throughout - so
        the firmware knows a panel is mounted, but the code is only readable
        early. Reading it per frame looked tidier and silently broke detection. */
-    /* The last non-zero frontpanel code seen, seeded at construction.
-
-       Reading it once at construction is not enough. A scene load constructs a
-       NEW panel instance with placement-new at load time rather than at boot,
-       so that instance reads the code whenever the load happens - and if it
-       reads 0 then, the reloaded panel comes up in the blank-plate layout with
-       its pages two rows out of place. Latching the last non-zero reading is
-       true whether the code is readable early, late, or only sometimes. */
-    int plate_code = get_frontpanel_code();
+    /* What this unit reported at THIS instance's construction. Zero is a real
+       answer here: on a Chords unit the code reads correctly at boot and 0 from
+       on_ui, and a scene load constructs a new instance with placement-new at
+       load time rather than at boot, so the reloaded instance reads 0 and has no
+       later chance to read anything else. */
+    const int plate_boot = get_frontpanel_code();
 
     /* Note input. on_midi records; on_ui paints, because touching the world is
        exactly what the sequence lock exists to protect. */
@@ -1537,6 +1535,11 @@ struct life : panel_t {
         pref_cc_out = 1;
         pref_cv_out = 1;
         pref_note_in = 1;
+
+        /* Seed the carried plate from whatever this instance can see. If it can
+           see nothing, a value read by an earlier instance arrives with the
+           settings copy instead. */
+        if (plate_boot) plate_saved = (uint8_t)plate_boot;
 
         /* The user-facing save and controller name. Left unset it takes whatever
            the firmware defaults to, which showed as "LIFE PANEL". */
@@ -2689,11 +2692,16 @@ struct life : panel_t {
        the code from on_ui rather than at construction, so the setting existed to
        work around a bug of ours and was removed once the bug was. */
     bool plate_is_printed(void) const {
-        return (plate_code & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
+        /* This instance's own reading wins when it has one, so moving the panel
+           to a different faceplate is picked up at the next boot. The carried
+           value is the fallback for an instance that was constructed at a moment
+           when the code was not readable. */
+        int code = plate_boot ? plate_boot : (int)plate_saved;
+        return (code & (FRONT_PANEL_CODE_CHORDS | FRONT_PANEL_CODE_DRUMS)) != 0;
     }
 
     const char *plate_layout_name(void) const {
-        int code = plate_code;
+        int code = plate_boot ? plate_boot : (int)plate_saved;
         if (code & FRONT_PANEL_CODE_CHORDS) return "Chords";
         if (code & FRONT_PANEL_CODE_DRUMS) return "Drums";
         if (code & FRONT_PANEL_CODE_TOADSTEP) return "Toadstep";
@@ -3090,8 +3098,12 @@ struct life : panel_t {
     void on_ui(int delta_time_us) override {
         (void)delta_time_us;
 
-        /* Keep the latch fed. Zero means "no answer right now", not "no plate". */
-        { int c = get_frontpanel_code(); if (c) plate_code = c; }
+        /* Remember any non-zero reading. This is what survives a scene load:
+           the system copies the live panel's declared settings into the staged
+           instance in memory before deserialising, so a settings field carries
+           the plate across while a re-read cannot. */
+        { int c = get_frontpanel_code();
+          if (c && c != plate_saved) { plate_saved = (uint8_t)c; settings_dirty = true; } }
 
 
         follow_musical_state();
@@ -3589,6 +3601,7 @@ struct life : panel_t {
         FIELD("ccout", pref_cc_out);
         FIELD("cvout", pref_cv_out);
         FIELD("notein", pref_note_in);
+        FIELD("plate", plate_saved);
         OBJECT_END(s);
 
         clamp_settings();
