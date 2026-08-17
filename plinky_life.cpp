@@ -1267,7 +1267,6 @@ static const uint8_t life_port_values[5] = {
 /* How far pressure must move before the voice is told. Pressure jitters by a
    few counts every frame; without this the surface issued hundreds of velocity
    updates a second to a voice that had not changed. */
-#define LIFE_VEL_DEADBAND 6
 
 #define LIFE_PAGE1_Y 16
 
@@ -1408,9 +1407,6 @@ struct life_panel : panel_t {
     uint8_t surf_mode;             /* 0 = unified touch, 1 = the old play_surface path */
     uint8_t voice_band[LIFE_PLAY_VOICES];    /* for lighting the pad being held */
     uint8_t voice_block[LIFE_PLAY_VOICES];
-    int16_t surf_p[LIFE_MAX_BANDS][LIFE_BLOCKS];   /* per large pad, sampled in on_ui */
-    uint8_t surf_touches;                          /* distinct fingers on the surface */
-    uint8_t play_vel[16];          /* last velocity actually sent, for the deadband */
     uint16_t dbg_strikes, dbg_moves, dbg_vel;   /* counted on the sequence thread */
     uint32_t dbg_last_us;                       /* reported from on_ui, never printf in an IRQ */
     uint8_t play_miss[16];         /* consecutive frames a sounding voice went unreported */
@@ -1555,11 +1551,7 @@ struct life_panel : panel_t {
         for (int i = 0; i < LIFE_PLAY_VOICES; ++i) {
             voice_band[i] = 0; voice_block[i] = 0;
         }
-        surf_touches = 0;
-        for (int rg = 0; rg < LIFE_MAX_BANDS; ++rg) {
-            for (int b = 0; b < LIFE_BLOCKS; ++b) surf_p[rg][b] = 0;
-        }
-        for (int i = 0; i < 16; ++i) { play_miss[i] = 0; play_vel[i] = 0; }
+        for (int i = 0; i < 16; ++i) play_miss[i] = 0;
         dbg_strikes = dbg_moves = dbg_vel = 0;
         dbg_last_us = 0;
         play_seen = 0;
@@ -2630,58 +2622,26 @@ struct life_panel : panel_t {
     void play_surface_voice(int voice, int note, int note_q8, int velocity, bool finger_is_new) {
         if (voice < 0 || voice >= 16) return;
         play_seen |= (uint16_t)(1u << voice);
+
+        /* Called every frame with retrigger = is_new, which is what the stock
+           surface does. Pressure rides in on the same call, so there is no
+           separate set_synth_velocity: removing that call was the one build
+           that stopped the retriggering, and restoring it brought them back. */
         bool strike = finger_is_new || !(play_down & (1u << voice));
-        bool note_changed = play_note[voice] != (uint8_t)note;
-
-        /* play_synth is a NOTE EVENT, not a per-frame update. This is the one
-           assumption never tested across eight attempts at the retriggering: the
-           surface called it every frame, so while a finger sat inside a single
-           pad it was re-issued perhaps a hundred times a second with a velocity
-           that wobbles as the finger crosses the physical pads underneath.
-
-           set_synth_velocity exists as a separate call, which is what a
-           continuous pressure update is meant to use. So play_synth is now only
-           called when a note actually starts or changes, and pressure goes
-           through set_synth_velocity in between. If the retriggering survives
-           this, it is not coming from this panel at all. */
         if (strike) ++dbg_strikes;
-        else if (note_changed) ++dbg_moves;
+        else if (play_note[voice] != (uint8_t)note) ++dbg_moves;
 
-        if (strike || note_changed) {
-            synth_voice_note_t n;
-            n.note_q8 = note_q8;
-            n.param_override_value = (int16_t)(strike ? 0 : LIFE_SURFACE_GLIDE);
-            n.velocity = (uint8_t)clamp_int(velocity, 0, 127);
-            n.preset_idx = (int8_t)preset_for(edit_voice);
-            n.x_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
-            n.y_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
-            n.param_override_idx = (int8_t)VOICE_PARAM_GLIDE;
+        synth_voice_note_t n;
+        n.note_q8 = note_q8;
+        n.param_override_value = (int16_t)(strike ? 0 : LIFE_SURFACE_GLIDE);
+        n.velocity = (uint8_t)clamp_int(velocity, 0, 127);
+        n.preset_idx = (int8_t)preset_for(edit_voice);
+        n.x_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
+        n.y_override = SYNTH_VOICE_XY_OVERRIDE_NONE;
+        n.param_override_idx = (int8_t)VOICE_PARAM_GLIDE;
 
-            play_note[voice] = (uint8_t)note;
-            play_vel[voice] = (uint8_t)clamp_int(velocity, 0, 127);
-            play_synth(voice, n, strike);
-            return;
-        }
-
-        /* Only when the value actually moves, and only past a deadband.
-
-           Removing this call entirely was the one build that stopped the
-           retriggering ("not getting retrigs any more but also not getting
-           pressure"), and putting it back brought them straight back - including
-           while velocity was pinned at 127, so it was the CALL and not the value
-           changing. Pressure jitters every frame, so at frame rate this was
-           several hundred calls a second into a voice that had not changed.
-
-           A deadband keeps expression while a steady finger makes no calls at
-           all. If retriggers survive this, the call cannot be used at all here
-           and pressure has to come from the preset instead. */
-        int v = clamp_int(velocity, 0, 127);
-        int diff = v - (int)play_vel[voice];
-        if (diff < 0) diff = -diff;
-        if (diff < LIFE_VEL_DEADBAND) return;
-        play_vel[voice] = (uint8_t)v;
-        ++dbg_vel;
-        set_synth_velocity(voice, v);
+        play_note[voice] = (uint8_t)note;
+        play_synth(voice, n, strike);
     }
 
     /* The note a block plays.
@@ -2718,105 +2678,67 @@ struct life_panel : panel_t {
        voice from the UI hook restruck the note whenever a finger moved, and no
        amount of care about pitch, velocity or retrigger flags fixed it, because
        none of those was the fault. */
-    /* One large pad, read as one thing.
+    /* One large pad, proxied into ONE touch.
 
-       get_pressure_and_pos_in_rect sums the pressure over a rectangle and says
-       whether anything in it is firmly touched. That is a big pad, natively, and
-       it is what the MIDI Panel Maker emits for its own big buttons. Everything
-       tried before this was an attempt to rebuild it from the 16x16 grid after
-       the fact - peak finding hopped between physical pads, touch origin
-       restarted on each new pad, hand-rolled blob tracking worked but was a
-       reimplementation of this call.
+       This is what the panel kept almost doing. A 4x3 pad is a shape the touch
+       layer has no concept of, so every earlier attempt read the fine grid and
+       then tried to un-see it: peak finding hopped between physical pads, touch
+       origin restarted on each new pad, blob tracking had to reinvent finger
+       identity, and a per-frame set_synth_velocity was needed to claw expression
+       back.
 
-       Sliding inside one pad leaves its total pressure high and every other pad
-       near zero, so nothing changes and there is nothing to retrigger.
+       Instead each pad's pressure is AVERAGED into one figure and poked in as a
+       virtual finger. The average is the point: finger_t::pressure,
+       touch_pressure_curve_q7 and PLAY_SURFACE_PRESSURE_NOTE_ON/HOLD are all
+       defined on ONE pad's 0..255 scale, so a twelve-pad total was in the wrong
+       units for every one of them - which is why velocity pinned at 127 and the
+       thresholds were an order of magnitude too sensitive.
 
-       Two thresholds with hysteresis: a pad must reach NOTE_ON to start a note
-       but only stay above HOLD to keep it. The API's constants are per-finger
-       on a 0..255 scale, so they are scaled up to compare against a rect total. A finger straddling
-       a seam therefore holds its current pad rather than flickering, and cannot
-       start a second note next door while a voice is on an adjacent pad. */
+       update_from_touch is never called, so the engine never sees the fine grid.
+       The poked finger's string is the band and its position is the block, and
+       from there finger identity, is_new, voice assignment and release are the
+       firmware's own. That is the part that makes the stock surface feel
+       refined, and it is the part this panel kept writing for itself. */
     void surface_sequence_unified(int sy, int sh, int nbands) {
         (void)sh;
-        (void)sy;
-        int p[LIFE_MAX_BANDS][LIFE_BLOCKS];
-        for (int rg = 0; rg < nbands; ++rg)
-            for (int b = 0; b < LIFE_BLOCKS; ++b) p[rg][b] = surf_p[rg][b];
-
-        bool taken[LIFE_MAX_BANDS][LIFE_BLOCKS];
-        for (int rg = 0; rg < LIFE_MAX_BANDS; ++rg)
-            for (int b = 0; b < LIFE_BLOCKS; ++b) taken[rg][b] = false;
-
-        play_seen = 0;
-
-        /* A sounding voice keeps its pad while it is merely held, and follows
-           the strongest neighbour if the finger has moved off it. Moving is not
-           a strike, so the note glides. */
-        for (int v = 0; v < LIFE_PLAY_VOICES; ++v) {
-            if (!(play_down & (1u << v))) continue;
-            int rg = clamp_int(voice_band[v], 0, nbands - 1), b = clamp_int(voice_block[v], 0, LIFE_BLOCKS - 1);
-
-            if (p[rg][b] < LIFE_SURF_HOLD) {
-                int best = 0, brg = -1, bb = -1;
-                for (int dy = -1; dy <= 1; ++dy)
-                    for (int dx = -1; dx <= 1; ++dx) {
-                        int ny = rg + dy, nx = b + dx;
-                        if (ny < 0 || ny >= nbands || nx < 0 || nx >= LIFE_BLOCKS) continue;
-                        if (taken[ny][nx] || p[ny][nx] < LIFE_SURF_HOLD) continue;
-                        if (p[ny][nx] > best) { best = p[ny][nx]; brg = ny; bb = nx; }
-                    }
-                if (brg < 0) continue;          /* finger gone - released below */
-                rg = brg; b = bb;
-            }
-
-            taken[rg][b] = true;
-            surface_play_pad(v, rg, b, p[rg][b], nbands, false);
-        }
-
-        /* Anything else pressed hard enough is a new finger - as long as there
-           IS another finger. A straddled seam puts pressure on two pads but is
-           one touch, so it cannot claim a second voice; two fingers on
-           neighbouring pads are two touches, and both play. Counting fingers is
-           the test, not adjacency, which forbade neighbouring notes outright. */
-        int held = 0;
-        for (int rg = 0; rg < LIFE_MAX_BANDS; ++rg)
-            for (int b = 0; b < LIFE_BLOCKS; ++b) if (taken[rg][b]) ++held;
-
         for (int rg = 0; rg < nbands; ++rg)
             for (int b = 0; b < LIFE_BLOCKS; ++b) {
-                if (taken[rg][b] || p[rg][b] < LIFE_SURF_NOTE_ON) continue;
-                if (held >= (int)surf_touches) continue;   /* no unaccounted finger */
+                int sum = 0, n = 0;
+                for (int r = 0; r < LIFE_BAND_ROWS; ++r)
+                    for (int c = 0; c < LIFE_BLOCK_W; ++c) {
+                        int pp = get_touch_pressure_xy(b * LIFE_BLOCK_W + c,
+                                                       sy + rg * LIFE_BAND_ROWS + r);
+                        if (pp > 0) { sum += pp; ++n; }
+                    }
+                if (!n) continue;
 
-                int v = -1;
-                for (int j = 0; j < LIFE_PLAY_VOICES; ++j)
-                    if (!(play_down & (1u << j)) && !(play_seen & (1u << j))) { v = j; break; }
-                if (v < 0) continue;
-                taken[rg][b] = true;
-                ++held;
-                surface_play_pad(v, rg, b, p[rg][b], nbands, true);
+                /* Averaged over the pads actually in contact, not over all
+                   twelve: a fingertip covers three or four of them, and dividing
+                   by twelve would report a firm press as a faint one. */
+                int avg = sum / n;
+                if (avg < PLAY_SURFACE_PRESSURE_HOLD) continue;
+                play_surface.poke_finger(rg, b << 8, avg, LIFE_PLAY_VOICES, true);
             }
 
+        play_surface.update_voices();
+
+        play_seen = 0;
+        for (int v = 0; v < LIFE_PLAY_VOICES && v < 16; ++v) {
+            finger_t f = play_surface.get_finger_for_voice(v);
+            if (!f.pressure) continue;
+
+            int rg = clamp_int((int)f.string_idx, 0, nbands - 1);
+            int block = clamp_int((int)(f.string_pos_q8 >> 8), 0, LIFE_BLOCKS - 1);
+            voice_band[v] = (uint8_t)rg;
+            voice_block[v] = (uint8_t)block;
+
+            int note = surface_note(nbands - 1 - rg, block);
+            int velocity = clamp_int(touch_pressure_curve_q7(f.pressure), 1, 127);
+            play_surface_voice(v, note, note << 8, velocity, f.is_new != 0);
+        }
         release_play_voices(play_seen);
     }
 
-    /* touch_pressure_curve_q7 is a response curve for ONE pad: it clamps its
-       input to 0..255 and saturates at 128, so feeding it the total of a 4x3
-       rect pinned every note to velocity 127 and made set_synth_velocity a
-       no-op writing 127 forever. The rect total is the sum over up to twelve
-       pads, so divide by the pads a finger actually covers before curving. */
-    static int surface_velocity(int rect_total) {
-        int per_pad = rect_total / LIFE_TOUCH_PADS_PER_FINGER;
-        return clamp_int(touch_pressure_curve_q7(clamp_int(per_pad, 0, 255)), 1, 127);
-    }
-
-    void surface_play_pad(int v, int row_group, int block, int pressure, int nbands, bool fresh) {
-        voice_band[v] = (uint8_t)row_group;
-        voice_block[v] = (uint8_t)block;
-        int band = nbands - 1 - row_group;
-        int note = surface_note(band, block);
-        int velocity = surface_velocity(pressure);
-        play_surface_voice(v, note, note << 8, velocity, fresh);
-    }
 
     void surface_sequence(void) {
         if (ui_mode != LIFE_UI_PLAY) {
@@ -2880,46 +2802,6 @@ struct life_panel : panel_t {
                 set_led(x, sy + r, col);
             }
         }
-
-        /* Sample the large pads here, not in on_sequence. The generated MIDI
-           panel reads touch in on_ui, and passes the BOTTOM row with
-           from_bottom = true; both are copied rather than reasoned about,
-           because the previous version guessed at the y convention and read
-           touch from a hook with no UI frame context. */
-        for (int rg = 0; rg < nbands; ++rg)
-            for (int b = 0; b < LIFE_BLOCKS; ++b) {
-                int pp = 0;
-                /* The return value is deliberately ignored. It reports whether
-                   anything in the rectangle is FIRMLY touched, which is right
-                   for the CC button this call was copied from - an unfirm knob
-                   reads zero - and wrong for a note: a finger dipping below firm
-                   for one frame took a note-off and a fresh strike. The device
-                   log showed exactly that, the same pad restriking at the same
-                   note with velocity climbing 20, 27, 45, 63. The total pressure
-                   is filled in either way, so use it and apply our own
-                   thresholds. */
-                /* p, x and y are documented outputs; only the bounding-box
-                   pointers carry NULL defaults, so pass real storage. */
-                int px = 0, py = 0;
-                (void)get_pressure_and_pos_in_rect(b * LIFE_BLOCK_W,
-                                                   sy + rg * LIFE_BAND_ROWS + LIFE_BAND_ROWS - 1,
-                                                   LIFE_BLOCK_W, LIFE_BAND_ROWS, true,
-                                                   &pp, &px, &py);
-                pp = clamp_int(pp, 0, 32767);
-
-                /* Fast attack, slow release. A touch must be able to start a
-                   note the instant it lands, but a one-frame dropout while a
-                   finger travels must not end one. */
-                int cur = surf_p[rg][b];
-                surf_p[rg][b] = (int16_t)((pp >= cur) ? pp : (cur + ((pp - cur) >> 2)));
-            }
-
-        /* How many fingers are actually on the surface. This is what separates
-           one finger straddling a seam from two fingers on neighbouring pads -
-           adjacency cannot, and vetoing adjacent pads outright made chords on
-           neighbouring pads unplayable. */
-        surf_touches = (uint8_t)clamp_int(count_touches_in_area(0, sy, LIFE_W - 1, sy + sh - 1),
-                                          0, LIFE_PLAY_VOICES);
 
         /* Read-only here: which pads to light. The touch reading and the notes
            themselves happen in on_sequence, see surface_sequence(). */
