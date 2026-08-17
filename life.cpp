@@ -1450,8 +1450,6 @@ struct life : panel_t {
     uint8_t cc_in_last[CC_PARAM_COUNT];
     uint64_t cc_in_pending;
     uint32_t musical_state_seen;   /* so we notice key or scale changed elsewhere */
-    uint32_t plate_log_us;         /* when the front panel was last reported */
-    bool plate_log_was;            /* the last reported value of plate_is_printed() */
 
     /* Read at CONSTRUCTION, in a member initialiser, which is what grid.cpp
        does and the only place it works.
@@ -1566,8 +1564,6 @@ struct life : panel_t {
     void on_load_finished(void) override {
         panel_t::on_load_finished();
 
-        plate_log_us = 0;   /* log the front panel promptly after a load */
-        plate_log_was = false;
 
         /* SYSTEM_NOTES.md section 6b: setup_default_panel_state() does NOT run on
            a staged load, which is how the IDE loads a panel. The arena is zeroed,
@@ -2703,11 +2699,17 @@ struct life : panel_t {
     /* Auto by default: the layout comes from the hardware, and pref_plate only
        overrides it if you have gone into settings and said so.
 
-       Deliberately reads the value captured at construction rather than calling
-       get_frontpanel_code() here. On a Chords unit that call answers correctly
-       from a member initialiser and returns 0 from on_ui, so "read it live so it
-       cannot go stale" is precisely the change that breaks detection - which is
-       why the override exists at all. See the note at the top of this file. */
+       Reads the value captured at construction rather than calling
+       get_frontpanel_code() here - grid.cpp does the same, in a member
+       initialiser. Reading it live once broke detection on a Chords unit, though
+       that was never proven to be a firmware behaviour rather than a bug of
+       ours, so treat it as a convention that works rather than a rule.
+
+       The override is kept because the failure is asymmetric. Without it, a unit
+       whose straps misread has the wrong voice-selector row, the wrong editor
+       rows, the wrong play surface rows and no way to fix any of it. With it,
+       that is one setting away. grid.cpp does the same: it seeds y_offset from
+       the frontpanel code, persists it, and gives the user a page to nudge it. */
     bool plate_is_printed(void) const {
         if (pref_plate == LIFE_PLATE_CHORDS || pref_plate == LIFE_PLATE_DRUMS) return true;
         if (pref_plate == LIFE_PLATE_BLANK) return false;
@@ -2875,22 +2877,6 @@ struct life : panel_t {
             if (i == 2 && mode == LIFE_UI_VOICE) voice_page = voice_page ? 0 : 1;
             else ui_mode = (uint8_t)here[i];
         }
-    }
-
-    /* Reports what the layout is keyed off, because every "is this drawn in the
-       right place" question comes down to this one boolean: the voice selector,
-       the editor's own voice row, and the play surface's rows all switch on it.
-       Logged on change and once a minute, from on_ui. */
-    void log_plate_periodically(void) {
-        uint32_t now = time_us();
-        bool printed = plate_is_printed();
-        if (plate_log_us && printed == plate_log_was &&
-            (uint32_t)(now - plate_log_us) < 60000000u) return;
-        plate_log_us = now ? now : 1;
-        plate_log_was = printed;
-        printf("life: plate code=%d pref=%d printed=%d -> selector row %d, surface rows %d-%d\n",
-               plate_at_construct, (int)pref_plate, printed ? 1 : 0,
-               printed ? 0 : 1, printed ? 2 : 0, printed ? 13 : 14);
     }
 
     void draw_voice_selector(void) {
@@ -3170,7 +3156,6 @@ struct life : panel_t {
         apply_pending_cc();
         apply_note_input();
 
-        log_plate_periodically();
 
         int page = get_scroll_page();
 
