@@ -1408,7 +1408,6 @@ struct life : panel_t {
     uint8_t pref_cv_out;      /* drive the two CV outputs from the world */
     uint8_t pref_note_in;     /* played notes draw cells into the world */
     uint8_t plate_saved;      /* last non-zero frontpanel code, carried across loads */
-    uint32_t plate_log_us;    /* rate limit for the plate report */
 
     /* --- transient UI state, never serialised --- */
     uint8_t edit_voice;       /* which voice the per-voice settings pages edit */
@@ -1501,7 +1500,6 @@ struct life : panel_t {
         play_active = false;
         picker_channel = -1;
         scene_picker_open = false;
-        plate_log_us = 0;
         for (int i = 0; i < 16; ++i) play_note[i] = 0;
         note_in_count = 0;
         note_write_x = 0;
@@ -3126,28 +3124,10 @@ struct life : panel_t {
     void on_ui(int delta_time_us) override {
         (void)delta_time_us;
 
-        /* Remember any non-zero reading. This is what survives a scene load:
-           the system copies the live panel's declared settings into the staged
-           instance in memory before deserialising, so a settings field carries
-           the plate across while a re-read cannot. */
-        /* Seed from THIS instance's construction reading first, and only fall
-           back to a live one. On a Chords unit the construction reading is 32
-           and the live reading is 0 forever, so seeding from the live reading
-           alone - which is what this did - never stored anything, and an
-           instance later constructed at a moment when the straps do not read had
-           nothing to inherit. Settings are copied into a staged instance before
-           it deserialises, so this is what carries the plate across a load. */
-        { int live = get_frontpanel_code();
-          int c = plate_boot ? plate_boot : live;
-          if (c && c != plate_saved) { plate_saved = (uint8_t)c; settings_dirty = true; }
-          uint32_t now = time_us();
-          if (!plate_log_us || (uint32_t)(now - plate_log_us) > 3000000u) {
-              plate_log_us = now ? now : 1;
-              printf("life: plate boot=%d live=%d orient=%d saved=%d used=%d printed=%d\n",
-                     plate_boot, live, get_frontpanel_orientation(), (int)plate_saved,
-                     plate_code(), plate_is_printed() ? 1 : 0);
-          } }
-
+        /* Remember any non-zero reading, so it can be carried across a staged
+           load - see on_prepare_staged_load. */
+        { int c = plate_boot ? plate_boot : get_frontpanel_code();
+          if (c && c != plate_saved) { plate_saved = (uint8_t)c; settings_dirty = true; } }
 
         follow_musical_state();
         apply_pending_cc();
