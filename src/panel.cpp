@@ -281,8 +281,6 @@ struct life : panel_t {
     voice_allocator_t allocator;
     preset_pages_t preset_pages;   /* the stock synth editor, hosted per voice */
     file_picker_t scene_picker;    /* scenes, placed by us - see draw_scene_page */
-    int scene_commit_wait;         /* sequence frames left to wait for a staged load */
-    bool scene_commit_failed;      /* set on the sequence thread, logged from on_ui */
     play_surface_t play_surface;   /* play the selected voice over the running world */
     uint8_t string_roots[16];
 
@@ -423,8 +421,6 @@ struct life : panel_t {
         cc_in_pending = 0;
         cc_out_primed = false;
         musical_state_seen = 0;
-        scene_commit_wait = 0;
-        scene_commit_failed = false;
         play_down = 0;
         for (int i = 0; i < 16; ++i) play_miss[i] = 0;
         play_seen = 0;
@@ -1699,38 +1695,29 @@ struct life : panel_t {
 
         if (scene_picker.panel_save_button(LIFE_SAVE_X, LIFE_PAGE1_Y + LIFE_FILE_BTN_Y))
             scroll_to_page(0);
-        if (scene_picker.panel_load_button(LIFE_LOAD_BTN_X, LIFE_PAGE1_Y + LIFE_FILE_BTN_Y))
-            scene_commit_wait = 2000;     /* sequence frames: a couple of seconds */
+        /* The return value is deliberately ignored: it reports whether the load
+           completed inline, and a load that stages instead returns false.
+           on_sequence commits whatever stages. */
+        (void)scene_picker.panel_load_button(LIFE_LOAD_BTN_X, LIFE_PAGE1_Y + LIFE_FILE_BTN_Y);
     }
 
-    /* Returns true if the panel is about to be replaced, in which case the
-       caller must stop touching anything: an accepted request queues a swap of
-       this whole object. */
-    /* Polled from on_sequence, which is where the reference says to poll a
-       staged load from, and committed as soon as it is ready.
+    /* Commit a staged panel load, from on_sequence.
 
-       It used to wait for a generation edge, on the reasoning that a scene
-       should land on the beat. That was wrong twice over: a scene swap replaces
-       the world and every voice at once, so there is no beat to be in the middle
-       of, and the wait had no timeout - with FREEZE on, or a slow GEN rate, no
-       edge arrives and the load hangs with nothing on screen to explain it.
+       This is polled unconditionally rather than being armed by the load button.
+       file_picker_t::panel_load_button returns whatever
+       load_panel_from_selected_slot returns, and a load that STAGES rather than
+       completing inline returns false - so arming from the button meant the
+       finalise was never requested and pressing LOAD did nothing at all, which
+       is exactly how it behaved on hardware.
 
-       The countdown runs whether or not the load has staged yet, so a load that
-       never arrives gives up and says so instead of waiting forever. */
+       is_panel_load_staged() is documented as "true while a staged panel load is
+       complete and waiting for a commit request", so if it is up, committing it
+       is the whole job. Voices are released first: the swap replaces every voice
+       and a note sounding across it would never be turned off. */
     void poll_staged_scene_seq(void) {
-        if (scene_commit_wait <= 0) return;
-        if (--scene_commit_wait == 0) {
-            scene_commit_failed = true;       /* reported from on_ui */
-            return;
-        }
         if (!is_panel_load_staged()) return;
-
-        /* Only stop asking once it is accepted: a refusal is a "not yet", and
-           clearing the countdown here would abandon the load silently. */
-        if (scene_picker.request_panel_load_finalise()) {
-            scene_commit_wait = 0;
-            for (int v = 0; v < LIFE_NUM_VOICES; ++v) release_voice_locked(v);
-        }
+        for (int v = 0; v < LIFE_NUM_VOICES; ++v) release_voice_locked(v);
+        (void)scene_picker.request_panel_load_finalise();
     }
 
     /* Four voice selectors at the top left, on printed plates only.
@@ -2031,10 +2018,6 @@ struct life : panel_t {
     void on_ui(int delta_time_us) override {
         (void)delta_time_us;
 
-        if (scene_commit_failed) {
-            scene_commit_failed = false;
-            printf("life: scene load never staged, commit abandoned\n");
-        }
 
         follow_musical_state();
         apply_pending_cc();
