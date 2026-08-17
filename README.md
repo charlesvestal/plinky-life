@@ -1,5 +1,7 @@
 # plinky-life
 
+<img src="artwork.png" width="240" align="right" alt="A Life world with four voice columns tinted">
+
 A Game of Life sequencer panel for the [Plinky 12](https://plinky12.com), in the spirit of
 [ZOA](https://apps.apple.com/us/app/zoa-living-midi-sequencer/id1581881354).
 
@@ -11,11 +13,13 @@ independent voices walk through it at their own speeds, playing whatever they fi
 
 **→ [Manual](docs/manual.md)**: how to play it, with pad maps of every mode.
 
-## The panel
+## Load it
 
-**[`life.cpp`](https://raw.githubusercontent.com/charlesvestal/plinky-life/main/life.cpp)**: load this into the Plinky IDE.
+**[`life.cpp`](https://raw.githubusercontent.com/charlesvestal/plinky-life/main/life.cpp)**: paste this into the Plinky IDE.
+It runs on Blocks, Chords, Drums and Toadstep, and lays itself out to match whichever you have.
 
-## Building
+<details>
+<summary><b>Building from source</b></summary>
 
 ```sh
 sh tests.sh                  # everything checkable without hardware
@@ -25,16 +29,15 @@ sh build/amalgamate.sh       # just produce life.cpp
 python3 docs/make_maps.py    # regenerate the manual's pad maps
 ```
 
-`src/panel.cpp` does not compile on its own. Panel code cannot use `#include`, and it only
-type-checks once the IDE injects the SDK headers. `amalgamate.sh` splices the pure headers in
-ahead of it to produce the single `life.cpp` that gets flashed.
+`src/panel.cpp` does not compile on its own: panel code cannot use `#include`, and the IDE injects
+the SDK headers. `amalgamate.sh` splices the pure headers in ahead of it to produce the single
+`life.cpp` that gets loaded.
 
-`harness/plinky_stubs.h` is a transcription of the published API, not the SDK. It exists so the
-generated file can be type-checked locally instead of flash-and-see. **If it and the real
-firmware disagree, the firmware is right**. It has been wrong several times, and the resulting
-errors only showed up server-side or, worse, as behaviour that made no sense on the device.
+`harness/plinky_stubs.h` mirrors the published API so the generated file can be type-checked on a
+laptop rather than on the device. It is not the SDK, and where the two disagree the firmware is
+right.
 
-## Layout
+### Layout
 
 ```
 src/life.h        Conway world, population stats, respawn trigger
@@ -55,19 +58,19 @@ The seven headers are pure functions of plain data with no Plinky API in them, w
 run natively. The musical logic is proved on a laptop and `panel.cpp` is thin glue. Over 34,000
 assertions cover the world, the selection rules, the scale tables and the note lifecycle.
 
-The pad maps in the manual are generated from the same layout table the panel uses, and
-`make_maps.py` asserts its captions and page counts against `panel.cpp`, so they cannot quietly
-drift from what the pads do. The editor pages have a map per faceplate, because the panel lays
-them out differently on Chords and Drums.
+The pad maps in the manual are generated from the same layout table the panel uses, and checked
+against `panel.cpp` when they are built, so they match the pads. The editor pages have a map per
+faceplate, since the layout differs on Chords and Drums.
 
-## Design notes
+### Design notes
 
 `docs/superpowers/specs/` holds the design spec, including the deviations made during
 implementation and why.
 
-`SYSTEM_NOTES.md` is the working reference for Plinky 12 panel development generally: hardware,
-execution model, memory, and the gotchas that cost real debugging time. Not specific to this
-panel.
+`SYSTEM_NOTES.md` is a general reference for Plinky 12 panel development: hardware, execution
+model, memory and assorted gotchas. Not specific to this panel.
+
+</details>
 
 ## Licence
 
