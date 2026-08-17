@@ -10,6 +10,8 @@ independent voices walk through it at their own speeds, playing whatever they fi
 
 **An empty column is a rest**, which is what turns the shape of the world into rhythm.
 
+**→ [Watch it](https://www.youtube.com/watch?v=DeXRKCYJnzk)**
+
 **→ [Manual](docs/manual.md)**: how to play it, with pad maps of every mode.
 
 ## Load it

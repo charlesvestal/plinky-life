@@ -7,6 +7,7 @@
 @Tags: sequencer, generative, midi, conway, automata
 @Documentation: https://github.com/charlesvestal/plinky-life/blob/main/docs/manual.md
 @Discussion: https://github.com/charlesvestal/plinky-life/issues
+@Video: https://www.youtube.com/watch?v=DeXRKCYJnzk
 */
 
 /* ---------------------------------------------------------------------------
